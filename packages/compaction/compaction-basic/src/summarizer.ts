@@ -114,7 +114,7 @@ export type SummaryResult = {
  * @param ctx - context providing the LLM service.
  * @param config - resolved backend configuration.
  * @param input - replayed conversation prefix (system, tools, and leading messages) to condense.
- * @param agent - supplies routed-model history, fallback model, and session id.
+ * @param agent - supplies routed request history, matching reasoning effort, fallback model, and session id.
  * @param signal - optional cancellation forwarded to the adapter.
  * @returns safe text-only summary blocks and the exact call envelope and output.
  */
@@ -141,6 +141,18 @@ export async function summarizeWithLlm(
       'no provider/model available for summarization: set both BasicCompactionConfig summarization fields, route one request, or set both AgentOptions fields',
     )
   }
+  // A selected effort belongs to one exact model route. Keep it for the
+  // matched conversation route, but let an explicitly different summarizer
+  // target resolve its own adapter default.
+  const reasoningEffort = latest !== undefined
+    && latest.provider === target.provider
+    && latest.model === target.model
+    ? latest.reasoningEffort
+    : agentTarget !== undefined
+      && agentTarget.provider === target.provider
+      && agentTarget.model === target.model
+      ? agent.options.reasoningEffort
+      : undefined
 
   const assembler = new BlockAssembler()
   const messages: Message[] = [
@@ -153,6 +165,7 @@ export async function summarizeWithLlm(
   const options: GenerateOptions = {
     provider: target.provider,
     model: target.model,
+    ...reasoningEffort === undefined ? {} : { reasoningEffort },
     messages,
     ...input.system === undefined ? {} : { system: input.system },
     ...input.tools === undefined ? {} : { tools: [...input.tools] },

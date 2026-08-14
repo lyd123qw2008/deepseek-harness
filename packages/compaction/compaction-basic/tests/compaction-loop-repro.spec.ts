@@ -3,7 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { toolPairingBalancedAfter, toolPairingBalancedBefore } from '@deepseek-ai/dsh-compaction'
 import { createUserMessage, CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, resolveRetryPolicy , createMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, GenerateOptions, LlmResolvedModelInfo, ResolvedRetryPolicy, StreamChunk } from '@deepseek-ai/dsh-llm'
-import { CallId, LlmAdapter } from '@deepseek-ai/dsh-llm'
+import { CallId, LlmAdapter, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
@@ -92,6 +92,7 @@ class OverflowRecoveryAdapter extends LlmAdapter {
       id: model,
       name: model,
       context: { contextWindow: 128 },
+      reasoning: { efforts: [{ id: ReasoningEffortId('max'), name: 'Max' }] },
     })
   }
 
@@ -316,7 +317,7 @@ describe('context-overflow recovery across the real loop and compaction-basic', 
       await ctx.plugin(TokenMeter)
       ctx.llm.registerAdapter(['mock'], adapter)
       ctx.on('agent/request', async (_payload, next) => ({
-        ...await next(), provider: 'mock', model: 'mock',
+        ...await next(), provider: 'mock', model: 'mock', reasoningEffort: ReasoningEffortId('max'),
       }))
       await ctx.plugin(BasicCompactionEngine, {
         thresholdRatio: 1,
@@ -341,6 +342,7 @@ describe('context-overflow recovery across the real loop and compaction-basic', 
 
         expect(adapter.conversationRequests).toHaveLength(2)
         expect(adapter.summaryRequests).toHaveLength(1)
+        expect(adapter.summaryRequests[0]?.reasoningEffort).toBe(ReasoningEffortId('max'))
         const instruction = adapter.summaryRequests[0]!.messages.at(-1)?.content
           .map(block => (block.type === 'text' ? block.text : ''))
           .join('') ?? ''
