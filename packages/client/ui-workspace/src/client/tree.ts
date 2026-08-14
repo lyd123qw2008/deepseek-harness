@@ -15,6 +15,34 @@ export const UNGROUPED_KEY = ''
 /** Display label for the ungrouped bucket row. */
 export const UNGROUPED_LABEL = 'Ungrouped'
 
+/** Group key prefix for sessions whose cwd has no registered Workspace entity. */
+export const CWD_GROUP_PREFIX = 'cwd:'
+
+/**
+ * Build a stable local group key from a stored working directory.
+ * @param cwd - stored absolute working directory.
+ * @returns a browser-local grouping key that cannot collide with the ungrouped bucket.
+ */
+export function cwdGroupKey(cwd: string): string {
+  const normalized = cwd.replaceAll('\\', '/').replace(/\/+$/u, '') || cwd
+  const comparable = /^[A-Za-z]:\//u.test(normalized) ? normalized.toLowerCase() : normalized
+  return `${CWD_GROUP_PREFIX}${comparable}`
+}
+
+/**
+ * Resolve the group key for one session, preferring persisted Workspace ownership.
+ * @param summary - session summary with its stored cwd.
+ * @param workspaces - persisted Workspace accounts.
+ * @returns the real Workspace id, a cwd-based local key, or the ungrouped key.
+ */
+export function sessionGroupKey(
+  summary: Pick<SessionSummary, 'id' | 'cwd'>,
+  workspaces: readonly WorkspaceView[],
+): string {
+  return (workspaces.find(workspace => workspace.sessionIds.includes(summary.id))?.workspaceId as string | undefined)
+    ?? (summary.cwd === undefined ? UNGROUPED_KEY : cwdGroupKey(summary.cwd))
+}
+
 /** One top-level session row in a group or the flat list. */
 export interface SessionNode {
   id: SessionId
@@ -35,14 +63,14 @@ export interface SessionNode {
 /** Session order selected by the Workspace browser. */
 export type SessionOrderBy = 'manual' | 'updated'
 
-/** One workspace group section: header row facts + visible top-level session rows. */
+/** One workspace or cwd-based group section: header facts plus visible session rows. */
 export interface GroupNode {
-  /** Group key: the workspace id or {@link UNGROUPED_KEY}. */
+  /** Group key: the Workspace id, a `cwd:` key, or {@link UNGROUPED_KEY}. */
   key: string
-  /** Backing Workspace id; absent only for the ungrouped bucket. */
+  /** Backing Workspace id; absent for cwd-based and ungrouped groups. */
   workspaceId: WorkspaceId | undefined
   cwd: string | undefined
-  /** Workspace creation time (epoch ms); absent only for the ungrouped bucket. */
+  /** Workspace creation time; absent for cwd-based and ungrouped groups. */
   createdAt: number | undefined
   label: string
   /** Total visible sessions in the group. */
@@ -78,8 +106,10 @@ export interface SearchResultSet {
 /** Viewing state consumed by the derivation. */
 export interface TreeView {
   expandedGroups: readonly string[]
-  /** Browser-local order for Sessions without a backing Workspace account. */
+  /** Browser-local order for groups without a backing Workspace account. */
   ungroupedOrder?: readonly string[]
+  /** Browser-local order records keyed by real Workspace or synthetic cwd group. */
+  sessionOrderByAccount?: Readonly<Record<string, readonly string[]>>
 }
 
 interface Group {
@@ -166,16 +196,15 @@ function orderedUngrouped(members: readonly SessionSummary[], stored: readonly s
 }
 
 /**
- * Group Sessions by Host Workspace: one group per entity in stable Host
- * order, with members resolved from sessionIds in their stored order. Sessions
- * outside every Workspace trail in the browser-local Ungrouped order, which
- * falls back to recency before that order is initialized.
+ * Group Sessions by Host Workspace first, then by stored cwd for sessions that
+ * have no Workspace account. Sessions without cwd remain in the browser-local
+ * Ungrouped bucket.
  */
 function groupByWorkspace(
   list: SessionListState,
   workspaces: readonly WorkspaceView[],
   archived: ReadonlySet<SessionId>,
-  ungroupedOrder: readonly string[] | undefined,
+  view: TreeView,
 ): Group[] {
   const groups: Group[] = []
   const accounted = new Set<SessionId>()
@@ -188,24 +217,42 @@ function groupByWorkspace(
       if (!sessionVisible(summary, list.current, archived)) continue
       members.push(summary)
     }
+    const key = workspace.workspaceId as string
     groups.push(buildGroup(
-      workspace.workspaceId, workspace.workspaceId, workspace.path,
+      key, workspace.workspaceId, workspace.path,
       Date.parse(workspace.createdAt), workspace.title, members, 'account',
     ))
   }
   const stray = list.ids
     .map(id => list.byId[id])
-    .filter((s): s is SessionSummary =>
-      s !== undefined && !accounted.has(s.id) && sessionVisible(s, list.current, archived))
-  if (stray.length > 0) {
+    .filter((summary): summary is SessionSummary =>
+      summary !== undefined && !accounted.has(summary.id) && sessionVisible(summary, list.current, archived))
+  const cwdGroups = new Map<string, { cwd: string; sessions: SessionSummary[] }>()
+  const ungrouped: SessionSummary[] = []
+  for (const summary of stray) {
+    if (summary.cwd === undefined || summary.cwd === '') {
+      ungrouped.push(summary)
+      continue
+    }
+    const key = cwdGroupKey(summary.cwd)
+    const group = cwdGroups.get(key)
+    if (group === undefined) cwdGroups.set(key, { cwd: summary.cwd, sessions: [summary] })
+    else group.sessions.push(summary)
+  }
+  for (const [key, group] of cwdGroups) {
+    const stored = view.sessionOrderByAccount?.[key]
     groups.push(buildGroup(
-      UNGROUPED_KEY,
-      undefined,
-      undefined,
-      undefined,
-      UNGROUPED_LABEL,
-      ungroupedOrder === undefined ? stray : orderedUngrouped(stray, ungroupedOrder),
-      ungroupedOrder === undefined ? 'recency' : 'account',
+      key, undefined, group.cwd, undefined, workspaceLabel(group.cwd),
+      stored === undefined ? group.sessions : orderedUngrouped(group.sessions, stored),
+      stored === undefined ? 'recency' : 'account',
+    ))
+  }
+  if (ungrouped.length > 0) {
+    const stored = view.sessionOrderByAccount?.[UNGROUPED_KEY] ?? view.ungroupedOrder
+    groups.push(buildGroup(
+      UNGROUPED_KEY, undefined, undefined, undefined, UNGROUPED_LABEL,
+      stored === undefined ? ungrouped : orderedUngrouped(ungrouped, stored),
+      stored === undefined ? 'recency' : 'account',
     ))
   }
   return groups
@@ -250,12 +297,12 @@ export function deriveGroups(
   const archived = new Set(archivedSessionIds)
   const expandedGroups = new Set(view.expandedGroups)
   const descendants = indexSubagentDescendants(list.byId)
-  const currentGroup = list.current === undefined
-    ? undefined
-    : (workspaces.find(w => w.sessionIds.includes(list.current as SessionId))?.workspaceId as string | undefined)
-        ?? UNGROUPED_KEY
+  const currentSummary = list.current === undefined ? undefined : list.byId[list.current]
+  const currentGroup = currentSummary === undefined
+    ? list.current === undefined ? undefined : UNGROUPED_KEY
+    : sessionGroupKey(currentSummary, workspaces)
   const groups: GroupNode[] = []
-  for (const g of groupByWorkspace(list, workspaces, archived, view.ungroupedOrder)) {
+  for (const g of groupByWorkspace(list, workspaces, archived, view)) {
     const expanded = expandedGroups.has(g.key)
     groups.push({
       key: g.key,

@@ -51,18 +51,18 @@ function createdLabel(createdAt: number, t: RowTranslate): string {
   return t('hover.created', { time: `${date} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` })
 }
 
-/** Hover-card body: workspace title, display directory path, absolute creation time. */
+/** Hover-card body: workspace title, full directory path, and optional creation time. */
 function WorkspaceHoverContent({ label, cwd, createdAt, t }: {
   label: string
   cwd: string | undefined
-  createdAt: number
+  createdAt: number | undefined
   t: RowTranslate
 }) {
   return (
     <div className={css.hoverContent}>
       <div className={css.hoverTitle}>{label}</div>
       <div className={css.hoverPath}>{cwd}</div>
-      <div className={css.hoverTime}>{createdLabel(createdAt, t)}</div>
+      {createdAt === undefined ? null : <div className={css.hoverTime}>{createdLabel(createdAt, t)}</div>}
     </div>
   )
 }
@@ -98,8 +98,8 @@ function rowHalf(e: { clientY: number; currentTarget: HTMLElement }): 'before' |
 
 /**
  * Project (workspace) header row: folder + title;
- * hover reveals the chevron and create button, and dwelling on a real
- * Workspace shows its hover card (the ungrouped bucket has none).
+ * hover reveals the chevron and create button, and dwelling on a real or cwd-derived
+ * Workspace shows its hover card (the cwd-less ungrouped bucket has none).
  * `containsCurrent` arrives on the node (derivation fact, no renderer scan).
  * @param props.group - derived group node.
  * @param props.onToggle - expand/collapse the group.
@@ -122,8 +122,8 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   t: RowTranslate
 }) {
   const row = group
-  // The ungrouped bucket has no workspace title: its label is dictionary copy.
-  const label = row.workspaceId === undefined ? t('group.ungrouped') : row.label
+  // Only the cwd-less bucket uses dictionary copy; cwd-derived groups expose their path basename.
+  const label = row.cwd === undefined ? t('group.ungrouped') : row.label
   const active = group.expanded && group.containsCurrent
   const [menuOpen, setMenuOpen] = useState(false)
   const workspaceMenuItems = [
@@ -195,8 +195,8 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
       </span>
     </div>
   )
-  // The ungrouped bucket has no backing Workspace: no card to show.
-  if (row.createdAt === undefined) return ownRow
+  // The cwd-less bucket has no path to show; cwd-derived groups expose the stored path.
+  if (row.cwd === undefined) return ownRow
   return (
     <HoverCard
       anchor={ownRow}

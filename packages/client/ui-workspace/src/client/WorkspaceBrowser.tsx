@@ -20,7 +20,7 @@ import type {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { WorkspaceBrowserProps } from './contract/slots.ts'
 import type { SessionNode, SessionOrderBy } from './tree.ts'
-import { deriveFlat, deriveGroups, deriveSearchResults, UNGROUPED_KEY } from './tree.ts'
+import { cwdGroupKey, deriveFlat, deriveGroups, deriveSearchResults, sessionGroupKey, UNGROUPED_KEY } from './tree.ts'
 import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './rows/Rows.tsx'
 import { FLAT_SESSION_ORDER_KEY } from './stores.ts'
 import { WorkspacePickFlow } from './WorkspacePicker.tsx'
@@ -194,7 +194,7 @@ function ViewOptionsMenu({ groupBy, orderBy, onGroupPick, onOrderPick, t }: {
 
 /** In-flight root-row drag: source identity plus the current insert marker. */
 interface DragState {
-  /** Workspace id, or {@link UNGROUPED_KEY} for the browser-local loose-session account. */
+  /** Workspace id, a cwd group key, or {@link UNGROUPED_KEY} for local ordering. */
   accountKey: string
   sessionId: SessionNode['id']
   /** Row the marker sits on and which half (insert above/below it). */
@@ -233,6 +233,8 @@ type SessionTreeProps = Pick<
   syncSessionOrderAccount: (accountKey: string, order: string[], updatedAt: Record<string, number>) => void
   /** Apply a drag to one shared order. */
   setSessionOrder: (accountKey: string, order: string[]) => void
+  /** Retain active Workspace and browser-local account keys. */
+  retainAccountKeys: (keys: readonly string[]) => void
   /** Registry-global archive set (hidden rows). */
   archivedSessionIds: readonly SessionNode['id'][]
   /** Open the browser-owned rename dialog for a real Workspace group. */
@@ -253,7 +255,7 @@ function SessionTree({
   onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive,
   insertWorkspaceBefore, insertSessionBefore, orderBy,
   groupExpansion, setGroupExpanded,
-  sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, home, t,
+  sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, retainAccountKeys, home, t,
 }: SessionTreeProps) {
   const list = useSessions(s => s)
   const current = list.current
@@ -266,10 +268,10 @@ function SessionTree({
   const previousOrderBy = useRef(orderBy)
   const nativeDragActive = drag !== null || workspaceDrag !== null
   useNativeDragAcceptance(nativeDragActive)
-  const currentGroup = current === undefined
-    ? undefined
-    : (workspaces.find(w => w.sessionIds.includes(current))?.workspaceId as string | undefined)
-      ?? UNGROUPED_KEY
+  const currentSummary = current === undefined ? undefined : list.byId[current]
+  const currentGroup = currentSummary === undefined
+    ? current === undefined ? undefined : UNGROUPED_KEY
+    : sessionGroupKey(currentSummary, workspaces)
   useEffect(() => {
     if (current === undefined || currentGroup === undefined || Object.hasOwn(groupExpansion, currentGroup)) return
     setGroupExpanded(currentGroup, true)
@@ -278,10 +280,26 @@ function SessionTree({
     () => Object.entries(groupExpansion).filter(([, expanded]) => expanded).map(([key]) => key),
     [groupExpansion],
   )
-  const ungroupedSessionIds = useMemo(() => {
+  const looseSessionIdsByAccount = useMemo(() => {
     const accounted = new Set(workspaces.flatMap(workspace => workspace.sessionIds))
-    return list.ids.filter(id => list.byId[id] !== undefined && !accounted.has(id))
+    const accounts: Record<string, SessionNode['id'][]> = { [UNGROUPED_KEY]: [] }
+    for (const id of list.ids) {
+      const summary = list.byId[id]
+      if (summary === undefined || accounted.has(id)) continue
+      const key = summary.cwd === undefined ? UNGROUPED_KEY : cwdGroupKey(summary.cwd)
+      ;(accounts[key] ??= []).push(id)
+    }
+    return accounts
   }, [list, workspaces])
+  useEffect(() => {
+    if (list.phase !== 'ready') return
+    retainAccountKeys([
+      UNGROUPED_KEY,
+      FLAT_SESSION_ORDER_KEY,
+      ...workspaces.map(workspace => workspace.workspaceId as string),
+      ...Object.keys(looseSessionIdsByAccount),
+    ])
+  }, [list.phase, looseSessionIdsByAccount, retainAccountKeys, workspaces])
   useEffect(() => {
     if (list.phase !== 'ready') return
     const switchedToUpdated = previousOrderBy.current !== 'updated' && orderBy === 'updated'
@@ -291,7 +309,7 @@ function SessionTree({
         key: workspace.workspaceId as string,
         sessionIds: workspace.sessionIds.filter(id => list.byId[id] !== undefined),
       })),
-      { key: UNGROUPED_KEY, sessionIds: ungroupedSessionIds },
+      ...Object.entries(looseSessionIdsByAccount).map(([key, sessionIds]) => ({ key, sessionIds })),
     ]
     for (const { key, sessionIds } of accounts) {
       const previousOrder = sessionOrderByAccount[key]
@@ -308,7 +326,7 @@ function SessionTree({
         syncSessionOrderAccount(key, next.order.map(id => id as string), next.updatedAt)
       }
     }
-  }, [list, orderBy, sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, ungroupedSessionIds, workspaces])
+  }, [list, looseSessionIdsByAccount, orderBy, sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, workspaces])
   const orderedWorkspaces = useMemo(() => {
     return workspaces.map((workspace) => {
       const stored = sessionOrderByAccount[workspace.workspaceId as string]
@@ -316,16 +334,10 @@ function SessionTree({
       return { ...workspace, sessionIds }
     })
   }, [sessionOrderByAccount, workspaces])
-  const orderedUngroupedSessionIds = useMemo(
-    () => reconciledSessionOrder(ungroupedSessionIds, sessionOrderByAccount[UNGROUPED_KEY]),
-    [sessionOrderByAccount, ungroupedSessionIds],
-  )
   const groups = useMemo(
     () => deriveGroups(list, orderedWorkspaces, archivedSessionIds, {
       expandedGroups,
-      ...(sessionOrderByAccount[UNGROUPED_KEY] === undefined
-        ? {}
-        : { ungroupedOrder: sessionOrderByAccount[UNGROUPED_KEY] }),
+      sessionOrderByAccount,
     }),
     [list, orderedWorkspaces, archivedSessionIds, expandedGroups, sessionOrderByAccount],
   )
@@ -345,15 +357,18 @@ function SessionTree({
       ? group.sessions.length
       : group.sessions.findIndex(session => session.id === anchor)
     if (sourceIndex !== -1 && (anchorIndex === sourceIndex || anchorIndex === sourceIndex + 1)) return
-    const accountSessionIds = activeDrag.accountKey === UNGROUPED_KEY
-      ? orderedUngroupedSessionIds
+    const accountSessionIds = group.workspaceId === undefined
+      ? reconciledSessionOrder(
+        looseSessionIdsByAccount[activeDrag.accountKey] ?? [],
+        sessionOrderByAccount[activeDrag.accountKey],
+      )
       : orderedWorkspaces.find(workspace => workspace.workspaceId === activeDrag.accountKey)?.sessionIds
     if (accountSessionIds === undefined) return
     const nextOrder = accountSessionIds.filter(id => id !== activeDrag.sessionId)
     const insertAt = anchor === undefined ? nextOrder.length : nextOrder.indexOf(anchor)
     nextOrder.splice(insertAt === -1 ? nextOrder.length : insertAt, 0, activeDrag.sessionId)
     setSessionOrder(activeDrag.accountKey, nextOrder.map(id => id as string))
-    if (orderBy === 'updated' || activeDrag.accountKey === UNGROUPED_KEY) return
+    if (orderBy === 'updated' || group.workspaceId === undefined) return
     insertSessionBefore(activeDrag.accountKey as WorkspaceId, activeDrag.sessionId, anchor).catch((reason: unknown) => {
       console.warn('session reorder rejected:', reason)
     })
@@ -484,8 +499,8 @@ function SessionTree({
                 ? group.sessions
                 : group.sessions.slice(0, COLLAPSED_SESSION_LIMIT)
               ).map((node) => {
-              // Session drag never leaves its group. Ungrouped writes only the
-              // browser-local account; real Workspaces may also write Host order.
+              // Session drag never leaves its group. Local cwd groups and
+              // Ungrouped write browser-local order; real Workspaces may also write Host order.
                 const sameGroupDrag = drag !== null && drag.accountKey === group.key
                 const dragProps = {
                   start: () => {
@@ -1170,6 +1185,7 @@ export function WorkspaceBrowser({
             )
             : (
               <SessionTree
+                retainAccountKeys={actions.retainAccountKeys}
                 useSessions={useSessions}
                 onSessionRename={onSessionRename}
                 onSessionArchive={onSessionArchive}

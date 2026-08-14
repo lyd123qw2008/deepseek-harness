@@ -180,6 +180,22 @@ describe('WorkspaceBrowser', () => {
     expect(b.store.getSnapshot().groupBy).toBe('workspace')
   })
 
+  it('groups sessions without persisted Workspace accounts by cwd basename', () => {
+    const b = mount({
+      useSessions: hook(sessionState([
+        summary('alpha-s', 2, { cwd: 'C:\\projects\\alpha' }),
+        summary('beta-s', 1, { cwd: 'C:\\projects\\beta' }),
+      ])),
+      useWorkspaces: hook(workspaceState([])),
+    })
+    expect(b.store.getSnapshot().groupBy).toBe('workspace')
+    expect(screen.getByText('alpha')).toBeTruthy()
+    expect(screen.getByText('beta')).toBeTruthy()
+    expect(screen.queryByText('未分组')).toBeNull()
+    fireEvent.click(screen.getByText('alpha'))
+    expect(screen.getByText('alpha-s')).toBeTruthy()
+  })
+
   it('persists flat-list drag order locally and applies Last updated within that account', async () => {
     const insertSessionBefore = vi.fn(async () => {})
     const sessions = sessionState([summary('one', 3), summary('two', 2), summary('three', 1)])

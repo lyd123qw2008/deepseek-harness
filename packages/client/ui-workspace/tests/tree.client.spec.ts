@@ -3,7 +3,7 @@ import type {
   SessionId, SessionListState, SessionSummary, WorkspaceId, WorkspaceView,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import {
-  deriveFlat, deriveGroups, deriveSearchResults, workspaceLabel, relativeTime,
+  deriveFlat, deriveGroups, deriveSearchResults, cwdGroupKey, workspaceLabel, relativeTime,
   UNGROUPED_KEY, UNGROUPED_LABEL,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
@@ -48,11 +48,25 @@ describe('deriveGroups', () => {
     expect(deriveFlat(sessions, noArchive)[0]).toMatchObject({ pendingInteraction: 'plan-review', running: true })
   })
 
-  it('puts only real unaccounted Sessions in the trailing Ungrouped group', () => {
+  it('groups unregistered Sessions by cwd and leaves cwd-less Sessions Ungrouped', () => {
     const sessions = list(summary('owned', 1, '/projects/first'), summary('loose', 9, '/other'))
-    const groups = deriveGroups(sessions, [workspace('first', ['owned'])], noArchive, view([UNGROUPED_KEY]))
-    expect(groups.map(group => group.key)).toEqual(['first', UNGROUPED_KEY])
+    const groups = deriveGroups(sessions, [workspace('first', ['owned'])], noArchive, view([cwdGroupKey('/other')]))
+    expect(groups.map(group => group.key)).toEqual(['first', cwdGroupKey('/other')])
+    expect(groups[1]).toMatchObject({ cwd: '/other', label: 'other', workspaceId: undefined })
     expect(groups[1]!.sessions.map(session => session.id)).toEqual([sid('loose')])
+  })
+
+
+  it('applies stored local order within a cwd group and appends new sessions by recency', () => {
+    const cwd = 'C:\\projects\\shared'
+    const key = cwdGroupKey(cwd)
+    const groups = deriveGroups(
+      list(summary('one', 3, cwd), summary('two', 2, cwd), summary('new', 4, cwd)),
+      [],
+      noArchive,
+      { expandedGroups: [key], sessionOrderByAccount: { [key]: ['two', 'stale', 'two'] } },
+    )
+    expect(groups[0]!.sessions.map(session => session.id)).toEqual([sid('two'), sid('new'), sid('one')])
   })
 
   it('applies stored Ungrouped order and appends new loose Sessions by recency', () => {

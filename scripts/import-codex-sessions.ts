@@ -2,7 +2,7 @@
 
 import { readFile, readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import { createAssistantMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -51,6 +51,7 @@ export interface CodexImportReport {
   readonly toolCalls: number
   readonly toolResults: number
   readonly unsupported: number
+  readonly unsupportedTypes: Readonly<Record<string, number>>
   readonly failures: readonly { path: string; message: string }[]
 }
 
@@ -86,10 +87,11 @@ function recordPayload(record: CodexRecord): JsonObject | undefined {
   return object(record.payload)
 }
 
-function timestampMs(value: unknown, fallback: number): number {
-  if (typeof value !== 'string') return fallback
+function timestampMs(value: unknown, sourcePath: string): number {
+  if (typeof value !== 'string') throw new Error(`${sourcePath}: session_meta timestamp must be an ISO timestamp`)
   const parsed = Date.parse(value)
-  return Number.isFinite(parsed) ? parsed : fallback
+  if (!Number.isFinite(parsed)) throw new Error(`${sourcePath}: session_meta timestamp is invalid`)
+  return parsed
 }
 
 function textFromBlocks(value: unknown, accepted: ReadonlySet<string>): string {
@@ -105,7 +107,7 @@ function textFromBlocks(value: unknown, accepted: ReadonlySet<string>): string {
 function jsonArguments(value: unknown): string {
   if (typeof value === 'string') return value
   const encoded = JSON.stringify(value)
-  return encoded === undefined ? '' : encoded
+  return typeof encoded === 'string' ? encoded : ''
 }
 
 function internalUserText(text: string): boolean {
@@ -121,6 +123,17 @@ function internalUserText(text: string): boolean {
 
 function unsupported(stats: MutableStats, detail: string): void {
   stats.unsupported.push(detail)
+}
+
+function unsupportedCategory(detail: string): string {
+  return detail.startsWith('unmatched tool output:') ? 'unmatched tool output' : detail
+}
+
+function addUnsupportedCategories(target: Record<string, number>, details: readonly string[]): void {
+  for (const detail of details) {
+    const category = unsupportedCategory(detail)
+    target[category] = (target[category] ?? 0) + 1
+  }
 }
 
 /** Build one validated DSH event log from Codex records. */
@@ -204,15 +217,18 @@ class EventBuilder {
     this.stats.assistantMessages += 1
   }
 
-  addToolCall(name: string, callId: string, args: string): void {
-    if (name === '' || callId === '') return
+  addToolCall(name: string, callId: string, args: string, provider: string, model: string): void {
+    if (name === '' || callId === '') {
+      unsupported(this.stats, 'malformed tool call')
+      return
+    }
     const position = this.ensureStep()
     const id = CallId(callId)
     this.session.append('assistant/message', {
       ...position,
       message: createAssistantMessage({
         content: [{ type: 'tool-call', id, name, arguments: args }],
-        source: { provider: 'codex', model: 'imported' },
+        source: { provider, model },
       }),
     }, { surfaceOp: 'append' })
     this.session.append('tool/call', {
@@ -268,11 +284,13 @@ function parseSessionMeta(
 ): { id: string; createdAt: number; cwd?: string; provider: string } {
   const first = records[0]
   const payload = first?.type === 'session_meta' ? recordPayload(first) : undefined
-  const id = stringValue(payload?.['id'])
-  if (id === undefined) throw new Error(`${sourcePath}: first record is not a valid session_meta`)
-  const createdAt = timestampMs(payload?.['timestamp'], Date.now())
-  const cwd = stringValue(payload?.['cwd'])
-  const provider = stringValue(payload?.['model_provider']) ?? 'codex'
+  if (payload === undefined) throw new Error(`${sourcePath}: first record is not a valid session_meta`)
+  const id = stringValue(payload['id'])
+  if (id === undefined || /[\\/:]/u.test(id)) throw new Error(`${sourcePath}: session_meta id is missing or unsafe`)
+  const createdAt = timestampMs(payload['timestamp'], sourcePath)
+  const cwd = stringValue(payload['cwd'])
+  if (cwd !== undefined && !isAbsolute(cwd)) throw new Error(`${sourcePath}: session_meta cwd must be absolute`)
+  const provider = stringValue(payload['model_provider']) ?? 'codex'
   return { id, createdAt, ...cwd === undefined ? {} : { cwd }, provider }
 }
 
@@ -301,13 +319,16 @@ function parseRecords(source: string, sourcePath: string): CodexRecord[] {
   return records
 }
 
-/** Parse one Codex rollout file without writing anything. */
+/**
+ * Parse one Codex rollout file without writing anything.
+ * @param sourcePath Absolute path to one Codex JSONL rollout.
+ * @returns The validated DSH event log and compatibility statistics.
+ */
 export async function parseCodexRollout(sourcePath: string): Promise<ParsedCodexRollout> {
   const records = parseRecords(await readFile(sourcePath, 'utf8'), sourcePath)
   const meta = parseSessionMeta(records, sourcePath)
   const builder = new EventBuilder(SessionId(`codex-${meta.id}`))
   let model = 'imported'
-  let sawTask = false
 
   for (const record of records) {
     const payload = recordPayload(record)
@@ -315,7 +336,6 @@ export async function parseCodexRollout(sourcePath: string): Promise<ParsedCodex
       const eventType = stringValue(payload['type'])
       if (eventType === 'task_started') {
         builder.startTurn()
-        sawTask = true
       } else if (eventType === 'task_complete') {
         builder.endTurn({ kind: 'completed' })
       } else if (eventType === 'turn_aborted') {
@@ -325,11 +345,9 @@ export async function parseCodexRollout(sourcePath: string): Promise<ParsedCodex
       }
       continue
     }
-    if (record.type !== 'turn_context' || payload === undefined) {
-      if (record.type !== 'response_item') continue
-    }
     if (record.type === 'turn_context') {
-      const contextModel = stringValue(payload?.['model'])
+      if (payload === undefined) continue
+      const contextModel = stringValue(payload['model'])
       if (contextModel !== undefined) model = contextModel
       continue
     }
@@ -352,7 +370,7 @@ export async function parseCodexRollout(sourcePath: string): Promise<ParsedCodex
       const name = stringValue(payload['name']) ?? ''
       const callId = stringValue(payload['call_id']) ?? ''
       const args = jsonArguments(payload['arguments'] ?? payload['input'] ?? {})
-      builder.addToolCall(name, callId, args)
+      builder.addToolCall(name, callId, args, meta.provider, model)
       continue
     }
     if (itemType === 'function_call_output' || itemType === 'custom_tool_call_output') {
@@ -363,9 +381,9 @@ export async function parseCodexRollout(sourcePath: string): Promise<ParsedCodex
       continue
     }
     if (itemType !== 'reasoning') unsupported(builder.stats, `response_item:${itemType ?? '<missing-type>'}`)
+    else unsupported(builder.stats, 'response_item:reasoning')
   }
 
-  if (!sawTask && builder.stats.userMessages > 0) builder.startTurn()
   builder.finish()
   return {
     sourcePath,
@@ -403,7 +421,24 @@ function defaultDshHome(): string {
     : resolve(configured)
 }
 
-/** Import Codex rollouts into a DSH JSONL backend. */
+async function withPersistence<T>(targetRoot: string, operation: (ctx: Context) => Promise<T>): Promise<T> {
+  const ctx = new Context()
+  try {
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(JsonlSessionPersistence, { root: targetRoot, compression: 'zstd' })
+    return await operation(ctx)
+  } finally {
+    await ctx.fiber.dispose()
+  }
+}
+
+/**
+ * Import Codex rollouts into a DSH JSONL backend.
+ * @param sourceRoot File or directory containing Codex JSONL rollouts.
+ * @param targetRoot DSH JSONL persistence root.
+ * @param dryRun Parse and report without publishing sessions.
+ * @returns Counters and explicit compatibility diagnostics for the batch.
+ */
 export async function importCodexRollouts(sourceRoot: string, targetRoot: string, dryRun = false): Promise<CodexImportReport> {
   const files = await rolloutFiles(sourceRoot)
   const failures: { path: string; message: string }[] = []
@@ -419,49 +454,49 @@ export async function importCodexRollouts(sourceRoot: string, targetRoot: string
     toolCalls: 0,
     toolResults: 0,
     unsupported: 0,
+    unsupportedTypes: {},
     failures,
   }
-  const ctx = dryRun ? undefined : new Context()
-  if (ctx !== undefined) {
-    await ctx.plugin(SessionStore)
-    await ctx.plugin(JsonlSessionPersistence, { root: targetRoot, compression: 'zstd' })
-  }
-  const existing = ctx === undefined ? new Set<string>() : new Set((await ctx.sessionPersistence.list()).map(header => String(header.id)))
-  try {
-    for (const path of files) {
-      try {
-        const parsed = await parseCodexRollout(path)
-        report.turns += parsed.stats.turns
-        report.userMessages += parsed.stats.userMessages
-        report.assistantMessages += parsed.stats.assistantMessages
-        report.toolCalls += parsed.stats.toolCalls
-        report.toolResults += parsed.stats.toolResults
-        report.unsupported += parsed.stats.unsupported.length
-        const id = `codex-${parsed.sourceId}`
-        if (existing.has(id)) {
-          report.skippedExisting += 1
-          continue
-        }
-        if (parsed.stats.userMessages === 0 && parsed.stats.assistantMessages === 0) {
-          report.skippedEmpty += 1
-          continue
-        }
-        if (!dryRun && ctx !== undefined) {
+  const existing = dryRun
+    ? new Set<string>()
+    : await withPersistence(targetRoot, async ctx => (
+      new Set((await ctx.sessionPersistence.list()).map(header => String(header.id)))
+    ))
+
+  for (const path of files) {
+    try {
+      const parsed = await parseCodexRollout(path)
+      report.turns += parsed.stats.turns
+      report.userMessages += parsed.stats.userMessages
+      report.assistantMessages += parsed.stats.assistantMessages
+      report.toolCalls += parsed.stats.toolCalls
+      report.toolResults += parsed.stats.toolResults
+      report.unsupported += parsed.stats.unsupported.length
+      addUnsupportedCategories(report.unsupportedTypes, parsed.stats.unsupported)
+      const id = `codex-${parsed.sourceId}`
+      if (existing.has(id)) {
+        report.skippedExisting += 1
+        continue
+      }
+      if (parsed.stats.userMessages === 0 && parsed.stats.assistantMessages === 0) {
+        report.skippedEmpty += 1
+        continue
+      }
+      if (!dryRun) {
+        await withPersistence(targetRoot, async (ctx) => {
           const session = ctx.sessions.create(SessionId(id), {
             seed: parsed.events,
             meta: { createdAt: parsed.createdAt, ...parsed.cwd === undefined ? {} : { cwd: parsed.cwd } },
           })
           await ctx.sessions.flush(session)
-          existing.add(id)
-        }
-        report.imported += 1
-      } catch (error) {
-        report.failed += 1
-        failures.push({ path, message: error instanceof Error ? error.message : String(error) })
+        })
+        existing.add(id)
       }
+      report.imported += 1
+    } catch (error) {
+      report.failed += 1
+      failures.push({ path, message: error instanceof Error ? error.message : String(error) })
     }
-  } finally {
-    if (ctx !== undefined) await ctx.fiber.dispose()
   }
   return report
 }
