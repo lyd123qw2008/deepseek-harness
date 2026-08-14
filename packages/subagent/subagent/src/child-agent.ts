@@ -57,10 +57,14 @@ export function resolveChildDepth(parent: Agent, maxDepth: number | undefined): 
 }
 
 /**
- * Resolve the child's `AgentOptions`: the parent's provider/model/maxTokens
- * route unless the request overrides it, stamped with the child's own
- * delegation depth.
- * @param parent - the delegating parent whose route the child inherits.
+ * Resolve the child's `AgentOptions`: the parent's active recorded
+ * provider/model route and explicit reasoning effort, or its declared options
+ * before the first request. Adapter-materialized effort is not pinned onto the
+ * child. A requested provider or model starts with that route's own effort
+ * unless the request explicitly supplies one; every request can still override
+ * the inherited values. The result is stamped with the child's own delegation
+ * depth.
+ * @param parent - the delegating parent whose active route the child inherits.
  * @param requested - per-child overrides, if any.
  * @param childDepth - the resolved delegation depth to stamp.
  * @returns the resolved options for `ctx.agents.create()`.
@@ -70,12 +74,23 @@ export function resolveChildAgentOptions(
   requested: AgentOptions | undefined,
   childDepth: number,
 ): AgentOptions {
-  const parentProvider = parent.options.provider
-  const parentModel = parent.options.model
+  const parentHeader = parent.session.requestHeader()
+  const parentConfig = parentHeader?.config
+  const parentProvider = parentConfig?.provider ?? parent.options.provider
+  const parentModel = parentConfig?.model ?? parent.options.model
   const parentMaxTokens = parent.options.maxTokens
+  const parentReasoningEffort = parentHeader === undefined
+    ? parent.options.reasoningEffort
+    : parentHeader.adapterDefaults?.reasoningEffort === true
+      ? undefined
+      : parentConfig?.reasoningEffort
+  const inheritedReasoningEffort = requested?.provider === undefined && requested?.model === undefined
+    ? parentReasoningEffort
+    : undefined
   return {
     ...parentProvider !== undefined ? { provider: parentProvider } : {},
     ...parentModel !== undefined ? { model: parentModel } : {},
+    ...inheritedReasoningEffort === undefined ? {} : { reasoningEffort: inheritedReasoningEffort },
     ...parentMaxTokens !== undefined ? { maxTokens: parentMaxTokens } : {},
     ...requested,
     subagentDepth: childDepth,

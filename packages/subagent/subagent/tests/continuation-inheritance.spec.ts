@@ -14,7 +14,8 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import type { LlmModelReasoningInfo } from '@deepseek-ai/dsh-llm'
 import SandboxPolicyService, { effectiveSandboxMode, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
@@ -29,13 +30,16 @@ type Script = ConstructorParameters<typeof MockAdapter>[0]
 
 const roots: string[] = []
 const contexts: Context[] = []
+const MAX_REASONING: LlmModelReasoningInfo = {
+  efforts: [{ id: ReasoningEffortId('max'), name: 'Max' }],
+}
 afterEach(async () => {
   for (const ctx of contexts.splice(0).reverse()) await ctx.fiber.dispose()
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
 /** Boot the continuable stack plus both policy services the manager consumes opportunistically. */
-async function setup(script: Script) {
+async function setup(script: Script, reasoning?: LlmModelReasoningInfo) {
   const ctx = new Context()
   contexts.push(ctx)
   await mountAgentLoopTestDependencies(ctx)
@@ -48,7 +52,7 @@ async function setup(script: Script) {
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(SubagentFork, { providerName: 'fork' })
-  ctx.llm.registerAdapter(['mock'], new MockAdapter(script))
+  ctx.llm.registerAdapter(['mock'], new MockAdapter(script, reasoning))
   const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
   return { ctx, parent }
 }
@@ -60,6 +64,22 @@ function startSpec(parent: Agent, provider = 'spawn') {
     request: { prompt: [{ type: 'text' as const, text: 'child task' }], parent },
     signal: new AbortController().signal,
   }
+}
+
+/** Seed the parent state emitted by a session-local model selection before delegation. */
+function recordParentMaxEffort(parent: Agent): void {
+  parent.session.append('turn/start', { turn: 1 })
+  parent.session.append('request/header', {
+    header: {
+      config: {
+        provider: 'mock',
+        model: 'mock',
+        reasoningEffort: ReasoningEffortId('max'),
+      },
+    },
+    reason: 'initial',
+  })
+  parent.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
 }
 
 /** Wait until a child's Activation is gone, i.e. its handle finished disposal. */
@@ -227,5 +247,27 @@ describe('continuable policy inheritance', () => {
       { data: { mode: 'read-only', source: 'delegation' } },
     ])
     expect(effectiveSandboxMode(loaded.events)).toBe('read-only')
+  })
+})
+
+describe('continuable model inheritance', () => {
+  it('snapshots the parent\'s active explicit reasoning effort for the child activation', { timeout: 20_000 }, async () => {
+    const { ctx, parent } = await setup([textResponse('child configured')], MAX_REASONING)
+    recordParentMaxEffort(parent)
+
+    let child: Agent | undefined
+    ctx.on('agent/created', ({ agent }) => {
+      if (agent !== parent) child = agent
+    })
+    const started = await ctx.subagents.startContinuable(startSpec(parent))
+    if (child === undefined) throw new Error('expected the continuable child to be created')
+    expect(child.options.reasoningEffort).toBe(ReasoningEffortId('max'))
+
+    await waitNoActivation(ctx, started.childId)
+    const loaded = await ctx.sessionPersistence.load(started.childId)
+    const header = loaded.events.find(
+      (event): event is SessionEvent<'request/header'> => event.type === 'request/header',
+    )
+    expect(header?.data.header.config.reasoningEffort).toBe(ReasoningEffortId('max'))
   })
 })

@@ -433,16 +433,18 @@ export class ReactLoopAgent implements Agent {
   ): Promise<{ request: GenerateOptions; preparedCall?: PreparedLlmCall }> {
     const { session } = this
 
-    // A loop instance starts from its declared route, restoring only an explicit
-    // effort owned by that exact model. Later steps re-resolve marked defaults.
+    // A loop instance starts from its declared route and explicit effort. A
+    // matching persisted header remains authoritative; later steps re-resolve
+    // adapter-marked defaults.
     const persistedHeader = session.requestHeader()
     const persistedConfig = persistedHeader?.config
     const route = { provider: this.options.provider ?? '', model: this.options.model ?? '' }
-    const reasoningEffort = persistedConfig?.provider === route.provider
-      && persistedConfig.model === route.model
-      && persistedHeader?.adapterDefaults?.reasoningEffort !== true
-      ? persistedConfig.reasoningEffort
-      : undefined
+    let reasoningEffort = this.options.reasoningEffort
+    if (persistedConfig?.provider === route.provider && persistedConfig.model === route.model) {
+      reasoningEffort = persistedHeader?.adapterDefaults?.reasoningEffort === true
+        ? undefined
+        : persistedConfig.reasoningEffort
+    }
     const maxTokens = this.options.maxTokens
     const seedConfig = deepFreeze(structuredClone(
       this.requestHeaderLogged

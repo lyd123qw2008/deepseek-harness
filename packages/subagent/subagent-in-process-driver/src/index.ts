@@ -107,13 +107,16 @@ export async function startInProcessRun(
   if (request.signal.aborted) throw prePublicationAbort()
   const parent = request.parent
   const childDepth = resolveChildDepth(parent, request.maxDepth)
+  // Snapshot before any await: a later parent route switch belongs to the
+  // parent's future, not to this child.
+  const childAgentOptions = resolveChildAgentOptions(parent, request.agentOptions, childDepth)
 
   const childId = SessionId(randomUUID())
   const seed = options.seed
   const activationBoundary = seed?.length ?? 0
 
-  // Capture before the first await: a later parent switch belongs to the
-  // parent's future.
+  // Capture before the first await: a later parent policy switch belongs to
+  // the parent's future.
   const inherited = captureDelegatedPolicyOverrides(parent)
 
   let structured: StructuredAttachment | undefined
@@ -133,7 +136,7 @@ export async function startInProcessRun(
     sessionId: childId,
     meta: childSessionMeta(parent, childDepth, activationBoundary),
     ...seed !== undefined ? { seed } : {},
-    agentOptions: resolveChildAgentOptions(parent, request.agentOptions, childDepth),
+    agentOptions: childAgentOptions,
     signal: request.signal,
     setup,
   })

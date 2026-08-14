@@ -41,6 +41,25 @@ export const WIDER_MODES: Record<string, readonly SandboxMode[]> = {
 export const ESCALATION_TARGETS: readonly SandboxMode[] = ['workspace-write', 'danger-full-access']
 
 /**
+ * Whether a known requested target is already covered by the call's standing
+ * policy. Tool consumers normalize only this no-op shape before validating the
+ * paired escalation arguments, because model runtimes can retain stale
+ * `sandbox_permissions` fields after the session has already reached that
+ * mode. Unknown requested or effective modes never count as redundant and
+ * continue to the fail-closed escalation path.
+ * @param sandboxPermissions - the raw `sandbox_permissions` argument, if given.
+ * @param effectiveMode - the resolved standing mode for this call, if any.
+ * @returns whether the request changes no authority and can run under the standing policy.
+ */
+export function isRedundantEscalation(sandboxPermissions: string | undefined, effectiveMode: SandboxMode | undefined): boolean {
+  if (sandboxPermissions === undefined || effectiveMode === undefined) return false
+  if (effectiveMode !== 'read-only' && !ESCALATION_TARGETS.includes(effectiveMode)) return false
+  const requestedMode = sandboxPermissions as SandboxMode
+  return ESCALATION_TARGETS.includes(requestedMode)
+    && !(WIDER_MODES[effectiveMode] ?? []).includes(requestedMode)
+}
+
+/**
  * Validate the escalation argument pairing a tool schema cannot express:
  * `sandbox_permissions` and `justification` travel together — an approval
  * prompt without a reason, or a reason driving nothing, is a malformed ask —

@@ -12,7 +12,8 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import SandboxedFileSystem from '@deepseek-ai/dsh-fs-sandbox'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, LlmModelReasoningInfo } from '@deepseek-ai/dsh-llm'
 import SandboxPolicyService, { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import * as ToolFs from '@deepseek-ai/dsh-tool-fs'
@@ -24,6 +25,9 @@ import { startInProcessRun } from '../src/index.ts'
 type Script = ConstructorParameters<typeof MockAdapter>[0]
 
 const READ_ONLY_DENIAL = '[sandbox: file access denied under read-only mode]'
+const MAX_REASONING: LlmModelReasoningInfo = {
+  efforts: [{ id: ReasoningEffortId('max'), name: 'Max' }],
+}
 const contexts: Context[] = []
 let workspace: string
 
@@ -36,7 +40,10 @@ afterEach(async () => {
   await rm(workspace, { recursive: true, force: true })
 })
 
-async function setupWalled(script: Script): Promise<{ ctx: Context; parent: Agent }> {
+async function setupWalled(
+  script: Script,
+  reasoning?: LlmModelReasoningInfo,
+): Promise<{ ctx: Context; parent: Agent }> {
   const ctx = new Context()
   contexts.push(ctx)
   await mountAgentLoopTestDependencies(ctx)
@@ -45,7 +52,7 @@ async function setupWalled(script: Script): Promise<{ ctx: Context; parent: Agen
   await ctx.plugin(ToolFs)
   await ctx.plugin(ApprovalService)
   await ctx.plugin(AgentLoop, { agents: [] })
-  ctx.llm.registerAdapter(['mock'], new MockAdapter(script))
+  ctx.llm.registerAdapter(['mock'], new MockAdapter(script, reasoning))
   const parent = ctx.agentLoop.create(
     SessionId('parent'),
     { provider: 'mock', model: 'mock' },
@@ -66,6 +73,22 @@ function spawnRequest(parent: Agent) {
       label: 'child task',
     }),
   }
+}
+
+/** Seed the parent state emitted by a session-local model selection before delegation. */
+function recordParentMaxEffort(parent: Agent): void {
+  parent.session.append('turn/start', { turn: 1 })
+  parent.session.append('request/header', {
+    header: {
+      config: {
+        provider: 'mock',
+        model: 'mock',
+        reasoningEffort: ReasoningEffortId('max'),
+      },
+    },
+    reason: 'initial',
+  })
+  parent.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
 }
 
 function toolResultTexts(agent: Agent): string[] {
@@ -248,6 +271,26 @@ describe('in-process policy inheritance', () => {
       )
       expect(asked?.data.toolName).toBe('write')
       expect(decided?.data).toMatchObject({ id: asked?.data.id, outcome: 'rejected' })
+    } finally {
+      await run.dispose()
+    }
+  })
+})
+
+describe('in-process model inheritance', () => {
+  it('copies the parent\'s active explicit reasoning effort into a spawn child', async () => {
+    const script: Script = [textResponse('child configured')]
+    const { parent } = await setupWalled(script, MAX_REASONING)
+    recordParentMaxEffort(parent)
+    expect(parent.options.reasoningEffort).toBeUndefined()
+    expect(parent.session.requestHeader()?.config.reasoningEffort).toBe(ReasoningEffortId('max'))
+
+    const run = await startInProcessRun(spawnRequest(parent), {})
+    try {
+      await run.result
+      const child = run.localAgent as Agent
+      expect(child.options.reasoningEffort).toBe(ReasoningEffortId('max'))
+      expect(child.session.requestHeader()?.config.reasoningEffort).toBe(ReasoningEffortId('max'))
     } finally {
       await run.dispose()
     }

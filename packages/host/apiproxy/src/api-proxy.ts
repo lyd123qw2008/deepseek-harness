@@ -1051,8 +1051,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     ?? DEFAULT_COLD_BLANK_PROBE_MAX_BYTES
   /** The seed model each create/resume declares; re-read so it never goes stale. */
   const agentOptions = (): AgentOptions => {
-    const { provider, model } = defaults.defaultModelSelection()
-    return { provider, model }
+    const { provider, model, reasoningEffort } = defaults.defaultModelSelection()
+    return {
+      provider,
+      model,
+      ...reasoningEffort === undefined ? {} : { reasoningEffort },
+    }
   }
   type WebModelSelectionRef = ModelSelectionRef & { current: ModelSelection }
   const selections = new WeakMap<Agent, WebModelSelectionRef>()

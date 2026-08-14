@@ -111,7 +111,11 @@ async function run(ctx: Context, task: string, io: HeadlessIo): Promise<void> {
   const { agent } = await agents.create({
     sessionId: SessionId(`session-${randomUUID()}`),
     meta: { cwd: process.cwd() },
-    agentOptions: { provider: selection.provider, model: selection.model },
+    agentOptions: {
+      provider: selection.provider,
+      model: selection.model,
+      ...selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort },
+    },
     setup: (agentCtx) => {
       const selected: ModelSelectionRef = { current: selection, assembled: undefined }
       installModelSelection(agentCtx, selected)
