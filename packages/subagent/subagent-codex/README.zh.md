@@ -45,7 +45,7 @@ dsh plugin --profile <name> remove @deepseek-ai/dsh-subagent-codex
 dsh --profile <name>
 ```
 
-安装决定 Host 可用性，而不是模型权限。Bundle 会提供休眠的默认 `codex` 配置项；Profile 可以替换该配置项的完整 config，也可以挂载更多具有不同 `providerName`、`permissionMode` 与 `env` 的配置项。加载实例本身不会在绑定工具调用前启动 Codex 进程。每个 `dsh-tool-subagent` 配置项指定一个提供方，并需要独立的 `toolName`，因此模型看到的是静态工具，而不是动态提供方选择器。完整 Agent Preset 携带对应的默认产品工具行并设置 `disabled: true`；复制一个 preset 后删除该字段，即可只向由该副本组装的 agent 暴露 `subagent_codex`。其 `one-shot` 策略会让省略 `run_in_background` 或传入 `false` 的调用继续在前台等待，而显式传入 `true` 会返回由父 agent 拥有的 Job ID，供 `job_output` 或 `job_kill` 使用。base host（基础宿主）与完整 preset 已提供通用作业注册表和控制工具。
+安装决定 Host 可用性，而不是模型权限。Bundle 会提供休眠的默认 `codex` 配置项；随附的 `codex` Agent Preset 暴露 `subagent_codex` 并省略 DSH 的 `web_search`，因此网络检索使用 Codex 自己的 websearch。Profile 可以替换该配置项的完整 config，也可以挂载更多具有不同 `providerName`、`permissionMode` 与 `env` 的配置项。加载实例本身不会在绑定工具调用前启动 Codex 进程。每个 `dsh-tool-subagent` 配置项指定一个提供方，并需要独立的 `toolName`，因此模型看到的是静态工具，而不是动态提供方选择器。完整 Agent Preset 携带对应的默认产品工具行并设置 `disabled: true`；复制一个 preset 后删除该字段，即可只向由该副本组装的 agent 暴露 `subagent_codex`。其 `one-shot` 策略会让省略 `run_in_background` 或传入 `false` 的调用继续在前台等待，而显式传入 `true` 会返回由父 agent 拥有的 Job ID，供 `job_output` 或 `job_kill` 使用。base host（基础宿主）与完整 preset 已提供通用作业注册表和控制工具。
 
 下列独立组装展示完整的显式能力。基于 `@deepseek-ai/dsh-base` 的 Profile 保留已有 Job 配置项，新增产品提供方与工具配置项，而且不重复挂载 Job 服务。
 

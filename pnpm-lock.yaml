@@ -1464,6 +1464,9 @@ importers:
       '@deepseek-ai/dsh-storage-json':
         specifier: workspace:^
         version: link:../../storage/storage-json
+      '@deepseek-ai/dsh-subagent-codex':
+        specifier: workspace:^
+        version: link:../../subagent/subagent-codex
       '@deepseek-ai/dsh-subprocess':
         specifier: workspace:^
         version: link:../../subprocess/subprocess

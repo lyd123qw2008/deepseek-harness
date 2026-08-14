@@ -294,6 +294,11 @@
     - id: ui-trajectory
       name: '@deepseek-ai/dsh-client-ui-trajectory'
 
+    # The Web profile owns the dormant Codex provider explicitly; it starts the
+    # native Codex process only when the shipped `codex` preset calls its tool.
+    - id: subagent-codex
+      name: '@deepseek-ai/dsh-subagent-codex'
+
 # ── the agent plane moves behind agent presets ─────────────────────────────
 #
 # Every row below composes what ONE agent contributes to the host registries:

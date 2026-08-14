@@ -216,10 +216,10 @@ describe('the shipped Web composition', () => {
     }
   })
 
-  it('supplies both shipped presets, and only those, from the system root', async () => {
+  it('supplies all shipped presets, and only those, from the system root', async () => {
     const listed = await ctx.agentPresets.list()
 
-    expect(listed.map(preset => preset.id).sort()).toEqual(['code', 'cordis', 'minimal', 'standard'])
+    expect(listed.map(preset => preset.id).sort()).toEqual(['code', 'codex', 'cordis', 'minimal', 'standard'])
     expect(listed.every(preset => preset.trust === 'system')).toBe(true)
     expect(ctx.agentPresets.defaultId).toBe('standard')
   })
@@ -241,6 +241,27 @@ describe('the shipped Web composition', () => {
         'subagent', 'subagent_fork', 'todo_write', 'update_goal', 'web_search',
         'workflow', 'write',
       ])
+    } finally {
+      await handle.dispose()
+    }
+  })
+
+  it('uses Codex native web research in the shipped `codex` preset', async () => {
+    expect(ctx.subagents.list()).toContain('codex')
+
+    const handle = await ctx.agents.create({
+      sessionId: SessionId('preset-codex'),
+      setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'codex').then(() => undefined),
+    })
+    try {
+      const tools = toolNames(ctx, handle.agent)
+      expect(tools).toContain('subagent_codex')
+      expect(tools).not.toContain('web_search')
+
+      const assembly = await ctx.systemPrompt.assemble({ scope: handle.agent })
+      const persona = assembly.sections.find(section => section.name === 'deployment:persona')?.text ?? ''
+      expect(persona).toContain('native websearch')
+      expect(persona).toContain('subagent_codex')
     } finally {
       await handle.dispose()
     }
