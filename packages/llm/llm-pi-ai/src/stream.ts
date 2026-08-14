@@ -28,15 +28,64 @@ export function mapUsage(usage: PiUsage): TokenUsage {
   }
 }
 
-// XXX(pi-ai upstream): pi-ai flattens the caught error to `error.message`
-// (api/anthropic-messages.js: `errorMessage = error instanceof Error ?
-// error.message : JSON.stringify(error)`), discarding the original Error and its
-// `cause` chain before it reaches us. undici carries the actionable transport
-// detail on `cause` (e.g. `SocketError: other side closed`) but hands the fetch
-// wrapper a bare `terminated`, so we are left pattern-matching terse words here.
-// If pi-ai ever forwards the original Error (or a fetch/dispatcher hook that lets
-// us capture the cause ourselves), classify on `code`/`cause` instead of text.
-function classifyPiAiError(message: string): string {
+/**
+ * Classify preserved OpenAI Responses failure metadata.
+ *
+ * The local pi-ai patch retains the provider's semantic code and HTTP status.
+ * A recognized code is more precise than its status; other pi-ai APIs still
+ * use flattened-message classification below.
+ */
+function classifyStructuredPiAiError(errorCode: string | undefined, errorStatus: number | undefined): string | undefined {
+  const normalizedCode = errorCode?.trim().toLowerCase()
+  if (normalizedCode !== undefined) {
+    switch (normalizedCode) {
+      case 'authentication_error':
+      case 'invalid_api_key':
+      case 'permission_denied':
+      case 'unauthorized':
+        return 'AUTH'
+      case 'insufficient_quota':
+      case 'quota_exceeded':
+        return QUOTA_EXCEEDED_CODE
+      case 'rate_limit_exceeded':
+      case 'rate_limit':
+        return 'RATE_LIMIT'
+      case 'context_length_exceeded':
+      case 'context_window_exceeded':
+      case 'max_context_length_exceeded':
+        return CONTEXT_WINDOW_EXCEEDED_CODE
+      case 'request_timeout':
+      case 'timeout':
+        return 'TIMEOUT'
+      case 'server_error':
+      case 'internal_error':
+      case 'service_unavailable':
+      case 'overloaded_error':
+        return 'SERVER'
+      case 'invalid_request_error':
+      case 'invalid_prompt':
+      case 'invalid_value':
+      case 'unsupported_value':
+        return 'INVALID_REQUEST'
+    }
+  }
+
+  if (errorStatus === undefined) return undefined
+  if (errorStatus === 401 || errorStatus === 403) return 'AUTH'
+  if (errorStatus === 408) return 'TIMEOUT'
+  if (errorStatus === 429) return 'RATE_LIMIT'
+  if (errorStatus >= 500 && errorStatus <= 599) return 'SERVER'
+  if (errorStatus >= 400 && errorStatus <= 499) return 'INVALID_REQUEST'
+  return undefined
+}
+
+/**
+ * Classify pi-ai APIs that emit only a flattened display message.
+ *
+ * Transport causes are discarded by some upstream adapters before their error
+ * events reach the Harness, so legacy protocols still need this narrow fallback.
+ */
+function classifyFlattenedPiAiError(message: string): string {
   if (/\b(?:401|403)\b/.test(message)) return 'AUTH'
   if (isQuotaExceededError(message)) return QUOTA_EXCEEDED_CODE
   if (/\b429\b|rate.?limit/i.test(message)) return 'RATE_LIMIT'
@@ -68,17 +117,22 @@ function classifyPiAiError(message: string): string {
  * Map a terminal pi-ai event to the harness finish reason.
  * @param message - the assistant message carried by the `done` or `error` event.
  * @param contextWindow - resolved catalog capacity for usage-based overflow detection.
- * @returns the mapped harness reason. Recognized error text, `stop` usage above
- *   `contextWindow`, and zero-output `length` usage that fills the window map
- *   to `CONTEXT_WINDOW_EXCEEDED`; a `stop` with no content blocks maps to an
- *   `EMPTY_RESPONSE` error.
+ * @returns the mapped harness reason. For error events, a preserved provider
+ *   code wins over HTTP status and legacy error text. Context-window codes,
+ *   `stop` usage above `contextWindow`, and zero-output `length` usage that
+ *   fills the window map to `CONTEXT_WINDOW_EXCEEDED`; a `stop` with no content
+ *   blocks maps to an `EMPTY_RESPONSE` error.
  */
 export function mapStopReason(message: AssistantMessage, contextWindow?: number): FinishReason {
-  const piAiOverflow = isContextOverflow(message, contextWindow)
-  const harnessOverflow = message.stopReason === 'error'
+  const structuredFailureCode = message.stopReason === 'error'
+    ? classifyStructuredPiAiError(message.errorCode, message.errorStatus)
+    : undefined
+  const piAiOverflow = structuredFailureCode === undefined && isContextOverflow(message, contextWindow)
+  const harnessOverflow = structuredFailureCode === undefined
+    && message.stopReason === 'error'
     && message.errorMessage !== undefined
     && isContextWindowExceededError(message.errorMessage)
-  if (piAiOverflow || harnessOverflow) {
+  if (piAiOverflow || structuredFailureCode === CONTEXT_WINDOW_EXCEEDED_CODE || harnessOverflow) {
     return {
       kind: 'error',
       failure: {
@@ -110,7 +164,7 @@ export function mapStopReason(message: AssistantMessage, contextWindow?: number)
     }
     case 'error': {
       const text = message.errorMessage ?? 'pi-ai stream error'
-      return { kind: 'error', failure: { message: text, code: classifyPiAiError(text) } }
+      return { kind: 'error', failure: { message: text, code: structuredFailureCode ?? classifyFlattenedPiAiError(text) } }
     }
   }
 }

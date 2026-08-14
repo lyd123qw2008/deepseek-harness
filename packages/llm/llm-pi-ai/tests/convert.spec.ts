@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
+import { createServer } from 'node:http'
 import { AttachmentId, ImageVariantId } from '@deepseek-ai/dsh-attachment'
 import type { AttachmentStore, ImageAttachmentRef, ImageRequestPolicy, RequestImageAttachment } from '@deepseek-ai/dsh-attachment'
-import { createUserMessage, CallId, CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, createMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, CallId, CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, LlmError, createMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, StreamChunk } from '@deepseek-ai/dsh-llm'
-import type { AssistantMessage, AssistantMessageEvent, Usage } from '@earendil-works/pi-ai'
+import { stream as streamOpenAIResponses } from '@earendil-works/pi-ai/api/openai-responses'
+import type { AssistantMessage, AssistantMessageEvent, Context as PiContext, Model, Usage } from '@earendil-works/pi-ai'
 import { toPiContext } from '../src/context.ts'
 import { toPiReplayState } from '../src/replay.ts'
 import { mapStopReason, mapUsage, toStreamChunks } from '../src/stream.ts'
@@ -783,7 +785,7 @@ describe('mapStopReason / mapUsage', () => {
       .toEqual({ kind: 'error', failure: { message: 'pi-ai stream error', code: 'PI_AI_ERROR' } })
   })
 
-  it('maps routable HTTP-ish error messages to stable codes', () => {
+  it('falls back to flattened pi-ai error text when metadata is unavailable', () => {
     expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'HTTP 401: bad key' })))
       .toMatchObject({ kind: 'error', failure: { code: 'AUTH' } })
     expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'HTTP 429: rate limit' })))
@@ -822,6 +824,84 @@ describe('mapStopReason / mapUsage', () => {
       stopReason: 'error',
       errorMessage: 'vector length limit exceeded',
     }))).toMatchObject({ kind: 'error', failure: { code: 'PI_AI_ERROR' } })
+  })
+
+  it('prioritizes structured provider errors over status and display text', () => {
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorCode: 'rate_limit_exceeded',
+      errorStatus: 503,
+      errorMessage: 'Our servers are currently overloaded. Please try again later.',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'RATE_LIMIT' } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorCode: 'insufficient_quota',
+      errorStatus: 429,
+      errorMessage: 'quota temporarily unavailable',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'QUOTA' } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorCode: 'context_length_exceeded',
+      errorStatus: 400,
+      errorMessage: 'invalid request',
+    }))).toMatchObject({ kind: 'error', failure: { code: CONTEXT_WINDOW_EXCEEDED_CODE } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorCode: 'server_error',
+      errorStatus: 503,
+      errorMessage: 'input exceeds the model context window limit',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'SERVER' } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorStatus: 503,
+      errorMessage: 'gateway failure',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'SERVER' } })
+  })
+
+  it('preserves an OpenAI Responses code and status through the patched pi-ai adapter', async () => {
+    const body = JSON.stringify({ error: { message: 'capacity unavailable', type: 'server_error', code: 'server_error' } })
+    const server = createServer((_request, response) => {
+      response.writeHead(503, {
+        'content-type': 'application/json',
+        'content-length': String(Buffer.byteLength(body)),
+      })
+      response.end(body)
+    })
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('test server did not bind a TCP port')
+    const model: Model<'openai-responses'> = {
+      id: 'local-responses-test',
+      name: 'Local Responses Test',
+      api: 'openai-responses',
+      provider: 'openai',
+      baseUrl: `http://127.0.0.1:${address.port}/v1`,
+      reasoning: false,
+      input: ['text'],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 1_024,
+      maxTokens: 128,
+    }
+    const context: PiContext = { messages: [] }
+    let terminal: AssistantMessage | undefined
+
+    try {
+      for await (const event of streamOpenAIResponses(model, context, { apiKey: 'test-key', maxRetries: 0 })) {
+        if (event.type === 'error') terminal = event.error
+      }
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => {
+        if (error === undefined) resolve()
+        else reject(error)
+      }))
+    }
+
+    expect(terminal).toMatchObject({
+      stopReason: 'error',
+      errorCode: 'server_error',
+      errorStatus: 503,
+    })
+    expect(mapStopReason(terminal!)).toMatchObject({ kind: 'error', failure: { code: 'SERVER' } })
   })
 
   it.each([
