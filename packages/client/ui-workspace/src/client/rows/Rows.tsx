@@ -122,8 +122,8 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   t: RowTranslate
 }) {
   const row = group
-  // Only the cwd-less bucket uses dictionary copy; cwd-derived groups expose their path basename.
-  const label = row.cwd === undefined ? t('group.ungrouped') : row.label
+  // Only the bucket without a Workspace or cwd uses dictionary copy; other groups expose their label.
+  const label = row.workspaceId === undefined && row.cwd === undefined ? t('group.ungrouped') : row.label
   const active = group.expanded && group.containsCurrent
   const [menuOpen, setMenuOpen] = useState(false)
   const workspaceMenuItems = [
@@ -195,8 +195,8 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
       </span>
     </div>
   )
-  // The cwd-less bucket has no path to show; cwd-derived groups expose the stored path.
-  if (row.cwd === undefined) return ownRow
+  // The ungrouped bucket has no backing Workspace; real Workspaces may omit cwd.
+  if (row.createdAt === undefined) return ownRow
   return (
     <HoverCard
       anchor={ownRow}
