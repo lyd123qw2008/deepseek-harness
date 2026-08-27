@@ -15,7 +15,7 @@ Status: implemented
 - `classifyFlattenedPiAiError` 识别另外两种传输层措辞，并将两者都映射为 `TRANSPORT`：
   - 流式输出中途的套接字断开，呈现为裸的 `terminated`（undici）或 `Premature close`（Node 流层）；
   - 在终止事件之前被截断的流，每个 pi-ai 提供方各自抛出不同措辞（`Anthropic stream ended before message_stop`、`… before a terminal response event`、`… ended without a terminal event`、`Stream ended without finish_reason`），统一按 `stream ended before/without` 匹配。
-- `classifyFlattenedPiAiError` 保留为仍会把原始传输失败压平成文本的 API 的兼容回退。OpenAI Responses 与 Codex 的结构化 code 和 status 决策记录在[结构化 metadata 注记](2026-08-14-pi-ai-server-overload-classification.md)中。
+- `classifyFlattenedPiAiError` 保留为仍会把原始传输失败压平成文本的 API 的兼容回退。OpenAI Responses 与 Codex 的结构化 code 和 status 决策记录在[结构化 metadata 注记](2026-08-14-pi-ai-server-overload-classification.zh.md)中。
 - `llm-pi-ai/README.md` 记录没有保留元数据的 API 会从扁平化传输消息中进行文本分类，并说明结构化的 OpenAI Responses/Codex 元数据优先。
 
 对于会压平传输失败的 API，分类继续基于消息文本，因为这是 pi-ai 交付的唯一信号。经过补丁处理的 OpenAI Responses 与 Codex 路径会在这个回退之前分类其保留的元数据。

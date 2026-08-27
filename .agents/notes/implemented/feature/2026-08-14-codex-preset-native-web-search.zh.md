@@ -10,7 +10,7 @@ Web profile 默认的 `tool-web` 暴露 `web_search`，其随附提供方会通�
 
 ## 决策
 
-随附的 `codex` preset 位于 `apps/cli/config/agent-presets/codex`。它保留标准编码能力，启用 `subagent_codex` 工具，省略面向模型的 `tool-web` 行，并在 persona 中指示模型把网络检索交给 Codex。Web 组合包显式依赖 `@deepseek-ai/dsh-subagent-codex`，并在 host 上挂载休眠的 `codex` 提供方；只有该 preset 的工具被调用时，提供方才会启动原生进程。根据[生产 dsh 排除产品 subagent 提供方](../simplification/2026-08-12-production-dsh-excludes-product-subagent-providers.md)，base 组合包仍不包含产品提供方依赖和配置行。
+随附的 `codex` preset 位于 `apps/cli/config/agent-presets/codex`。它保留标准编码能力，启用 `subagent_codex` 工具，省略面向模型的 `tool-web` 行，并在 persona 中指示模型把网络检索交给 Codex。Web 组合包显式依赖 `@deepseek-ai/dsh-subagent-codex`，并在 host 上挂载休眠的 `codex` 提供方；只有该 preset 的工具被调用时，提供方才会启动原生进程。根据[生产 dsh 排除产品 subagent 提供方](../simplification/2026-08-12-production-dsh-excludes-product-subagent-providers.zh.md)，base 组合包仍不包含产品提供方依赖和配置行。
 
 ## 验证
 

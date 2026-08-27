@@ -14,7 +14,7 @@ Status: implemented
 
 bash、PowerShell 与文件系统工具消费方会在校验升级参数对之前解析其常驻策略。冗余的已知目标会绕过成对参数校验和 `approveEscalation`，随后按未变的常驻策略执行。不会创建 approval 请求、授权或策略模式变更。
 
-每个会改变权限的请求仍保留[沙箱决策](../feature/2026-07-06-sandbox.md)中的既有路径：成对参数校验、针对有效模式的严格放宽，以及执行前的 approval。文件系统路径仍按[跨家族决策](../feature/2026-07-14-cross-family-fs-sandbox.md)与 shell 路径保持一致。
+每个会改变权限的请求仍保留[沙箱决策](../feature/2026-07-06-sandbox.zh.md)中的既有路径：成对参数校验、针对有效模式的严格放宽，以及执行前的 approval。文件系统路径仍按[跨家族决策](../feature/2026-07-14-cross-family-fs-sandbox.zh.md)与 shell 路径保持一致。
 
 ## Alternatives considered
 

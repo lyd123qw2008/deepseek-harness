@@ -34,5 +34,5 @@ OpenAI Responses 与 Codex 的失败可能只带着展示消息抵达 Harness。
 
 - OpenAI Responses 与 Codex 的重试分类依据下游元数据工作，而不会把恢复范围扩大到未知 pi-ai 失败。
 - 当 pi-ai 暴露响应标头时，非 2xx 提供方延迟与请求标识可以抵达 Harness 重试策略。
-- 上游 API 将原始 `cause` 压平的传输失败仍只能尽力从文本分类；兼容回退及其理由见[扁平化传输注记](2026-07-22-pi-ai-transport-truncation-classification.md)。pi-ai 未转发的 cause 无法由适配器层恢复。
+- 上游 API 将原始 `cause` 压平的传输失败仍只能尽力从文本分类；兼容回退及其理由见[扁平化传输注记](2026-07-22-pi-ai-transport-truncation-classification.zh.md)。pi-ai 未转发的 cause 无法由适配器层恢复。
 - 未来升级 pi-ai 时必须重新应用并审查版本固定补丁；其哈希记录在 `pnpm-lock.yaml` 中。
