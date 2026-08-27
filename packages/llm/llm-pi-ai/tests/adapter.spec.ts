@@ -32,6 +32,13 @@ const IMAGE_REF: ImageAttachmentRef = {
   height: 1,
 }
 
+function codexToken(): string {
+  const payload = Buffer.from(JSON.stringify({
+    'https://api.openai.com/auth': { chatgpt_account_id: 'test-account' },
+  })).toString('base64url')
+  return `header.${payload}.signature`
+}
+
 async function harness(baseURL: string, overrides: Record<string, unknown> = {}): Promise<Context> {
   vi.stubEnv('PI_TEST_KEY', 'test-key')
   const ctx = new Context()
@@ -99,6 +106,35 @@ describe('PiAiAdapter provider routing', () => {
     expect(chunks.length).toBeGreaterThan(0)
     expect(first.requests).toHaveLength(1)
     expect(second.requests).toHaveLength(0)
+  })
+
+  it('pins catalog Codex routes to one SSE generation request', async () => {
+    const server = await mockServer([{
+      events: [JSON.stringify({
+        type: 'response.failed',
+        response: { error: { code: 'server_error', message: 'capacity unavailable' } },
+      })],
+    }])
+    const adapter = adapterOf({
+      'openai-codex': {
+        apiKeyEnv: 'PI_TEST_KEY',
+        baseURL: server.url,
+        transport: 'websocket',
+      },
+    }, codexToken())
+    const chunks: unknown[] = []
+
+    for await (const chunk of adapter.stream({
+      provider: 'openai-codex',
+      model: 'gpt-5.4',
+      messages: [],
+    })) chunks.push(chunk)
+
+    expect(server.paths).toEqual(['/codex/responses'])
+    expect(chunks.at(-1)).toMatchObject({
+      type: 'finish',
+      reason: { kind: 'error', failure: { code: 'SERVER' } },
+    })
   })
 
   it('merges profile headers with Harness attribution winning', async () => {
@@ -332,6 +368,105 @@ describe('PiAiAdapter provider routing', () => {
 
     expect(result.finish).toMatchObject({ kind: 'error' })
     expect(server.paths).toEqual(['/v1/responses'])
+    expect(server.requests).toHaveLength(1)
+  })
+
+  it('retains non-2xx response retry metadata for the Harness failure', async () => {
+    const server = await mockServer([{
+      status: 503,
+      headers: { 'retry-after-ms': '17', 'x-request-id': 'request-503' },
+      body: JSON.stringify({ error: { message: 'temporary provider failure' } }),
+    }])
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: { openai: { apiKeyEnv: 'PI_TEST_KEY', baseURL: `${server.url}/v1` } },
+    })
+
+    const result = await assemble(ctx, { provider: 'openai', model: 'gpt-4.1', messages: [] })
+
+    expect(result.finish).toMatchObject({
+      kind: 'error',
+      failure: {
+        code: 'SERVER',
+        status: 503,
+        providerRetryAfterMs: 17,
+        requestId: 'request-503',
+      },
+    })
+    expect(server.requests).toHaveLength(1)
+  })
+
+  it('parses Retry-After seconds and HTTP dates when retry-after-ms is absent', async () => {
+    const retryAt = new Date(Date.now() + 5_000).toUTCString()
+    const server = await mockServer([
+      {
+        status: 429,
+        headers: { 'retry-after': '2', 'retry-after-ms': 'not-a-delay' },
+        body: JSON.stringify({ error: { message: 'seconds retry-after' } }),
+      },
+      {
+        status: 429,
+        headers: { 'retry-after': retryAt },
+        body: JSON.stringify({ error: { message: 'date retry-after' } }),
+      },
+      {
+        status: 429,
+        headers: { 'retry-after': 'not-a-date' },
+        body: JSON.stringify({ error: { message: 'invalid retry-after' } }),
+      },
+      {
+        status: 429,
+        headers: { 'retry-after': '1e308' },
+        body: JSON.stringify({ error: { message: 'overflow retry-after' } }),
+      },
+    ])
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: { openai: { apiKeyEnv: 'PI_TEST_KEY', baseURL: `${server.url}/v1` } },
+    })
+
+    const seconds = await assemble(ctx, { provider: 'openai', model: 'gpt-4.1', messages: [] })
+    const date = await assemble(ctx, { provider: 'openai', model: 'gpt-4.1', messages: [] })
+    const invalidDate = await assemble(ctx, { provider: 'openai', model: 'gpt-4.1', messages: [] })
+    const overflow = await assemble(ctx, { provider: 'openai', model: 'gpt-4.1', messages: [] })
+
+    expect(seconds.finish).toMatchObject({
+      kind: 'error',
+      failure: { code: 'RATE_LIMIT', providerRetryAfterMs: 2_000 },
+    })
+    expect(date.finish).toMatchObject({ kind: 'error', failure: { code: 'RATE_LIMIT' } })
+    if (date.finish.kind !== 'error') throw new Error('expected HTTP-date retry failure')
+    expect(date.finish.failure.providerRetryAfterMs).toBeGreaterThan(0)
+    expect(date.finish.failure.providerRetryAfterMs).toBeLessThan(5_000)
+    expect(invalidDate.finish).toMatchObject({ kind: 'error', failure: { code: 'RATE_LIMIT' } })
+    expect(invalidDate.finish).not.toHaveProperty('failure.providerRetryAfterMs')
+    expect(overflow.finish).toMatchObject({ kind: 'error', failure: { code: 'RATE_LIMIT' } })
+    expect(overflow.finish).not.toHaveProperty('failure.providerRetryAfterMs')
+  })
+
+  it('does not attach successful response facts to a later stream error', async () => {
+    const server = await mockServer([{
+      events: [JSON.stringify({
+        type: 'error',
+        code: 'stream_transform_error',
+        message: 'HTTP/2 stream reset by peer',
+      })],
+    }])
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: { openai: { apiKeyEnv: 'PI_TEST_KEY', baseURL: `${server.url}/v1` } },
+    })
+
+    const result = await assemble(ctx, { provider: 'openai', model: 'gpt-4.1', messages: [] })
+
+    expect(result.finish).toMatchObject({ kind: 'error', failure: { code: 'TRANSPORT' } })
+    expect(result.finish).not.toHaveProperty('failure.status')
+    expect(result.finish).not.toHaveProperty('failure.providerRetryAfterMs')
+    expect(result.finish).not.toHaveProperty('failure.requestId')
+    expect(server.requests).toHaveLength(1)
   })
 
   it('uses OpenAI Responses against an Azure project v1 path with its API key header', async () => {

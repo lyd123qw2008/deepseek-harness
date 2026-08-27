@@ -12,11 +12,11 @@ Provider adapters can fail by throwing during dispatch or iteration or by ending
 
 That boundary is already safe for another request attempt. Raw `assistant/chunk` events carry the failed `turn` and `step`, message derivation ignores them unless a successful `assistant/message` cites them, tool calls are dispatched only after a successful terminal finish and assembly, and a retry reconstructs its next attempt from the durable log. The harness therefore does not need a second response lifecycle or tentative-output protocol to keep two attempts separate.
 
-The prior boundary left three narrower gaps.
+The boundary has three narrower requirements.
 
-- Provider failures retain only a message and usually a code. HTTP status, retry delay, and provider request id are discarded or recoverable only through provider-specific error objects, so generic recovery cannot make or explain a decision without parsing text.
-- Retry ownership differs by adapter. The hand-written DeepSeek adapter makes one attempt, while pi-ai profiles can enable opaque library retries. Combining hidden transport retries with an `agent/request-error` listener would multiply attempts and omit intermediate failures from the session log.
-- A recovered failure has no durable status fact. The failed step and chunks remain reconstructable, but an observer cannot tell whether the agent is deliberately backing off, for how long, or why. A long silent wait looks like a stalled loop.
+- Provider adapters do not expose identical facts. The patched pi-ai OpenAI Responses and Codex paths preserve provider code, valid HTTP status, Retry-After, and request id when available; other APIs may flatten failures to text, so adapters use structured facts first and narrow message classification only where no structured metadata exists.
+- Retry ownership differs by adapter. The hand-written DeepSeek adapter makes one attempt, while the pi-ai adapter disables library retries and pins Codex to SSE so a stream call cannot hide an auto-transport replay. Combining hidden transport retries with an `agent/request-error` listener would multiply attempts and omit intermediate failures from the session log.
+- A recovered failure carries durable status facts. The failed step and chunks remain reconstructable, and observers can tell whether the agent is backing off, for how long, and why.
 
 The default policy provides bounded recovery from transient failures of the same explicit provider/model request. Provider or model failover, response splicing, and semantic output repair are different problems and have no current consumer.
 
@@ -68,7 +68,7 @@ The agent-spine demo bundle loads the plugin so the shared stdio/TUI, one-shot C
 
 ### Make one layer own visible attempts
 
-Adapters perform one provider request per `stream()` call. The pi-ai adapter removes public `maxRetries` and `maxRetryDelayMs` profile fields and disables library retries; the hand-written adapter keeps its current single-attempt behavior. This prevents an SDK budget from multiplying the agent budget and ensures every transient retry is represented by its recorded failed attempt plus `llm/retry`.
+Adapters perform one provider model-generation request per `stream()` call. The pi-ai adapter removes public `maxRetries` and `maxRetryDelayMs` profile fields and disables library retries; Codex routes additionally force `transport: 'sse'` to prevent an auto WebSocket `response.create` request from being replayed through SSE. The hand-written adapter keeps its current single-attempt behavior. This prevents an SDK budget from multiplying the agent budget and ensures every transient retry is represented by a closed failed step plus `llm/retry`.
 
 `ctx.llm.stream()` remains the raw one-attempt waterfall. Direct callers such as compaction summarization receive the structured failure but do not gain automatic retry, because they have no agent step boundary or general durable place to separate attempts. A future direct-call consumer may justify a buffering helper that retries only before emitting a chunk; this decision adds no such helper.
 
@@ -109,7 +109,7 @@ If recovery is exhausted, the final failure is stored once on `turn/end.reason` 
 - `LlmFailure` is the single serializable payload for adapter throws, error finishes, and aborted finishes; normalization preserves stable code, status, retry delay, branded provider request id, and caller-abort versus adapter-timeout classification where available.
 - Adapter throws become terminal failure chunks before reaching consumers; middleware and consumer exceptions remain thrown outside model-request recovery.
 - DeepSeek and pi-ai adapter tests cover representative 400, 401/403, 429, 5xx, connection, malformed/truncated stream, timeout, abort, retry-after seconds/date, request-id, and unknown-SDK-error paths without recovery policy parsing message text.
-- Pi-ai pins the SDK option to zero retries and performs one observed wire attempt for a retryable provider response; separate tests make removing either boundary fail.
+- Pi-ai pins the SDK option to zero retries and performs one observed wire attempt for a retryable provider response; Codex routes use SSE to prevent an auto-transport replay. Separate tests make removing either boundary fail.
 - `agent/request-error` carries current failure facts, immutable prior-retried failure facts, and the serving registration's immutable retry policy; a success clears the history, and alternating transient/context-overflow integration tests prove the two policies consume only their own finite budgets.
 - Each provider adapter validates its nested retry policy at Loader startup, and `ctx.llm` captures it with the route; normal mode delegates ineligible paths and makes at most `maxRetries + 1` provider requests when no other policy applies.
 - HMR-during-backoff tests prove disposal unregisters the listener, aborts and awaits its captured callbacks, emits no retry decision after disposal, and leaves no timer or promise alive.

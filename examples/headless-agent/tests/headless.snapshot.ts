@@ -1,5 +1,6 @@
 import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
+import { zstdDecompressSync } from 'node:zlib'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { delimiter, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -34,6 +35,8 @@ const goalScenarioDir = join(snapshotsDir, 'goal-tools')
 const goalConfigPath = fileURLToPath(new URL('../goal.cordis.snapshot.yml', import.meta.url))
 const retryScenarioDir = join(snapshotsDir, 'provider-retry')
 const retryConfigPath = fileURLToPath(new URL('../retry.cordis.snapshot.yml', import.meta.url))
+const piAiRetryScenarioDir = join(snapshotsDir, 'pi-ai-provider-retry')
+const piAiRetryConfigPath = fileURLToPath(new URL('../pi-ai-retry.cordis.snapshot.yml', import.meta.url))
 const compactionScenarioDir = join(snapshotsDir, 'compaction-recovery')
 const compactionSessionFixture = join(compactionScenarioDir, 'session.jsonl')
 const compactionStreamExpected = join(compactionScenarioDir, 'stream-json.expected.jsonl')
@@ -97,6 +100,77 @@ interface DeepSeekDefaultsServer {
   readonly url: string
   readonly requests: JsonObject[]
   close(): Promise<void>
+}
+
+interface PiAiRetrySnapshotServer {
+  readonly url: string
+  readonly methods: string[]
+  readonly paths: string[]
+  readonly requests: number
+  readonly requestBodies: JsonObject[]
+  close(): Promise<void>
+}
+
+/** Serve one structured OpenAI Responses failure followed by a deterministic success. */
+async function piAiRetrySnapshotServer(): Promise<PiAiRetrySnapshotServer> {
+  let requests = 0
+  const methods: string[] = []
+  const paths: string[] = []
+  const requestBodies: JsonObject[] = []
+  const server = createServer((request: IncomingMessage, response: ServerResponse) => {
+    const chunks: Buffer[] = []
+    request.on('data', (chunk: Buffer) => { chunks.push(chunk) })
+    request.on('end', () => {
+      const raw = Buffer.concat(chunks)
+      const encoding = request.headers['content-encoding']?.toString().toLowerCase() ?? ''
+      const decoded = encoding.includes('zstd')
+        ? zstdDecompressSync(raw)
+        : raw
+      requestBodies.push(JSON.parse(decoded.toString('utf8')) as JsonObject)
+      methods.push(request.method ?? '')
+      paths.push(request.url ?? '')
+      requests += 1
+      if (requests === 1) {
+        response.writeHead(503, {
+          'content-type': 'application/json',
+          'retry-after-ms': '1',
+          'x-request-id': 'pi-ai-snapshot-request',
+        })
+        response.end(JSON.stringify({ error: { code: 'server_error', message: 'snapshot transient failure' } }))
+        return
+      }
+      if (requests === 2) {
+        response.writeHead(200, { 'content-type': 'text/event-stream' })
+        response.end([
+          'data: {"type":"error","code":"stream_transform_error","message":"stream error: stream ID 703; INTERNAL_ERROR; received from peer"}',
+          'data: [DONE]',
+          '',
+        ].join('\n\n'))
+        return
+      }
+      response.writeHead(200, { 'content-type': 'text/event-stream' })
+      response.end([
+        'data: {"type":"response.created","response":{"id":"snapshot-response","status":"in_progress"}}',
+        'data: {"type":"response.output_item.added","output_index":0,"item":{"id":"snapshot-message","type":"message","role":"assistant","content":[]}}',
+        'data: {"type":"response.output_text.delta","item_id":"snapshot-message","output_index":0,"content_index":0,"delta":"PI_AI_RETRY_OK"}',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"id":"snapshot-message","type":"message","role":"assistant","content":[{"type":"output_text","text":"PI_AI_RETRY_OK","annotations":[]}]}}',
+        'data: {"type":"response.completed","response":{"id":"snapshot-response","status":"completed","output":[{"id":"snapshot-message","type":"message","role":"assistant","content":[{"type":"output_text","text":"PI_AI_RETRY_OK","annotations":[]}]}],"usage":{"input_tokens":4,"output_tokens":2,"total_tokens":6,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}}}}',
+        'data: [DONE]',
+        '',
+      ].join('\n\n'))
+    })
+  })
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  if (address === null || typeof address === 'string') throw new Error('pi-ai retry snapshot server has no port')
+  return {
+    url: `http://127.0.0.1:${address.port}/v1`,
+    methods,
+    paths,
+    get requests() { return requests },
+    requestBodies,
+    close: () => new Promise(resolve => server.close(() => { resolve() })),
+  }
 }
 
 /** Serve one deterministic DeepSeek-compatible response while retaining its request body. */
@@ -353,6 +427,81 @@ describe('headless stream-json snapshots', () => {
     expect(normalized).toBe(await readFile(streamExpected, 'utf8'))
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)
 
+  it('classifies a structured pi-ai failure through the one-shot app', async () => {
+    const prompt = await scenarioPrompt(piAiRetryScenarioDir, 'pi-ai-provider-retry')
+    const streamExpected = join(piAiRetryScenarioDir, 'stream-json.expected.jsonl')
+    const server = await piAiRetrySnapshotServer()
+    let runCwd = ''
+    try {
+      const result = await runLoaderSmoke({
+        label: 'pi-ai provider retry headless stream-json snapshot',
+        tempDirPrefix: 'headless-snapshot-pi-ai-provider-retry-',
+        binScript,
+        libBinScript: binScript,
+        configPath: piAiRetryConfigPath,
+        binArgs: [piAiRetryConfigPath, prompt],
+        tsconfigPath,
+        env: {
+          DSH_SNAPSHOT: 'replay',
+          DSH_SNAPSHOT_PI_AI_URL: server.url,
+          DSH_SNAPSHOT_PI_AI_KEY: 'snapshot-key',
+          NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+        },
+        prepare: (cwd) => { runCwd = cwd },
+        inspect: async (cwd) => {
+          const logs = await persistedLogs(cwd)
+          expect(logs).toHaveLength(1)
+          const records = parseJsonl(logs[0]?.content ?? '')
+          const retries = records.filter(record => record.type === 'llm/retry')
+          expect(retries).toHaveLength(2)
+          expect(retries[0]?.data).toMatchObject({
+            provider: 'deepseek-official',
+            mode: 'normal',
+            policyKey: '["normal",2,["SERVER","TRANSPORT"],1,1,0]',
+            retry: 1,
+            maxRetries: 2,
+            delayMs: 1,
+            failure: {
+              code: 'SERVER',
+              status: 503,
+              providerRetryAfterMs: 1,
+              requestId: 'pi-ai-snapshot-request',
+            },
+          })
+          expect(retries[1]?.data).toMatchObject({
+            provider: 'deepseek-official',
+            mode: 'normal',
+            policyKey: '["normal",2,["SERVER","TRANSPORT"],1,1,0]',
+            retry: 2,
+            maxRetries: 2,
+            delayMs: 1,
+            failure: {
+              code: 'TRANSPORT',
+              message: 'Error Code stream_transform_error: stream error: stream ID 703; INTERNAL_ERROR; received from peer',
+            },
+          })
+          expect(retries[1]?.data).not.toHaveProperty('failure.status')
+          expect(retries[1]?.data).not.toHaveProperty('failure.providerRetryAfterMs')
+          expect(retries[1]?.data).not.toHaveProperty('failure.requestId')
+        },
+      })
+
+      expect(server.requests).toBe(3)
+      expect(server.methods).toEqual(['POST', 'POST', 'POST'])
+      expect(server.paths).toEqual(['/v1/responses', '/v1/responses', '/v1/responses'])
+      expect(server.requestBodies).toHaveLength(3)
+      expect(server.requestBodies[1]?.input).toEqual(server.requestBodies[0]?.input)
+      expect(server.requestBodies[2]?.input).toEqual(server.requestBodies[0]?.input)
+      expect(JSON.stringify(server.requestBodies[1]?.input)).not.toContain('snapshot transient failure')
+      expect(JSON.stringify(server.requestBodies[2]?.input)).not.toContain('snapshot transient failure')
+      expect(result.stderr).toBe('')
+      const normalized = normalizeHeadlessStream(result.stdout, runCwd)
+      if (refreshing) await writeFile(streamExpected, normalized)
+      expect(normalized).toBe(await readFile(streamExpected, 'utf8'))
+    } finally {
+      await server.close()
+    }
+  }, LOADER_SMOKE_TEST_TIMEOUT_MS)
   it('recovers from context overflow through an assembled compaction', async () => {
     const prompt = await scenarioPrompt(compactionScenarioDir, 'compaction-recovery')
     let expectedSession = await readFile(compactionSessionFixture, 'utf8')

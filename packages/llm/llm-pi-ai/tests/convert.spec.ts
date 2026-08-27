@@ -1,14 +1,16 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createServer } from 'node:http'
 import { AttachmentId, ImageVariantId } from '@deepseek-ai/dsh-attachment'
 import type { AttachmentStore, ImageAttachmentRef, ImageRequestPolicy, RequestImageAttachment } from '@deepseek-ai/dsh-attachment'
 import { createUserMessage, CallId, CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, LlmError, createMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { stream as streamOpenAIResponses } from '@earendil-works/pi-ai/api/openai-responses'
+import { streamSimple as streamCodexResponses } from '@earendil-works/pi-ai/api/openai-codex-responses'
 import type { AssistantMessage, AssistantMessageEvent, Context as PiContext, Model, Usage } from '@earendil-works/pi-ai'
 import { toPiContext } from '../src/context.ts'
 import { toPiReplayState } from '../src/replay.ts'
 import { mapStopReason, mapUsage, toStreamChunks } from '../src/stream.ts'
+import { closeMockServers, mockServer } from './mock-server.ts'
 
 function usage(input = 0, output = 0, cacheRead = 0, cacheWrite = 0): Usage {
   return {
@@ -45,6 +47,10 @@ async function collect(stream: AsyncIterable<StreamChunk>): Promise<StreamChunk[
   return out
 }
 
+afterEach(async () => {
+  await closeMockServers()
+})
+
 function requestVersion(ref: ImageAttachmentRef): RequestImageAttachment {
   return {
     variantId: ImageVariantId(`sha256:${'e'.repeat(64)}`),
@@ -66,6 +72,43 @@ function attachmentStore(readImageRequest: (
   signal?: AbortSignal,
 ) => Promise<RequestImageAttachment>): AttachmentStore {
   return { readImageRequest } as unknown as AttachmentStore
+}
+
+function codexToken(): string {
+  const payload = Buffer.from(JSON.stringify({
+    'https://api.openai.com/auth': { chatgpt_account_id: 'test-account' },
+  })).toString('base64url')
+  return `header.${payload}.signature`
+}
+
+function codexModel(baseUrl: string): Model<'openai-codex-responses'> {
+  return {
+    id: 'local-codex-test',
+    name: 'Local Codex Test',
+    api: 'openai-codex-responses',
+    provider: 'openai',
+    baseUrl,
+    reasoning: false,
+    input: ['text'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 1_024,
+    maxTokens: 128,
+  }
+}
+
+function openAIResponsesModel(baseUrl: string): Model<'openai-responses'> {
+  return {
+    id: 'local-responses-test',
+    name: 'Local Responses Test',
+    api: 'openai-responses',
+    provider: 'openai',
+    baseUrl,
+    reasoning: false,
+    input: ['text'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 1_024,
+    maxTokens: 128,
+  }
 }
 
 describe('toPiContext', () => {
@@ -853,9 +896,124 @@ describe('mapStopReason / mapUsage', () => {
     }))).toMatchObject({ kind: 'error', failure: { code: 'SERVER' } })
     expect(mapStopReason(assistant({
       stopReason: 'error',
+      errorCode: 'stream_transform_error',
+      errorStatus: 503,
+      errorMessage: 'server is overloaded',
+    }))).toEqual({
+      kind: 'error',
+      failure: {
+        message: 'server is overloaded',
+        code: 'TRANSPORT',
+        status: 503,
+      },
+    })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorCode: 'server_is_overloaded',
+      errorStatus: 503,
+      errorMessage: 'Selected model is at capacity',
+    }))).toEqual({
+      kind: 'error',
+      failure: {
+        message: 'Selected model is at capacity',
+        code: 'PI_AI_ERROR',
+        status: 503,
+      },
+    })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorCode: 'model_overloaded',
+      errorMessage: 'model capacity is unavailable',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'SERVER' } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorCode: 'model_busy',
+      errorMessage: 'model is busy',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'SERVER' } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorCode: 'slow_down',
+      errorMessage: 'slow down',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'SERVER' } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorCode: 'overloaded',
+      errorMessage: 'capacity reached',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'SERVER' } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorCode: 'provider_specific_error',
+      errorMessage: 'HTTP 500: retry later',
+    }))).toEqual({
+      kind: 'error',
+      failure: {
+        message: 'HTTP 500: retry later',
+        code: 'PI_AI_ERROR',
+      },
+    })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorCode: 'provider_specific_error',
+      errorStatus: 503,
+      errorMessage: 'retry later',
+    }))).toEqual({
+      kind: 'error',
+      failure: {
+        message: 'retry later',
+        code: 'SERVER',
+        status: 503,
+      },
+    })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
       errorStatus: 503,
       errorMessage: 'gateway failure',
     }))).toMatchObject({ kind: 'error', failure: { code: 'SERVER' } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorCode: 'model_disabled',
+      errorMessage: 'model disabled',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'PI_AI_ERROR' } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorCode: 'model_unavailable',
+      errorMessage: 'model unavailable',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'PI_AI_ERROR' } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorStatus: 429,
+      errorMessage: 'You exceeded your current quota',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'QUOTA', status: 429 } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorStatus: 503,
+      errorMessage: 'model is unavailable',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'PI_AI_ERROR', status: 503 } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorStatus: 429,
+      errorMessage: 'billing is required',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'PI_AI_ERROR', status: 429 } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorCode: 'server_error',
+      errorStatus: 503,
+      errorMessage: 'model is unavailable',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'SERVER', status: 503 } })
+  })
+
+  it('maps structured HTTP statuses when no recognized provider code is present', () => {
+    const mapStatus = (errorStatus: number) => mapStopReason(assistant({
+      stopReason: 'error',
+      errorStatus,
+      errorMessage: `provider status ${errorStatus}`,
+    }))
+    expect(mapStatus(401)).toMatchObject({ kind: 'error', failure: { code: 'AUTH', status: 401 } })
+    expect(mapStatus(403)).toMatchObject({ kind: 'error', failure: { code: 'AUTH', status: 403 } })
+    expect(mapStatus(408)).toMatchObject({ kind: 'error', failure: { code: 'TIMEOUT', status: 408 } })
+    expect(mapStatus(429)).toMatchObject({ kind: 'error', failure: { code: 'RATE_LIMIT', status: 429 } })
+    expect(mapStatus(400)).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST', status: 400 } })
+    expect(mapStatus(200)).toMatchObject({ kind: 'error', failure: { code: 'PI_AI_ERROR', status: 200 } })
   })
 
   it('preserves an OpenAI Responses code and status through the patched pi-ai adapter', async () => {
@@ -870,18 +1028,7 @@ describe('mapStopReason / mapUsage', () => {
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
     const address = server.address()
     if (address === null || typeof address === 'string') throw new Error('test server did not bind a TCP port')
-    const model: Model<'openai-responses'> = {
-      id: 'local-responses-test',
-      name: 'Local Responses Test',
-      api: 'openai-responses',
-      provider: 'openai',
-      baseUrl: `http://127.0.0.1:${address.port}/v1`,
-      reasoning: false,
-      input: ['text'],
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: 1_024,
-      maxTokens: 128,
-    }
+    const model = openAIResponsesModel(`http://127.0.0.1:${address.port}/v1`)
     const context: PiContext = { messages: [] }
     let terminal: AssistantMessage | undefined
 
@@ -904,7 +1051,142 @@ describe('mapStopReason / mapUsage', () => {
     expect(mapStopReason(terminal!)).toMatchObject({ kind: 'error', failure: { code: 'SERVER' } })
   })
 
+  it('preserves OpenAI Responses response.failed codes through the patched adapter', async () => {
+    const server = await mockServer([{
+      events: [JSON.stringify({
+        type: 'response.failed',
+        response: { error: { code: '', type: 'server_error', message: 'capacity unavailable' } },
+      })],
+    }])
+    let terminal: AssistantMessage | undefined
+
+    for await (const event of streamOpenAIResponses(openAIResponsesModel(server.url), { messages: [] }, {
+      apiKey: 'test-key',
+      maxRetries: 0,
+    })) {
+      if (event.type === 'error') terminal = event.error
+    }
+
+    expect(server.requests).toHaveLength(1)
+    expect(terminal).toMatchObject({
+      stopReason: 'error',
+      errorCode: 'server_error',
+      errorMessage: 'server_error: capacity unavailable',
+    })
+    expect(mapStopReason(terminal!)).toMatchObject({
+      kind: 'error',
+      failure: { code: 'SERVER' },
+    })
+  })
+
+  it('preserves Codex stream error codes through the patched adapter', async () => {
+    const server = await mockServer([{
+      events: [JSON.stringify({
+        type: 'error',
+        code: 'stream_transform_error',
+        message: 'HTTP/2 stream reset by peer',
+      })],
+    }])
+    let terminal: AssistantMessage | undefined
+
+    for await (const event of streamCodexResponses(codexModel(server.url), { messages: [] }, {
+      apiKey: codexToken(),
+      transport: 'sse',
+      maxRetries: 0,
+    })) {
+      if (event.type === 'error') terminal = event.error
+    }
+
+    expect(server.requests).toHaveLength(1)
+    expect(terminal).toMatchObject({
+      stopReason: 'error',
+      errorCode: 'stream_transform_error',
+    })
+    expect(mapStopReason(terminal!)).toMatchObject({
+      kind: 'error',
+      failure: { code: 'TRANSPORT' },
+    })
+  })
+
+  it('preserves Codex type-only SSE errors as structured codes', async () => {
+    const server = await mockServer([
+      {
+        events: [JSON.stringify({
+          type: 'error',
+          error: { code: '', type: 'server_error', message: 'type-only server error' },
+        })],
+      },
+      {
+        events: [JSON.stringify({
+          type: 'response.failed',
+          response: { error: { code: '', type: 'server_error', message: 'type-only response failure' } },
+        })],
+      },
+    ])
+    const terminals: AssistantMessage[] = []
+
+    for (const _attempt of [0, 1]) {
+      for await (const event of streamCodexResponses(codexModel(server.url), { messages: [] }, {
+        apiKey: codexToken(),
+        transport: 'sse',
+        maxRetries: 0,
+      })) {
+        if (event.type === 'error') terminals.push(event.error)
+      }
+    }
+
+    expect(server.requests).toHaveLength(2)
+    expect(terminals).toHaveLength(2)
+    expect(terminals).toEqual([
+      expect.objectContaining({ errorCode: 'server_error' }),
+      expect.objectContaining({ errorCode: 'server_error' }),
+    ])
+    for (const terminal of terminals) {
+      const reason = mapStopReason(terminal)
+      expect(reason.kind).toBe('error')
+      if (reason.kind !== 'error') throw new Error('expected structured server failure')
+      expect(reason.failure.code).toBe('SERVER')
+    }
+  })
+
+  it('preserves Codex non-2xx body code and status through friendly errors', async () => {
+    const server = await mockServer([{
+      status: 503,
+      body: JSON.stringify({
+        error: {
+          message: 'capacity unavailable',
+          type: 'server_error',
+          code: 'server_error',
+        },
+      }),
+    }])
+    let terminal: AssistantMessage | undefined
+
+    for await (const event of streamCodexResponses(codexModel(server.url), { messages: [] }, {
+      apiKey: codexToken(),
+      transport: 'sse',
+      maxRetries: 0,
+    })) {
+      if (event.type === 'error') terminal = event.error
+    }
+
+    expect(server.requests).toHaveLength(1)
+    expect(terminal).toMatchObject({
+      stopReason: 'error',
+      errorCode: 'server_error',
+      errorStatus: 503,
+    })
+    expect(mapStopReason(terminal!)).toMatchObject({
+      kind: 'error',
+      failure: { code: 'SERVER', status: 503 },
+    })
+  })
+
   it.each([
+    'stream_transform_error: stream error: stream ID 703; INTERNAL_ERROR; received from peer',
+    'ERR_HTTP2_STREAM_ERROR',
+    'HTTP/2 stream reset by peer',
+    'HTTP/2 INTERNAL_ERROR received from peer',
     'other side closed',
     'HTTP2 request did not get a response',
     'WebSocket closed unexpectedly',
@@ -920,6 +1202,19 @@ describe('mapStopReason / mapUsage', () => {
   ])('maps pi-ai transport wording %j', (errorMessage) => {
     expect(mapStopReason(assistant({ stopReason: 'error', errorMessage })))
       .toMatchObject({ kind: 'error', failure: { code: 'TRANSPORT' } })
+  })
+
+  it('keeps generic server-like text non-retryable without provider metadata', () => {
+    for (const errorMessage of [
+      'internal error; please try again later',
+      'model is overloaded',
+      'Selected model is at capacity',
+    ]) {
+      expect(mapStopReason(assistant({ stopReason: 'error', errorMessage }))).toEqual({
+        kind: 'error',
+        failure: { message: errorMessage, code: 'PI_AI_ERROR' },
+      })
+    }
   })
 
   it('uses pi-ai provider-specific overflow classification without losing rate-limit exclusions', () => {

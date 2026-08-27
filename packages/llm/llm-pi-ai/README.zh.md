@@ -126,7 +126,7 @@ pi-ai 依据提供方 id 与 baseURL 决定每个请求的形状：系统提示�
 
 受支持的 profile 字段是 `apiKeyEnv`、`displayName`、`api`、`baseURL`、`models`、`modelOverrides`、`compat`、`defaultContextWindow`、`defaultMaxTokens`、`defaultInput`、`headers`、`reasoning`、`thinkingBudgets`、`cacheRetention`、`transport`、`timeoutMs`、`websocketConnectTimeoutMs`、`streamIdleTimeoutMs`、`maxRequestImageBytes`、`requestImagePixelBudget`、`requestImageMaxBytes` 和 `retryPolicy`。每条 profile 解析后的重试策略会随该提供方路由一同捕获；省略时使用共享的有界 normal 默认值并重试五次。流空闲间隔必须是正的有限 Node 定时器延迟，默认为五分钟，且只覆盖未完成提供方读取，不包括消费方思考时间。每条图片路由从提供方无关的规范化附件派生确定性请求版本，受 `requestImagePixelBudget`（默认总像素 2048×2048）和 `requestImageMaxBytes`（默认原始字节 1MiB）约束。读取附件前，`maxRequestImageBytes` 先按请求版本的保守上界替换超预算的最旧图片；保留版本生成后再用确切 base64 长度检查。20MiB 默认值可保留十五个按 1MiB 上限生成的请求版本，并为请求正文留下余量。同一版本用于内联 base64，其稳定描述会公开附件 ID 和实际请求图片尺寸。若已配置标头中有同名项，则以 Harness 应用归因为准。
 
-适配器强制 pi-ai SDK `maxRetries` 为零，因此一次 `stream()` 调用只会发起一次提供方请求。已移除 profile 字段 `maxRetries` 和 `maxRetryDelayMs` 会使加载失败，而不是静默倍增或隐藏单独组合的 agent（智能体）级重试预算。空闲超时会 abort SDK 的稳定请求信号，并以 `TIMEOUT` 呈现；较早的调用方 abort 仍为 `ABORTED`。
+适配器强制 pi-ai SDK `maxRetries` 为零，因此一次 `stream()` 调用只会发起一次模型生成请求。Codex 路由固定使用 `transport: 'sse'`，即使 profile 配置了其它 transport；这样可避免 pi-ai 的 WebSocket `response.create` 在首个事件前回退时重复发送请求。组合出的 `dsh-llm-retry` 扩展拥有可见重试及其持久化 `llm/retry` 记录，因此一次适配器失败会先产生一次生成尝试，再由 agent 级策略决定是否重试。已移除 profile 字段 `maxRetries` 和 `maxRetryDelayMs` 会使加载失败，而不是静默倍增或隐藏单独组合的 agent（智能体）级重试预算。空闲超时会 abort SDK 的稳定请求信号，并以 `TIMEOUT` 呈现；较早的调用方 abort 仍为 `ABORTED`。
 
 ## 端点询问
 
@@ -155,8 +155,8 @@ pi-ai 依据提供方 id 与 baseURL 决定每个请求的形状：系统提示�
 ## 词汇差异
 
 - pi-ai 工具调用参数是已解析对象；harness 存储原始 JSON 字符串。适配器会解析输入，并将输出重新字符串化。
-- pi-ai 将失败报告为流内错误事件；它们会映射到 `finish {kind:'error'|'aborted', failure}` 分片。对于 OpenAI Responses，随附的 pi-ai 补丁会保留提供方的 `error.code` 和 HTTP 状态：已识别 code 的优先级高于状态，状态又高于旧的消息文本。没有这两个元数据字段的 API 仍使用文本和 usage 信号区分终止型 `QUOTA`、暂时型 `RATE_LIMIT` 与 `CONTEXT_WINDOW_EXCEEDED`。终止时的 `stop` 若消息不含内容块，则会映射为 `finish {kind:'error'}`，code 为 `EMPTY_RESPONSE`（默认策略会重试），而非成功空消息。
-- `server_error` 或 HTTP 5xx 会映射为瞬态 `SERVER`；`rate_limit_exceeded` 或 429 会映射为 `RATE_LIMIT`。除非提供方的 `retryableCodes` 将其移除，否则 normal 重试策略包含这两个 code。未识别的元数据和旧式错误文本仍为 `PI_AI_ERROR`。
+- pi-ai 将失败报告为流内错误事件；它们会映射到 `finish {kind:'error'|'aborted', failure}` 分片。对于经过补丁处理的 OpenAI Responses 与 Codex，随附的 pi-ai 补丁会保留提供方 error code 与 HTTP 状态；当 API 暴露这些信息时，非 2xx 响应标头还会向 Harness 提供 Retry-After 与 request-id。已识别 code 优先于状态。没有 code 时，明确的 quota、billing 或 model-disabled 文案会在状态回退前保持终止语义；其它文案才由状态优先于旧的消息文本。没有这两个元数据字段的 API 仍使用文本和 usage 信号区分终止型 `QUOTA`、暂时型 `RATE_LIMIT` 与 `CONTEXT_WINDOW_EXCEEDED`。终止时的 `stop` 若消息不含内容块，则会映射为 `finish {kind:'error'}`，code 为 `EMPTY_RESPONSE`（默认策略会重试），而非成功空消息。
+- `server_error`、瞬态的结构化 overload code 或 HTTP 5xx 响应会映射为瞬态 `SERVER`；`rate_limit_exceeded` 或 429 会映射为 `RATE_LIMIT`；`stream_transform_error` 与窄范围 HTTP/2 reset 标记会映射为 `TRANSPORT`。除非提供方的 `retryableCodes` 将这些 code 移除，否则 normal 重试策略会包含它们。确切的终止型 code `server_is_overloaded`、`model_disabled` 和 `model_unavailable` 不可重试；`overloaded`、`overloaded_error`、`model_overloaded`、`model_busy` 和 `slow_down` 仍是瞬态 `SERVER` 信号。invalid-request、quota，以及没有状态的未识别元数据仍不可重试；泛化的 overload 文案不是重试信号。
 - pi-ai 将推理 token 折叠到输出 usage 中；没有可映射的独立推理计数。
 - pi-ai 的 `off` 思考级别会原样穿过 Harness 能力 seam，并在分派时变为被省略的 pi-ai 通用 `reasoning` 选项。
 - `GenerateOptions.stop` 会以 `UNSUPPORTED_OPTION` 被拒绝，因为 pi-ai 的通用流式输出接口无法保证所有提供方都支持它。
@@ -213,5 +213,5 @@ pi-ai 事件会变为 harness 推理、文本、工具调用、usage 与 finish 
 - **未认证路由取决于其协议**：不点名凭据会让路由解析为「已配置但无密钥」，但 pi-ai 的 OpenAI 兼容实现仍要求 API key 或 `Authorization` 标头，因此无鉴权的本地服务需要一个由 `apiKeyEnv` 引用的占位凭据，或在 `headers` 中给出 `Authorization` 条目。
 - **不支持 `GenerateOptions.stop`**：pi-ai 的通用流选项无法保证所有提供方都支持 stop sequence，因此适配器会拒绝该字段。
 - **历史中的 `system` 消息使用 pi-ai 通用上下文转换**：提供方特定位置由 pi-ai 决定，而非由 harness 拥有的协议覆盖决定。
-- **无法获取提供方 HTTP 状态**：pi-ai 错误事件不会在所有提供方上公开稳定 HTTP 状态；失败只公开稳定 harness 错误 code。
+- **提供方元数据覆盖范围取决于 pi-ai**：本地补丁会为 OpenAI Responses 与 Codex 保留提供方 code 和 HTTP 状态，适配器也会从暴露出来的非 2xx 响应标头捕获 Retry-After 与 request-id。其他协议仍可能把失败压平成文本，流式输出中途的错误也可能没有 HTTP 响应信息。
 - **重试策略由提供方持有，而不是 SDK 重试**：每个提供方 profile 都可以提供嵌套的 `retryPolicy`；省略时解析为 normal 模式并重试五次，`dsh-llm-retry` 会在 agent 的失败步骤扩展点上执行有效路由策略。pi-ai SDK 重试仍保持禁用，因此持久化的 agent 步骤与 `llm/retry` 事件记录每次可见尝试，直接 `ctx.llm.stream()` 调用仍只尝试一次。

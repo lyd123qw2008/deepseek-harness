@@ -9,7 +9,7 @@
  */
 
 import { CallId, CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, isContextWindowExceededError, isQuotaExceededError, LlmError, QUOTA_EXCEEDED_CODE } from '@deepseek-ai/dsh-llm'
-import type { FinishReason, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
+import type { FinishReason, LlmFailure, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
 import { isContextOverflow } from '@earendil-works/pi-ai'
 import type { AssistantMessage, AssistantMessageEvent, Usage as PiUsage } from '@earendil-works/pi-ai'
 import { toPiReplayState } from './replay.ts'
@@ -28,71 +28,118 @@ export function mapUsage(usage: PiUsage): TokenUsage {
   }
 }
 
-/**
- * Classify preserved OpenAI Responses failure metadata.
- *
- * The local pi-ai patch retains the provider's semantic code and HTTP status.
- * A recognized code is more precise than its status; other pi-ai APIs still
- * use flattened-message classification below.
- */
-function classifyStructuredPiAiError(errorCode: string | undefined, errorStatus: number | undefined): string | undefined {
-  const normalizedCode = errorCode?.trim().toLowerCase()
-  if (normalizedCode !== undefined) {
-    switch (normalizedCode) {
-      case 'authentication_error':
-      case 'invalid_api_key':
-      case 'permission_denied':
-      case 'unauthorized':
-        return 'AUTH'
-      case 'insufficient_quota':
-      case 'quota_exceeded':
-        return QUOTA_EXCEEDED_CODE
-      case 'rate_limit_exceeded':
-      case 'rate_limit':
-        return 'RATE_LIMIT'
-      case 'context_length_exceeded':
-      case 'context_window_exceeded':
-      case 'max_context_length_exceeded':
-        return CONTEXT_WINDOW_EXCEEDED_CODE
-      case 'request_timeout':
-      case 'timeout':
-        return 'TIMEOUT'
-      case 'server_error':
-      case 'internal_error':
-      case 'service_unavailable':
-      case 'overloaded_error':
-        return 'SERVER'
-      case 'invalid_request_error':
-      case 'invalid_prompt':
-      case 'invalid_value':
-      case 'unsupported_value':
-        return 'INVALID_REQUEST'
-    }
-  }
+const STRUCTURED_PI_AI_ERROR_CODES: ReadonlyMap<string, string> = new Map([
+  ['authentication_error', 'AUTH'],
+  ['invalid_api_key', 'AUTH'],
+  ['permission_denied', 'AUTH'],
+  ['unauthorized', 'AUTH'],
+  ['insufficient_quota', QUOTA_EXCEEDED_CODE],
+  ['quota_exceeded', QUOTA_EXCEEDED_CODE],
+  ['usage_limit_reached', QUOTA_EXCEEDED_CODE],
+  ['usage_not_included', QUOTA_EXCEEDED_CODE],
+  ['rate_limit_exceeded', 'RATE_LIMIT'],
+  ['rate_limit', 'RATE_LIMIT'],
+  ['too_many_requests', 'RATE_LIMIT'],
+  ['context_length_exceeded', CONTEXT_WINDOW_EXCEEDED_CODE],
+  ['context_window_exceeded', CONTEXT_WINDOW_EXCEEDED_CODE],
+  ['max_context_length_exceeded', CONTEXT_WINDOW_EXCEEDED_CODE],
+  ['request_timeout', 'TIMEOUT'],
+  ['timeout', 'TIMEOUT'],
+  ['stream_transform_error', 'TRANSPORT'],
+  ['stream_error', 'TRANSPORT'],
+  ['stream_connection_error', 'TRANSPORT'],
+  ['connection_error', 'TRANSPORT'],
+  ['connection_reset', 'TRANSPORT'],
+  ['network_error', 'TRANSPORT'],
+  ['socket_error', 'TRANSPORT'],
+  ['econnreset', 'TRANSPORT'],
+  ['econnrefused', 'TRANSPORT'],
+  ['websocket_error', 'TRANSPORT'],
+  ['websocket_closed', 'TRANSPORT'],
+  ['premature_close', 'TRANSPORT'],
+  ['server_error', 'SERVER'],
+  ['internal_error', 'SERVER'],
+  ['service_unavailable', 'SERVER'],
+  ['overloaded_error', 'SERVER'],
+  ['overloaded', 'SERVER'],
+  ['server_is_overloaded', 'PI_AI_ERROR'],
+  ['slow_down', 'SERVER'],
+  ['model_overloaded', 'SERVER'],
+  ['model_busy', 'SERVER'],
+  ['invalid_request_error', 'INVALID_REQUEST'],
+  ['invalid_prompt', 'INVALID_REQUEST'],
+  ['invalid_value', 'INVALID_REQUEST'],
+  ['unsupported_value', 'INVALID_REQUEST'],
+  ['model_not_found', 'INVALID_REQUEST'],
+  ['model_disabled', 'PI_AI_ERROR'],
+  ['model_unavailable', 'PI_AI_ERROR'],
+])
 
-  if (errorStatus === undefined) return undefined
-  if (errorStatus === 401 || errorStatus === 403) return 'AUTH'
-  if (errorStatus === 408) return 'TIMEOUT'
-  if (errorStatus === 429) return 'RATE_LIMIT'
-  if (errorStatus >= 500 && errorStatus <= 599) return 'SERVER'
-  if (errorStatus >= 400 && errorStatus <= 499) return 'INVALID_REQUEST'
+/**
+ * Classify structured pi-ai failure metadata before inspecting display text.
+ *
+ * Recognized provider codes take precedence over HTTP status. Without a code,
+ * explicit quota, billing, and model-disabled wording remains terminal before
+ * status fallback; flattened transport text remains the final fallback when
+ * structured metadata is absent.
+ */
+function terminalPiAiMessageCode(message: string): string | undefined {
+  if (isQuotaExceededError(message)) return QUOTA_EXCEEDED_CODE
+  if (/\b(?:model|deployment)\b.{0,32}\b(?:disabled|unavailable|not[\s_-]+available|not[\s_-]+enabled|not[\s_-]+found)\b/i.test(message)
+    || /\b(?:disabled|unavailable|not[\s_-]+available|not[\s_-]+enabled|not[\s_-]+found)\b.{0,32}\b(?:model|deployment)\b/i.test(message)) {
+    return 'PI_AI_ERROR'
+  }
+  if (/\b(?:billing|payment[\s_-]+required|insufficient[\s_-]+funds|account[\s_-]+balance)\b/i.test(message)) {
+    return 'PI_AI_ERROR'
+  }
   return undefined
 }
 
+function classifyStructuredPiAiError(
+  errorCode: string | undefined,
+  errorStatus: number | undefined,
+  errorMessage: string | undefined,
+): string | undefined {
+  const normalizedCode = errorCode?.trim().toLowerCase() || undefined
+  const structuredCode = normalizedCode === undefined ? undefined : STRUCTURED_PI_AI_ERROR_CODES.get(normalizedCode)
+  if (structuredCode !== undefined) return structuredCode
+
+  if (normalizedCode === undefined && errorMessage !== undefined) {
+    const terminalCode = terminalPiAiMessageCode(errorMessage)
+    if (terminalCode !== undefined) return terminalCode
+  }
+
+  if (validStatus(errorStatus)) {
+    if (errorStatus === 401 || errorStatus === 403) return 'AUTH'
+    if (errorStatus === 408) return 'TIMEOUT'
+    if (errorStatus === 429) return 'RATE_LIMIT'
+    if (errorStatus >= 500) return 'SERVER'
+    if (errorStatus >= 400) return 'INVALID_REQUEST'
+  }
+  return normalizedCode === undefined ? undefined : 'PI_AI_ERROR'
+}
+
 /**
- * Classify pi-ai APIs that emit only a flattened display message.
+ * Classify pi-ai stream failures whose metadata was flattened into a message.
  *
- * Transport causes are discarded by some upstream adapters before their error
- * events reach the Harness, so legacy protocols still need this narrow fallback.
+ * The HTTP/2 markers are intentionally narrow: they cover a reset of the
+ * response stream without making arbitrary `internal error` or overload text
+ * retryable. Other existing transport and status fallbacks remain unchanged.
  */
 function classifyFlattenedPiAiError(message: string): string {
   if (/\b(?:401|403)\b/.test(message)) return 'AUTH'
-  if (isQuotaExceededError(message)) return QUOTA_EXCEEDED_CODE
   if (/\b429\b|rate.?limit/i.test(message)) return 'RATE_LIMIT'
   // A rejected request body (gateway or provider size cap): resending the
   // same request cannot succeed, so it is invalid, not transient.
   if (/\b413\b|failed to buffer the request body:\s*length limit exceeded|payload too large|request body too large/i.test(message)) return 'INVALID_REQUEST'
   if (/\b400\b|invalid.?request/i.test(message)) return 'INVALID_REQUEST'
+  // This covers `stream_transform_error: stream error: stream ID 703;
+  // INTERNAL_ERROR; received from peer` and equivalent HTTP/2 reset wording.
+  if (/\bERR_HTTP2_STREAM_ERROR\b/i.test(message)
+    || /stream[_\s-]*transform[_\s-]*error/i.test(message)
+    || /\bstream\s+error\b.*\b(?:internal[_\s-]*error|received\s+from\s+peer|stream\s+id)\b/i.test(message)
+    || /\b(?:http\/?2|http2)\b.*\b(?:internal[_\s-]*error|received\s+from\s+peer|stream\s+reset|rst[_\s-]*stream)\b/i.test(message)
+    || /\b(?:rst[_\s-]*stream|stream\s+reset|peer\s+reset)\b/i.test(message)) return 'TRANSPORT'
   if (/\b5\d\d\b/.test(message)) return 'SERVER'
   if (/\btime(?:d)?\s*out\b|timeout/i.test(message)) return 'TIMEOUT'
   // A stream truncated before the provider's terminal event: each pi-ai provider
@@ -113,6 +160,19 @@ function classifyFlattenedPiAiError(message: string): string {
   return 'PI_AI_ERROR'
 }
 
+function validStatus(value: number | undefined): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599
+}
+
+function failureWithMessage(source: AssistantMessage, code: string, text: string): LlmFailure {
+  const status = validStatus(source.errorStatus) ? source.errorStatus : undefined
+  return {
+    message: text,
+    code,
+    ...status === undefined ? {} : { status },
+  }
+}
+
 /**
  * Map a terminal pi-ai event to the harness finish reason.
  * @param message - the assistant message carried by the `done` or `error` event.
@@ -125,7 +185,7 @@ function classifyFlattenedPiAiError(message: string): string {
  */
 export function mapStopReason(message: AssistantMessage, contextWindow?: number): FinishReason {
   const structuredFailureCode = message.stopReason === 'error'
-    ? classifyStructuredPiAiError(message.errorCode, message.errorStatus)
+    ? classifyStructuredPiAiError(message.errorCode, message.errorStatus, message.errorMessage)
     : undefined
   const piAiOverflow = structuredFailureCode === undefined && isContextOverflow(message, contextWindow)
   const harnessOverflow = structuredFailureCode === undefined
@@ -135,10 +195,11 @@ export function mapStopReason(message: AssistantMessage, contextWindow?: number)
   if (piAiOverflow || structuredFailureCode === CONTEXT_WINDOW_EXCEEDED_CODE || harnessOverflow) {
     return {
       kind: 'error',
-      failure: {
-        message: message.errorMessage ?? `pi-ai detected context overflow for model "${message.model}"`,
-        code: CONTEXT_WINDOW_EXCEEDED_CODE,
-      },
+      failure: failureWithMessage(
+        message,
+        CONTEXT_WINDOW_EXCEEDED_CODE,
+        message.errorMessage ?? `pi-ai detected context overflow for model "${message.model}"`,
+      ),
     }
   }
 
@@ -160,11 +221,14 @@ export function mapStopReason(message: AssistantMessage, contextWindow?: number)
     case 'toolUse': return { kind: 'tool-calls' }
     case 'aborted': return {
       kind: 'aborted',
-      failure: { message: message.errorMessage ?? 'pi-ai stream aborted', code: 'ABORTED' },
+      failure: failureWithMessage(message, 'ABORTED', message.errorMessage ?? 'pi-ai stream aborted'),
     }
     case 'error': {
       const text = message.errorMessage ?? 'pi-ai stream error'
-      return { kind: 'error', failure: { message: text, code: structuredFailureCode ?? classifyFlattenedPiAiError(text) } }
+      return {
+        kind: 'error',
+        failure: failureWithMessage(message, structuredFailureCode ?? classifyFlattenedPiAiError(text), text),
+      }
     }
   }
 }

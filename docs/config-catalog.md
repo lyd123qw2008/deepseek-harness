@@ -1074,7 +1074,7 @@ export interface PiAiProviderProfile {
   thinkingBudgets?: ThinkingBudgets
   /** Prompt-cache retention preference. */
   cacheRetention?: CacheRetention
-  /** Streaming transport preference. */
+  /** Streaming transport preference; Codex routes ignore it and use SSE. */
   transport?: Transport
   /** HTTP/provider SDK timeout in milliseconds. */
   timeoutMs?: number
