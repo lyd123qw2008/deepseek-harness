@@ -1,4 +1,5 @@
 import { createServer } from 'node:http'
+import { gunzipSync, zstdDecompressSync } from 'node:zlib'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 
 export interface MockServer {
@@ -43,11 +44,21 @@ export async function mockServer(script: {
       closedResponses += 1
       responseClosed.resolve(undefined)
     })
-    let body = ''
-    request.on('data', (chunk: Buffer) => { body += chunk.toString('utf8') })
+    const body: Buffer[] = []
+    request.on('data', (chunk: Buffer) => { body.push(chunk) })
     request.on('end', () => {
+      const encoded = Buffer.concat(body)
+      const contentEncoding = request.headers['content-encoding']
+      const encoding = Array.isArray(contentEncoding)
+        ? contentEncoding.join(',').toLowerCase()
+        : contentEncoding?.toLowerCase() ?? ''
+      const decoded = encoding.includes('zstd')
+        ? zstdDecompressSync(encoded)
+        : encoding.includes('gzip')
+          ? gunzipSync(encoded)
+          : encoded
       paths.push(request.url ?? '')
-      requests.push(body.length === 0 ? undefined : JSON.parse(body))
+      requests.push(decoded.length === 0 ? undefined : JSON.parse(decoded.toString('utf8')))
       headers.push(request.headers)
       const behavior = script.shift() ?? { status: 500, body: 'script exhausted' }
       if (behavior.status !== undefined && behavior.status !== 200) {

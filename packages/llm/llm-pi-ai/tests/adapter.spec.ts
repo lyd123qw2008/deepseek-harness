@@ -336,7 +336,7 @@ describe('PiAiAdapter provider routing', () => {
     const server = await mockServer([
       {
         status: 429,
-        headers: { 'retry-after-ms': '1' },
+        headers: { 'retry-after-ms': '1', 'x-request-id': 'request-429' },
         body: JSON.stringify({ error: { message: 'retryable provider failure' } }),
       },
       { status: 500, body: JSON.stringify({ error: { message: 'hidden SDK retry' } }) },
@@ -350,8 +350,41 @@ describe('PiAiAdapter provider routing', () => {
 
     const result = await assemble(ctx, { provider: 'openai', model: 'gpt-4.1', messages: [] })
 
-    expect(result.finish).toMatchObject({ kind: 'error' })
+    expect(result.finish).toMatchObject({
+      kind: 'error',
+      failure: {
+        code: 'RATE_LIMIT',
+        status: 429,
+        providerRetryAfterMs: 1,
+        requestId: 'request-429',
+      },
+    })
     expect(server.paths).toEqual(['/v1/responses'])
+  })
+
+  it('keeps a terminal model-capacity code from being widened by response status', async () => {
+    const server = await mockServer([{
+      status: 503,
+      headers: { 'x-request-id': 'capacity-request' },
+      body: JSON.stringify({
+        error: {
+          message: 'Selected model is at capacity',
+          type: 'server_is_overloaded',
+          code: 'server_is_overloaded',
+        },
+      }),
+    }])
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: { openai: { apiKeyEnv: 'PI_TEST_KEY', baseURL: `${server.url}/v1` } },
+    })
+    const result = await assemble(ctx, { provider: 'openai', model: 'gpt-4.1', messages: [] })
+
+    expect(result.finish).toMatchObject({
+      kind: 'error',
+      failure: { code: 'PI_AI_ERROR', status: 503, requestId: 'capacity-request' },
+    })
   })
 
   it('uses OpenAI Responses against an Azure project v1 path with its API key header', async () => {

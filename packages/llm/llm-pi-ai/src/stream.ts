@@ -9,7 +9,7 @@
  */
 
 import { ToolCallId, CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, isContextWindowExceededError, isQuotaExceededError, LlmError, QUOTA_EXCEEDED_CODE } from '@deepseek-ai/dsh-llm'
-import type { FinishReason, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
+import type { FinishReason, LlmFailure, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
 import { isContextOverflow } from '@earendil-works/pi-ai'
 import type { AssistantMessage, AssistantMessageEvent, Usage as PiUsage } from '@earendil-works/pi-ai'
 import { toPiReplayState } from './replay.ts'
@@ -30,15 +30,134 @@ export function mapUsage(usage: PiUsage): TokenUsage {
   }
 }
 
-// XXX(pi-ai upstream): pi-ai flattens the caught error to `error.message`
-// (api/anthropic-messages.js: `errorMessage = error instanceof Error ?
-// error.message : JSON.stringify(error)`), discarding the original Error and its
-// `cause` chain before it reaches us. undici carries the actionable transport
-// detail on `cause` (e.g. `SocketError: other side closed`) but hands the fetch
-// wrapper a bare `terminated`, so we are left pattern-matching terse words here.
-// If pi-ai ever forwards the original Error (or a fetch/dispatcher hook that lets
-// us capture the cause ourselves), classify on `code`/`cause` instead of text.
-function classifyPiAiError(message: string): string {
+/**
+ * pi-ai 0.84 carries provider diagnostics on AssistantMessage and still flattens
+ * several protocol failures into errorMessage. Prefer the structured diagnostic
+ * or provider code, then use the narrow text fallback for APIs that expose no
+ * usable metadata.
+ */
+const STRUCTURED_PI_AI_ERROR_CODES: ReadonlyMap<string, string> = new Map([
+  ['authentication_error', 'AUTH'],
+  ['invalid_api_key', 'AUTH'],
+  ['permission_denied', 'AUTH'],
+  ['unauthorized', 'AUTH'],
+  ['insufficient_quota', QUOTA_EXCEEDED_CODE],
+  ['quota_exceeded', QUOTA_EXCEEDED_CODE],
+  ['usage_limit_reached', QUOTA_EXCEEDED_CODE],
+  ['usage_not_included', QUOTA_EXCEEDED_CODE],
+  ['rate_limit_exceeded', 'RATE_LIMIT'],
+  ['rate_limit', 'RATE_LIMIT'],
+  ['too_many_requests', 'RATE_LIMIT'],
+  ['context_length_exceeded', CONTEXT_WINDOW_EXCEEDED_CODE],
+  ['context_window_exceeded', CONTEXT_WINDOW_EXCEEDED_CODE],
+  ['max_context_length_exceeded', CONTEXT_WINDOW_EXCEEDED_CODE],
+  ['request_timeout', 'TIMEOUT'],
+  ['timeout', 'TIMEOUT'],
+  ['stream_transform_error', 'TRANSPORT'],
+  ['stream_error', 'TRANSPORT'],
+  ['stream_connection_error', 'TRANSPORT'],
+  ['connection_error', 'TRANSPORT'],
+  ['connection_reset', 'TRANSPORT'],
+  ['network_error', 'TRANSPORT'],
+  ['socket_error', 'TRANSPORT'],
+  ['econnreset', 'TRANSPORT'],
+  ['econnrefused', 'TRANSPORT'],
+  ['err_http2_stream_error', 'TRANSPORT'],
+  ['websocket_error', 'TRANSPORT'],
+  ['websocket_closed', 'TRANSPORT'],
+  ['premature_close', 'TRANSPORT'],
+  ['provider_transport_failure', 'TRANSPORT'],
+  ['server_error', 'SERVER'],
+  ['internal_error', 'SERVER'],
+  ['service_unavailable', 'SERVER'],
+  ['overloaded_error', 'SERVER'],
+  ['overloaded', 'SERVER'],
+  ['server_is_overloaded', 'PI_AI_ERROR'],
+  ['slow_down', 'SERVER'],
+  ['model_overloaded', 'SERVER'],
+  ['model_busy', 'SERVER'],
+  ['invalid_request_error', 'INVALID_REQUEST'],
+  ['invalid_prompt', 'INVALID_REQUEST'],
+  ['invalid_value', 'INVALID_REQUEST'],
+  ['unsupported_value', 'INVALID_REQUEST'],
+  ['model_not_found', 'INVALID_REQUEST'],
+  ['model_disabled', 'PI_AI_ERROR'],
+  ['model_unavailable', 'PI_AI_ERROR'],
+])
+
+function validStatus(value: number | undefined): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599
+}
+
+function diagnosticFailureCode(message: AssistantMessage): string | undefined {
+  const direct = message.errorCode
+  if (typeof direct === 'string' && direct.trim().length > 0) return direct
+  let transportDiagnostic = false
+  for (const diagnostic of message.diagnostics ?? []) {
+    const code = diagnostic.error?.code
+    if (typeof code === 'string' && code.trim().length > 0) {
+      if (STRUCTURED_PI_AI_ERROR_CODES.has(code.trim().toLowerCase())) return code
+      transportDiagnostic ||= diagnostic.type === 'provider_transport_failure'
+    }
+    transportDiagnostic ||= diagnostic.type === 'provider_transport_failure'
+  }
+  return transportDiagnostic ? 'provider_transport_failure' : undefined
+}
+
+function diagnosticFailureStatus(message: AssistantMessage): number | undefined {
+  const direct = message.errorStatus
+  if (validStatus(direct)) return direct
+  for (const diagnostic of message.diagnostics ?? []) {
+    const status = diagnostic.details?.status
+    if (typeof status === 'number' && validStatus(status)) return status
+    const errorStatus = diagnostic.details?.errorStatus
+    if (typeof errorStatus === 'number' && validStatus(errorStatus)) return errorStatus
+  }
+  return undefined
+}
+
+/** Preserve explicit non-retryable provider wording before status fallback. */
+function terminalPiAiMessageCode(message: string): string | undefined {
+  if (isQuotaExceededError(message)) return QUOTA_EXCEEDED_CODE
+  if (/\b(?:model|deployment)\b.{0,32}\b(?:disabled|unavailable|not[\s_-]+available|not[\s_-]+enabled|not[\s_-]+found)\b/i.test(message)
+    || /\b(?:disabled|unavailable|not[\s_-]+available|not[\s_-]+enabled|not[\s_-]+found)\b.{0,32}\b(?:model|deployment)\b/i.test(message)) {
+    return 'PI_AI_ERROR'
+  }
+  if (/\b(?:billing|payment[\s_-]+required|insufficient[\s_-]+funds|account[\s_-]+balance)\b/i.test(message)) {
+    return 'PI_AI_ERROR'
+  }
+  return undefined
+}
+
+function classifyStructuredPiAiError(
+  errorCode: string | undefined,
+  errorStatus: number | undefined,
+  errorMessage: string | undefined,
+): string | undefined {
+  const normalizedCode = errorCode?.trim().toLowerCase() || undefined
+  const structuredCode = normalizedCode === undefined ? undefined : STRUCTURED_PI_AI_ERROR_CODES.get(normalizedCode)
+  if (structuredCode !== undefined) return structuredCode
+  if (normalizedCode === undefined && errorMessage !== undefined) {
+    const terminalCode = terminalPiAiMessageCode(errorMessage)
+    if (terminalCode !== undefined) return terminalCode
+  }
+  if (validStatus(errorStatus)) {
+    if (errorStatus === 401 || errorStatus === 403) return 'AUTH'
+    if (errorStatus === 408) return 'TIMEOUT'
+    if (errorStatus === 429) return 'RATE_LIMIT'
+    if (errorStatus >= 500) return 'SERVER'
+    if (errorStatus >= 400) return 'INVALID_REQUEST'
+  }
+  return normalizedCode === undefined ? undefined : 'PI_AI_ERROR'
+}
+
+/**
+ * Classify pi-ai stream failures whose metadata was flattened into a message.
+ *
+ * Transport causes are discarded by some upstream adapters before their error
+ * events reach the Harness, so legacy protocols still need this narrow fallback.
+ */
+function classifyFlattenedPiAiError(message: string): string {
   if (/\b(?:401|403)\b/.test(message)) return 'AUTH'
   if (isQuotaExceededError(message)) return QUOTA_EXCEEDED_CODE
   if (/\b429\b|rate.?limit/i.test(message)) return 'RATE_LIMIT'
@@ -46,48 +165,64 @@ function classifyPiAiError(message: string): string {
   // same request cannot succeed, so it is invalid, not transient.
   if (/\b413\b|failed to buffer the request body:\s*length limit exceeded|payload too large|request body too large/i.test(message)) return 'INVALID_REQUEST'
   if (/\b400\b|invalid.?request/i.test(message)) return 'INVALID_REQUEST'
+  if (/\bERR_HTTP2_STREAM_ERROR\b/i.test(message)
+    || /stream[_\s-]*transform[_\s-]*error/i.test(message)
+    || /\bstream\s+error\b.*\b(?:internal[_\s-]*error|received\s+from\s+peer|stream\s+id)\b/i.test(message)
+    || /\b(?:http\/?2|http2)\b.*\b(?:internal[_\s-]*error|received\s+from\s+peer|stream\s+reset|rst[_\s-]*stream)\b/i.test(message)
+    || /\b(?:rst[_\s-]*stream|stream\s+reset|peer\s+reset)\b/i.test(message)) return 'TRANSPORT'
   if (/\b5\d\d\b/.test(message)) return 'SERVER'
   if (/\btime(?:d)?\s*out\b|timeout/i.test(message)) return 'TIMEOUT'
-  // A stream truncated before the provider's terminal event: each pi-ai provider
-  // throws its own wording when the wire closes mid-response without a terminal
-  // event (`… stream ended before message_stop`, `… before a terminal response
-  // event`, `… ended without a terminal event`, `Stream ended without
-  // finish_reason`). The connection dropped mid-response, so this is a transport
-  // truncation, not a model-level error.
+  // A stream truncated before the provider's terminal event.
   if (/stream ended (?:before|without)\b/i.test(message)) return 'TRANSPORT'
   if (/\b(?:network|connection|socket|fetch)\b|\bECONN[A-Z]+\b/i.test(message)
     || /\b(?:other side closed|HTTP2 request did not get a response|WebSocket closed unexpectedly)\b/i.test(message)
-    // undici renders a mid-stream socket drop as a bare `terminated` (its
-    // `cause` — the real SocketError — was flattened away upstream); Node's
-    // stream layer says `Premature close`.
-    || /\bterminated\b|premature close/i.test(message)) {
-    return 'TRANSPORT'
-  }
+    || /\bterminated\b|premature close/i.test(message)) return 'TRANSPORT'
   return 'PI_AI_ERROR'
+}
+
+function failureWithMessage(source: AssistantMessage, code: string, text: string): LlmFailure {
+  const directStatus = source.errorStatus
+  const status = validStatus(directStatus) ? directStatus : diagnosticFailureStatus(source)
+  return {
+    message: text,
+    code,
+    ...validStatus(status) ? { status } : {},
+  }
 }
 
 /**
  * Map a terminal pi-ai event to the harness finish reason.
  * @param message - the assistant message carried by the `done` or `error` event.
  * @param contextWindow - resolved catalog capacity for usage-based overflow detection.
- * @returns the mapped harness reason. Recognized error text, `stop` usage above
- *   `contextWindow`, and zero-output `length` usage that fills the window map
- *   to `CONTEXT_WINDOW_EXCEEDED`; a `stop` with no content blocks maps to an
- *   `EMPTY_RESPONSE` error, while terminal `pending` and `deferred` states map
- *   to non-retryable `PI_AI_ERROR` failures.
+ * @returns the mapped harness reason. For error events, a preserved provider
+ *   code or diagnostic takes precedence over HTTP status and flattened text.
+ *   Context-window codes, `stop` usage above `contextWindow`, and zero-output
+ *   `length` usage that fills the window map to `CONTEXT_WINDOW_EXCEEDED`; a
+ *   `stop` with no content blocks maps to an `EMPTY_RESPONSE` error, while
+ *   terminal `pending` and `deferred` states map to non-retryable `PI_AI_ERROR`
+ *   failures.
  */
 export function mapStopReason(message: AssistantMessage, contextWindow?: number): FinishReason {
-  const piAiOverflow = isContextOverflow(message, contextWindow)
-  const harnessOverflow = message.stopReason === 'error'
+  const structuredFailureCode = message.stopReason === 'error'
+    ? classifyStructuredPiAiError(
+      diagnosticFailureCode(message),
+      diagnosticFailureStatus(message),
+      message.errorMessage,
+    )
+    : undefined
+  const piAiOverflow = structuredFailureCode === undefined && isContextOverflow(message, contextWindow)
+  const harnessOverflow = structuredFailureCode === undefined
+    && message.stopReason === 'error'
     && message.errorMessage !== undefined
     && isContextWindowExceededError(message.errorMessage)
-  if (piAiOverflow || harnessOverflow) {
+  if (piAiOverflow || structuredFailureCode === CONTEXT_WINDOW_EXCEEDED_CODE || harnessOverflow) {
     return {
       kind: 'error',
-      failure: {
-        message: message.errorMessage ?? `pi-ai detected context overflow for model "${message.model}"`,
-        code: CONTEXT_WINDOW_EXCEEDED_CODE,
-      },
+      failure: failureWithMessage(
+        message,
+        CONTEXT_WINDOW_EXCEEDED_CODE,
+        message.errorMessage ?? `pi-ai detected context overflow for model "${message.model}"`,
+      ),
     }
   }
 
@@ -117,11 +252,14 @@ export function mapStopReason(message: AssistantMessage, contextWindow?: number)
     }
     case 'aborted': return {
       kind: 'aborted',
-      failure: { message: message.errorMessage ?? 'pi-ai stream aborted', code: 'ABORTED' },
+      failure: failureWithMessage(message, 'ABORTED', message.errorMessage ?? 'pi-ai stream aborted'),
     }
     case 'error': {
       const text = message.errorMessage ?? 'pi-ai stream error'
-      return { kind: 'error', failure: { message: text, code: classifyPiAiError(text) } }
+      return {
+        kind: 'error',
+        failure: failureWithMessage(message, structuredFailureCode ?? classifyFlattenedPiAiError(text), text),
+      }
     }
   }
 }
