@@ -8,9 +8,10 @@
 /**
  * Every `SessionEventMap` member declared in this repository — the event
  * vocabulary this build understands. The persistence read path refuses to
- * interpret a log containing a type outside this set: such a log was likely
- * written by a newer harness, and silently skipping the event could
- * reconstruct a wrong session.
+ * interpret a log containing a type outside this set unless the event carries
+ * its explicit `ignorable` marker: an unmarked event may change
+ * reconstruction, while the marker is reserved for purely informational
+ * extension records.
  * Downstream (out-of-repo) plugin events are outside this list by
  * construction; a registration surface for them is deferred until such a
  * consumer exists.

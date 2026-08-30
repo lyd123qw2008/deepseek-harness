@@ -424,6 +424,8 @@ export interface SessionWireEvent {
   readonly seq: number
   readonly time: number
   readonly data: JsonValue
+  /** Preserve the explicit marker on informational extension events. */
+  readonly ignorable?: true
   readonly sourceEventSeqs?: number[]
   readonly surfaceOp?: SurfaceOp
 }

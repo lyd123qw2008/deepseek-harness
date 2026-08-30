@@ -12,9 +12,9 @@ Status: implemented
 
 ## 决策
 
-每个会话事件类型都是读取必需项。受支持的 legacy 记录归一化后，`PersistenceCoordinator` 会将每个事件类型与 `KNOWN_SESSION_EVENT_TYPES` 比较；后者是从本仓库声明的所有 `SessionEventMap` 成员生成的集合。任何未知类型都以 `SessionFormatUnsupportedError` 拒绝重建；诊断会列出事件与序号，指明日志可能由更新的写入方生成，并在后端拥有独立原始产物时附上该路径。该守卫仍只在读取侧生效，因为在实时事件已提交后拒绝追加会中断持久化，使会话无法在下次加载时报告不受支持的日志。
+每个会话事件类型都是读取必需项，除非记录带有[标记事件兼容性 Agent Note](../architecture/2026-08-30-ignorable-session-events.zh.md)所述的明确迁移兼容标记。受支持的 legacy 记录归一化后，`PersistenceCoordinator` 会将每个事件类型与 `KNOWN_SESSION_EVENT_TYPES` 比较；后者是从本仓库声明的所有 `SessionEventMap` 成员生成的集合。任何未知且未标记的类型都以 `SessionFormatUnsupportedError` 拒绝重建；诊断会列出事件与序号，指明日志可能由更新的写入方生成，并在后端拥有独立原始产物时附上该路径。该守卫仍只在读取侧生效，因为在实时事件已提交后拒绝追加会中断持久化，使会话无法在下次加载时报告不受支持的日志。
 
-`SessionEvent` 没有可选的未知事件跳过字段。JSONL 继续序列化相同的事件对象，因为生产追加路径从未发出该字段，`SESSION_FORMAT_VERSION` 仍为 `0`。SQLite 提供方将被复用的 `ignorable` 列替换为 schema 18 的 `is_packed` 判别值：标量逻辑事件存储 `0`，打包分片行存储 `1`，与物理分片标签同名的事件在协调器应用已知类型守卫之前仍可明确解码。
+`SessionEvent.ignorable` 是为明确的信息性迁移记录接受的可选 envelope 字段。JSONL 保留该字段，`SESSION_FORMAT_VERSION` 仍为 `0`。SQLite 提供方将被复用的 `ignorable` 列替换为 schema 18 的 `is_packed` 判别值：标量逻辑事件存储 `0`，打包分片行存储 `1`，与物理分片标签同名的事件在协调器应用已知类型守卫之前仍可明确解码。本次 Alpha 迁移使用 JSONL；SQLite 物理格式不提供这条标记路径，因此对无法识别的事件继续 fail-closed。
 
 `SESSION_FORMAT_VERSION` 仍是单个单调整数。当较旧运行时无法完全正确地解释某项结构或语义变更时，写入方必须升版本：会话 header 字段、事件 envelope 字段、核心事件语义或 `SurfaceEventType`/`SurfaceOp` 机制。仅新增事件类型无需升版本，因为较旧读取器会拒绝该确切的未知类型，而不是误读日志。版本相等时正常读取；版本不等时当前以分方向诊断拒绝。n→n+1 升级器链仍推迟到第一个真实 v0→v1 步骤提供可测的输入和输出时建立。未来的查看升级属于内存转换，只有用户继续会话时才持久替换；缺失的步骤会保留源产物以供原始查看。
 
@@ -34,7 +34,7 @@ Status: implemented
 
 ## 后果
 
-较旧构建在较新的同版本日志包含任何未知事件类型后都无法恢复该日志，即使新事件仅用于信息。这是对未使用的前向降级行为的有意放弃，换取单一事件 envelope 与单一失败规则。如果真实生产方以后需要较旧读取器跳过可选事件并继续会话，设计必须只对事件类型分类一次，让 `Session.append()` 自动发出持久分类，并覆盖两个持久化后端和线上表示。
+较旧构建在较新的同版本日志包含任何未标记的未知事件类型后都无法恢复该日志，即使新事件仅用于信息。Alpha 迁移只为已有 JSONL 记录恢复明确标记；这些记录的 producer 已确认它们不影响重建，但这不提供通用的外部事件注册机制。未来 producer 如果在迁移之外需要此行为，设计必须只对事件类型分类一次，让 `Session.append()` 自动发出持久分类，并覆盖每个持久化后端和线上表示。
 
 第一方 JSONL 会话字节保持不变，包括打包行与 `SESSION_FORMAT_VERSION = 0`。现有第一方 JSONL 会话仍可读。SQLite 是可选功能，并遵循预发布 schema 策略：schema 18 不从 schema 17 迁移，不兼容数据库会被拒绝而不是改写。[SQLite 物理压缩决策](../architecture/2026-08-18-sqlite-physical-chunk-row-compression.zh.md)拥有该后端的打包行表示。
 

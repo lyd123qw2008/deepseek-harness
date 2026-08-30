@@ -112,6 +112,45 @@ describe('diffCardModel', () => {
     })
   })
 
+  it('renders applied edit diff when redundant full-access fields have blank justification', () => {
+    const argsRaw = JSON.stringify({
+      file_path: 'notes/demo.txt',
+      old_string: 'hello',
+      new_string: 'hello fixture',
+      replace_all: false,
+      sandbox_permissions: 'danger-full-access',
+      justification: '',
+    })
+    expect(diffCardModel(settled({
+      call: { name: 'edit', argsRaw },
+      meta: { diffs: DIFFS },
+    }))).toEqual({ card: { diffs: DIFFS } })
+  })
+
+  it('renders an applied write diff when redundant escalation fields have blank justification', () => {
+    const argsRaw = JSON.stringify({
+      file_path: 'notes/new.txt',
+      content: 'hello fixture\n',
+      sandbox_permissions: 'danger-full-access',
+      justification: '',
+    })
+    expect(diffCardModel(settled({
+      call: { name: 'write', argsRaw },
+      meta: { diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture\n' }] },
+    }))).toEqual({ card: { diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture\n' }] } })
+  })
+
+  it('keeps running invalid escalation calls generic', () => {
+    const argsRaw = JSON.stringify({
+      file_path: 'notes/demo.txt',
+      old_string: 'hello',
+      new_string: 'hello fixture',
+      sandbox_permissions: 'danger-full-access',
+      justification: '',
+    })
+    expect(diffCardModel(running({ argsRaw }))).toBeNull()
+  })
+
   it('uses the intended write diff when successful metadata reports no applied hunk', () => {
     const writeArgs = JSON.stringify({ file_path: 'notes/new.txt', content: 'hello fixture\n' })
     expect(diffCardModel(settled({

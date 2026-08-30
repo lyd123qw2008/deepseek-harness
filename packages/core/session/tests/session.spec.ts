@@ -662,6 +662,21 @@ describe('Session', () => {
     expect(session.events.slice(0, 1)).toEqual([{ ...event }])
   })
 
+  it('accepts an explicit ignorable marker only when it is true', () => {
+    const marked = {
+      type: 'plugin/event',
+      seq: 0,
+      time: 1,
+      data: null,
+      ignorable: true,
+    } as unknown as SessionEvent
+    expect(Session.create(SessionId('seed-ignorable'), [marked]).events[0]).toMatchObject(marked)
+
+    const invalid = { ...marked, ignorable: false } as unknown as SessionEvent
+    expect(() => Session.create(SessionId('seed-invalid-ignorable'), [invalid]))
+      .toThrow('invalid event envelope')
+  })
+
   it('reads a nested seed-metadata getter once and stores its first JSON value', () => {
     let reads = 0
     const surfaceOp = Object.defineProperty({ op: 'replace', end: 0 }, 'start', {

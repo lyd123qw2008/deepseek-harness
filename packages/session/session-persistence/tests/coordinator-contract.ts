@@ -1369,6 +1369,7 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
         const failure = await ctx.sessionPersistence.load(required.id).then(() => undefined, (error: unknown) => error as Error)
         expect(failure?.name).toBe('SessionFormatUnsupportedError')
         expect(failure?.message).toMatch(/event type "future\/event".*unknown to this harness/)
+
       } finally {
         await fiber.dispose()
         await fix.cleanup()

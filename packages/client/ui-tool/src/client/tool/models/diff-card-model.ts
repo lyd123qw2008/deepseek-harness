@@ -49,7 +49,7 @@ function narrowDiffs(diffs: unknown): DiffHunk[] | null {
 
 type IntendedDiff = { tool: 'write' | 'edit' | 'str_replace_editor'; diff: DiffHunk }
 
-function intendedDiff(block: ToolCallBlock): IntendedDiff | null {
+function intendedDiff(block: ToolCallBlock, allowAppliedMetadata = false): IntendedDiff | null {
   const parsed = parsedToolCall(block)
   if (parsed === null) return null
   if (parsed.name === 'str_replace_editor') {
@@ -74,7 +74,7 @@ function intendedDiff(block: ToolCallBlock): IntendedDiff | null {
   }
   const { file_path: path } = parsed.args
   if (typeof path !== 'string' || path.trim() === '') return null
-  if (!validEscalationFields(parsed.args)) return null
+  if (!allowAppliedMetadata && !validEscalationFields(parsed.args)) return null
   if (parsed.name === 'write') {
     const { content } = parsed.args
     return typeof content === 'string'
@@ -99,20 +99,24 @@ function appliedDiffs(meta: unknown): DiffHunk[] | 'empty' | null {
 /**
  * Derive running diffs for root write/edit and `str_replace_editor`
  * create/replace calls, plus applied settled diffs for root write/edit calls.
- * A successful write with valid empty metadata uses its argument-derived
- * whole-file diff, matching create and identical-overwrite presentation;
+ * A successful root write/edit with a non-empty, well-formed `meta.diffs` uses
+ * that result metadata even when optional escalation fields fail Client
+ * validation; mutation fields remain validated. A successful write with valid
+ * empty or unusable metadata uses its argument-derived whole-file diff.
  * `str_replace_editor` settles through Generic because it has no result view.
  * @param block - running or settled Tool block.
  * @returns the diff-card props, or null for the generic path.
  */
 export function diffCardModel(block: ToolCallBlock): DiffCardModel | null {
   if (block.parentCallId !== undefined) return null
-  const intended = intendedDiff(block)
+  const settled = 'kind' in block
+  const applied = settled && !block.isError ? appliedDiffs(block.meta) : null
+  const allowAppliedMetadata = applied !== null && applied !== 'empty'
+  const intended = intendedDiff(block, allowAppliedMetadata)
   if (intended === null) return null
-  if (!('kind' in block)) return { card: { diffs: [intended.diff] } }
+  if (!settled) return { card: { diffs: [intended.diff] } }
   if (intended.tool === 'str_replace_editor') return null
   if (block.isError) return null
-  const applied = appliedDiffs(block.meta)
   if (applied === null || applied === 'empty') {
     return intended.tool === 'write' ? { card: { diffs: [intended.diff] } } : null
   }

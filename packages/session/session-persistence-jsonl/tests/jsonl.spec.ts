@@ -132,6 +132,35 @@ runCoordinatorContract('jsonl-none', async (): Promise<CoordinatorFixture> => {
   }
 })
 
+describe('JsonlSessionPersistence: marked extension events', () => {
+  it('round-trips an unknown event marked ignorable', async () => {
+    const dir = await freshRoot()
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const fiber = await ctx.plugin(JsonlSessionPersistence, { root: dir, compression: 'none' })
+    try {
+      const session = meta('unknown-ignorable', '/w')
+      await ctx.sessionPersistence.create(session)
+      await ctx.sessionPersistence.append(session.id, [
+        ...oneTurnLog(),
+        {
+          type: 'future/event',
+          seq: oneTurnLog().length,
+          time: 99,
+          data: { payload: 1 },
+          ignorable: true,
+        } as unknown as SessionEvent,
+      ])
+      const loaded = await ctx.sessionPersistence.load(session.id)
+      expect(loaded.events.at(-1)).toMatchObject({
+        type: 'future/event', data: { payload: 1 }, ignorable: true,
+      })
+    } finally {
+      await fiber.dispose()
+    }
+  })
+})
+
 describe('JsonlSessionPersistence: format helpers', () => {
   it('encodeSegment neutralizes traversal, separators, and absolute paths', () => {
     expect(encodeSegment('..')).toBe('~002E~002E')
