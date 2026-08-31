@@ -33,7 +33,7 @@ kind: "package-library"
 
 ### 渲染 agent 输出
 
-`MarkdownText` 渲染不可信的 GFM 与 TeX 公式、阻止不安全的链接与图片，并可把已解析的文件提及转换为显式控件。回复流式输出时，它冻结已完成的块，并从保存的 Shiki grammar state 为不断增长的 fence 增量高亮；最终渲染使用相同的 span 树（[增量渲染器](../../../.agents/notes/implemented/architecture/2026-08-06-web-markdown-incremental-ast-renderer.zh.md)、[流式 fence 高亮](../../../.agents/notes/implemented/feature/2026-08-20-web-streaming-fence-highlight.zh.md)）。`TerminalBlock`、`ReadBlock`、`DiffBlock`、`SearchBlock` 与 `WebBlock` 把对应的工具结果意图渲染为带复制控件、溢出处理及适用时 ANSI 处理的卡片。`JsonTree` 与 `JsonBlock` 以只读方式检查 JSON 值；`MessageText` 仍是用户创作内容的字面文本原语。
+`MarkdownText` 渲染不可信的 GFM 与 TeX 公式、阻止不安全的链接与图片，并可把已解析的文件提及转换为显式控件。回复流式输出时，它冻结已完成的块，并从保存的 Shiki grammar state 为不断增长的 fence 增量高亮；最终渲染使用相同的 span 树（[增量渲染器](../../../.agents/notes/implemented/architecture/2026-08-06-web-markdown-incremental-ast-renderer.zh.md)、[流式 fence 高亮](../../../.agents/notes/implemented/feature/2026-08-20-web-streaming-fence-highlight.zh.md)）。`TerminalBlock`、`ReadBlock`、`DiffBlock`、`SearchBlock` 与 `WebBlock` 把对应的工具结果意图渲染为带复制控件、溢出处理及适用时 ANSI 处理的卡片。`DiffBlock` 会重建中性上下文与变更行，显示可选的旧／新文件行号，并为单行替换高亮变化的词语；没有行号起始值的调用时或旧 hunk 保持只有标记列的回退显示。`JsonTree` 与 `JsonBlock` 以只读方式检查 JSON 值；`MessageText` 仍是用户创作内容的字面文本原语。
 
 ### 本地化文案
 
@@ -67,7 +67,7 @@ kind: "package-library"
 
 ### 几何与溢出
 
-输出卡片共享同一套几何模型：`white-space: pre` 并横向滚动，让按列对齐的内容保持对齐；超过 `maxLines`（默认 16）时折叠为头部切片加尾部切片，由展开按钮控制，长正文不会撑高卡片。`TerminalBlock` 把 ANSI 解析为 React span，并带逐行列缓冲处理光标移动，遵循行内擦除、制表位与字符宽度。
+输出卡片共享同一套几何模型：`white-space: pre` 并横向滚动，让按列对齐的内容保持对齐；超过 `maxLines`（默认 16）时折叠为头部切片加尾部切片，由展开按钮控制，长正文不会撑高卡片。Diff 行使用独立的标记、可选行号和内容列；页脚统计变更行而非上下文行。`TerminalBlock` 把 ANSI 解析为 React span，并带逐行列缓冲处理光标移动，遵循行内擦除、制表位与字符宽度。
 
 </details>
 

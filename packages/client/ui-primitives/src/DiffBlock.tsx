@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from 'react'
+import { diffLines, diffWords } from 'diff'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { FoldToggle } from './FoldToggle.tsx'
 import { writeClipboard } from './clipboard.ts'
@@ -18,6 +19,10 @@ export interface DiffHunk {
   oldText: string | null
   /** Content after the change (the added side). */
   newText: string
+  /** Optional 1-based line where this hunk starts in the old file. Older call-time and session data may omit it. */
+  oldStart?: number
+  /** Optional 1-based line where this hunk starts in the new file. Older call-time and session data may omit it. */
+  newStart?: number
 }
 
 export interface DiffBlockProps {
@@ -42,10 +47,33 @@ export interface DiffBlockLabels {
   files: (count: number) => string
 }
 
+type DiffRowKind = 'path' | 'context' | 'del' | 'add' | 'gap'
+
+interface DiffSegment {
+  text: string
+  changed: boolean
+}
+
 /** A single rendered body line and its role, so the height cap slices a flat list. */
 interface DiffRow {
-  kind: 'path' | 'del' | 'add' | 'gap'
+  kind: DiffRowKind
   text: string
+  lineNumber?: number
+  segments?: DiffSegment[]
+}
+
+interface HunkRows {
+  rows: DiffRow[]
+  added: number
+  removed: number
+}
+
+interface DiffRows {
+  rows: DiffRow[]
+  added: number
+  removed: number
+  files: number
+  lineNumberWidth: number
 }
 
 /** Local exhaustiveness helper — this package does not depend on `dsh-llm`. */
@@ -54,19 +82,164 @@ function assertNever(value: never): never {
   throw new Error(`unreachable diff row kind: ${String(value)}`)
 }
 
-/** The dim class per row kind (path/gap chrome vs the diff's own +/- colors). */
-const ROW_CLASS: Record<DiffRow['kind'], string | undefined> = {
+/** The dim or change class per row kind. */
+const ROW_CLASS: Record<DiffRowKind, string | undefined> = {
   path: css.path,
+  context: css.context,
   del: css.del,
   add: css.add,
   gap: css.gap,
 }
 
 /**
- * Total added/removed line counts across hunks — the same numbers the footer
- * prints, exported so a summary row can show them without rebuilding the body.
- * Every old-side line counts toward `removed` and every new-side line toward
- * `added`, under {@link contentLines}'s terminator rule.
+ * Split a side's text into content lines. Empty text is zero lines, and a
+ * single trailing newline is a line terminator rather than an extra empty line.
+ * @param text - the removed, added, or diff-part text.
+ * @returns content lines without the terminating newline.
+ */
+function contentLines(text: string): string[] {
+  /* v8 ignore next -- diffLines omits empty change parts; empty source has no part to split */
+  if (text === '') return []
+  const body = text.endsWith('\n') ? text.slice(0, -1) : text
+  return body.split('\n')
+}
+
+function advanceLine(line: number | undefined, count: number): number | undefined {
+  return line === undefined ? undefined : line + count
+}
+
+function lineNumber(line: number | undefined): number | undefined {
+  return line !== undefined && Number.isSafeInteger(line) && line >= 1 ? line : undefined
+}
+
+function appendSegment(target: DiffSegment[], text: string, changed: boolean, stripLeadingWhitespace: boolean): void {
+  let value = text
+  if (changed && stripLeadingWhitespace) {
+    const firstNonWhitespace = value.search(/\S/)
+    const leadingWhitespaceEnd = firstNonWhitespace === -1 ? value.length : firstNonWhitespace
+    const leadingWhitespace = value.slice(0, leadingWhitespaceEnd)
+    if (leadingWhitespace !== '') target.push({ text: leadingWhitespace, changed: false })
+    value = value.slice(leadingWhitespace.length)
+  }
+  if (value !== '') target.push({ text: value, changed })
+}
+
+/**
+ * Compute word-level segments for a one-line replacement. Leading indentation
+ * stays unhighlighted, matching the line-level gutter's role as the change cue.
+ * @param oldText - one removed line.
+ * @param newText - one added line.
+ * @returns segments for the removed and added render rows.
+ */
+function inlineSegments(oldText: string, newText: string): { old: DiffSegment[]; new: DiffSegment[] } {
+  const old: DiffSegment[] = []
+  const added: DiffSegment[] = []
+  let firstRemoved = true
+  let firstAdded = true
+  for (const part of diffWords(oldText, newText)) {
+    if (part.removed) {
+      appendSegment(old, part.value, true, firstRemoved)
+      firstRemoved = false
+    } else if (part.added) {
+      appendSegment(added, part.value, true, firstAdded)
+      firstAdded = false
+    } else {
+      appendSegment(old, part.value, false, false)
+      appendSegment(added, part.value, false, false)
+    }
+  }
+  return { old, new: added }
+}
+
+function makeRow(kind: DiffRowKind, text: string, start: number | undefined, segments?: DiffSegment[]): DiffRow {
+  const row: DiffRow = { kind, text }
+  if (start !== undefined) row.lineNumber = start
+  if (segments !== undefined) row.segments = segments
+  return row
+}
+
+function pushPlainRows(rows: DiffRow[], kind: 'del' | 'add' | 'context', lines: string[], start: number | undefined): void {
+  lines.forEach((text, index) => {
+    rows.push(makeRow(kind, text, start === undefined ? undefined : start + index))
+  })
+}
+
+/**
+ * Reconstruct semantic context/change rows from one hunk. `FileDiff` stores
+ * before/after text rather than row markers, so the browser repeats the line
+ * diff here and can keep unchanged context neutral.
+ * @param diff - one file hunk.
+ * @returns rows and changed-line counts for the hunk.
+ */
+function buildHunkRows(diff: DiffHunk): HunkRows {
+  const rows: DiffRow[] = []
+  const parts = diffLines(diff.oldText ?? '', diff.newText)
+  let oldLine = lineNumber(diff.oldStart)
+  let newLine = lineNumber(diff.newStart)
+  let added = 0
+  let removed = 0
+
+  let skipNext = false
+  for (const [index, part] of parts.entries()) {
+    if (skipNext) {
+      skipNext = false
+      continue
+    }
+    const currentLines = contentLines(part.value)
+    if (part.removed) {
+      const next = parts[index + 1]
+      const addedLines = next?.added === true ? contentLines(next.value) : []
+      if (addedLines.length > 0) {
+        if (currentLines.length === 1 && addedLines.length === 1) {
+          const oldText = currentLines.join('')
+          const newText = addedLines.join('')
+          const segments = inlineSegments(oldText, newText)
+          rows.push(makeRow('del', oldText, oldLine, segments.old))
+          rows.push(makeRow('add', newText, newLine, segments.new))
+        } else {
+          pushPlainRows(rows, 'del', currentLines, oldLine)
+          pushPlainRows(rows, 'add', addedLines, newLine)
+        }
+        removed += currentLines.length
+        added += addedLines.length
+        oldLine = advanceLine(oldLine, currentLines.length)
+        newLine = advanceLine(newLine, addedLines.length)
+        skipNext = true
+      } else {
+        pushPlainRows(rows, 'del', currentLines, oldLine)
+        removed += currentLines.length
+        oldLine = advanceLine(oldLine, currentLines.length)
+      }
+      continue
+    }
+    if (part.added) {
+      pushPlainRows(rows, 'add', currentLines, newLine)
+      added += currentLines.length
+      newLine = advanceLine(newLine, currentLines.length)
+      continue
+    }
+
+    pushPlainRows(rows, 'context', currentLines, oldLine ?? newLine)
+    oldLine = advanceLine(oldLine, currentLines.length)
+    newLine = advanceLine(newLine, currentLines.length)
+  }
+  return { rows, added, removed }
+}
+
+function hunkChangeCounts(diff: DiffHunk): { added: number; removed: number } {
+  let added = 0
+  let removed = 0
+  for (const part of diffLines(diff.oldText ?? '', diff.newText)) {
+    const count = contentLines(part.value).length
+    if (part.added) added += count
+    else if (part.removed) removed += count
+  }
+  return { added, removed }
+}
+
+/**
+ * Count only changed lines across hunks. Context stored in applied result
+ * metadata is intentionally excluded from the footer and collapsed-row stat.
  * @param diffs - the hunks to count.
  * @returns the +/- totals.
  */
@@ -74,68 +247,57 @@ export function diffTotals(diffs: DiffHunk[]): { added: number; removed: number 
   let added = 0
   let removed = 0
   for (const diff of diffs) {
-    if (diff.oldText !== null) removed += contentLines(diff.oldText).length
-    added += contentLines(diff.newText).length
+    const counts = hunkChangeCounts(diff)
+    added += counts.added
+    removed += counts.removed
   }
   return { added, removed }
 }
 
 /**
- * Flatten the hunks into the body's rows plus the footer counts. A path header
- * opens each new file; a same-file second hunk (a scattered edit) opens with a
- * `⋯` gap instead of repeating the path. The +/- totals are
- * {@link diffTotals}'s. The file count is of DISTINCT paths, matching the TUI
- * diff card's footer, so two hunks in one file read as `1 file` on both front
- * ends.
+ * Flatten the hunks into body rows plus footer counts. A path header opens each
+ * new file; a same-file second hunk opens with a `⋯` gap. Context rows stay
+ * neutral, while removed and added rows get separate markers and line numbers
+ * when the optional hunk starts are available.
  * @param diffs - the hunks to render.
- * @returns the body rows, the +/- totals, and the distinct-file count.
+ * @returns the body rows, +/- totals, distinct-file count, and gutter width.
  */
-function buildRows(diffs: DiffHunk[]): { rows: DiffRow[]; added: number; removed: number; files: number } {
+function buildRows(diffs: DiffHunk[]): DiffRows {
   const rows: DiffRow[] = []
   const paths = new Set<string>()
   let prevPath: string | undefined
+  let added = 0
+  let removed = 0
   for (const diff of diffs) {
     paths.add(diff.path)
     if (diff.path !== prevPath) rows.push({ kind: 'path', text: diff.path })
     else rows.push({ kind: 'gap', text: '⋯' })
     prevPath = diff.path
-    if (diff.oldText !== null) {
-      for (const line of contentLines(diff.oldText)) {
-        rows.push({ kind: 'del', text: line })
-      }
-    }
-    for (const line of contentLines(diff.newText)) {
-      rows.push({ kind: 'add', text: line })
-    }
+    const hunk = buildHunkRows(diff)
+    rows.push(...hunk.rows)
+    added += hunk.added
+    removed += hunk.removed
   }
-  return { rows, ...diffTotals(diffs), files: paths.size }
+  const maxLine = rows.reduce((max, row) => Math.max(max, row.lineNumber ?? 0), 0)
+  return {
+    rows,
+    added,
+    removed,
+    files: paths.size,
+    lineNumberWidth: maxLine === 0 ? 0 : String(maxLine).length,
+  }
 }
 
 /**
- * Split a side's text into its content lines. Empty text is zero lines (a full
- * deletion's `newText` or a create's absent `oldText` side draws nothing), and a
- * single trailing newline is a line terminator rather than an extra empty line —
- * the same terminator rule TerminalBlock applies to command output. An interior
- * blank line (a genuine `\n\n`) survives.
- * @param text - the removed or added side's text.
- * @returns the content lines, without the terminating newline.
- */
-function contentLines(text: string): string[] {
-  if (text === '') return []
-  const body = text.endsWith('\n') ? text.slice(0, -1) : text
-  return body.split('\n')
-}
-
-/**
- * The diff text a reader copies: each row's `-`/`+`/path/gap prefix and its
- * content, exactly what the card shows. The removed and added blocks are the
- * change; the path headers keep a multi-file copy attributable.
+ * The diff text a reader copies. Gutter numbers are display-only; semantic
+ * context and change markers remain in the copied unified-style text.
  * @param rows - the flattened body rows.
  * @returns the diff as plain text.
  */
 function copyText(rows: DiffRow[]): string {
   return rows.map((row) => {
     switch (row.kind) {
+      case 'context': return `  ${row.text}`
       case 'del': return `- ${row.text}`
       case 'add': return `+ ${row.text}`
       case 'path': return row.text
@@ -146,13 +308,44 @@ function copyText(rows: DiffRow[]): string {
   }).join('\n')
 }
 
+function renderSegments(row: DiffRow): ReactNode {
+  if (row.segments === undefined) return row.text
+  return row.segments.map((segment, index) => segment.changed
+    ? <mark key={index} className={css.inlineChanged}>{segment.text}</mark>
+    : <span key={index}>{segment.text}</span>)
+}
+
+function markerFor(kind: 'context' | 'del' | 'add'): string {
+  switch (kind) {
+    case 'context': return ' '
+    case 'del': return '-'
+    case 'add': return '+'
+    /* v8 ignore next -- closed-union backstop; only reached if a marker kind is forged */
+    default: return assertNever(kind)
+  }
+}
+
+function renderRow(row: DiffRow, lineNumberWidth: number): ReactNode {
+  if (row.kind === 'path' || row.kind === 'gap') return row.text
+  const number = lineNumberWidth === 0
+    ? null
+    : <span className={css.lineNumber}>{row.lineNumber === undefined ? ''.padStart(lineNumberWidth) : String(row.lineNumber).padStart(lineNumberWidth)}</span>
+  return (
+    <>
+      <span className={css.marker} aria-hidden="true">{markerFor(row.kind)}</span>
+      {number}
+      <span className={css.lineContent}>{renderSegments(row)}</span>
+    </>
+  )
+}
+
 /**
  * Render a file mutation as an inline diff surface.
  * @param props - see {@link DiffBlockProps}.
  * @returns the diff block element.
  */
 export function DiffBlock({ diffs, labels, maxLines = DEFAULT_DIFF_MAX_LINES, className }: DiffBlockProps) {
-  const { rows, added, removed, files } = useMemo(() => buildRows(diffs), [diffs])
+  const { rows, added, removed, files, lineNumberWidth } = useMemo(() => buildRows(diffs), [diffs])
   const [expanded, setExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -177,6 +370,7 @@ export function DiffBlock({ diffs, labels, maxLines = DEFAULT_DIFF_MAX_LINES, cl
   const tailLines = maxLines - headLines
   const head = capped ? rows.slice(0, headLines) : rows
   const tail = capped ? rows.slice(rows.length - tailLines) : []
+  const numbered = lineNumberWidth > 0
 
   return (
     <div className={clsx(css.block, className)} data-diff="">
@@ -185,7 +379,13 @@ export function DiffBlock({ diffs, labels, maxLines = DEFAULT_DIFF_MAX_LINES, cl
       </button>
       <div className={css.body}>
         {head.map((row, index) => (
-          <div key={index} className={clsx(css.line, ROW_CLASS[row.kind])}>{row.text}</div>
+          <div
+            key={index}
+            className={clsx(css.line, ROW_CLASS[row.kind], numbered && css.numbered)}
+            data-diff-line={row.kind}
+          >
+            {renderRow(row, lineNumberWidth)}
+          </div>
         ))}
         {hidden > 0 && (
           <FoldToggle
@@ -197,7 +397,13 @@ export function DiffBlock({ diffs, labels, maxLines = DEFAULT_DIFF_MAX_LINES, cl
           />
         )}
         {tail.map((row, index) => (
-          <div key={index} className={clsx(css.line, ROW_CLASS[row.kind])}>{row.text}</div>
+          <div
+            key={index}
+            className={clsx(css.line, ROW_CLASS[row.kind], numbered && css.numbered)}
+            data-diff-line={row.kind}
+          >
+            {renderRow(row, lineNumberWidth)}
+          </div>
         ))}
       </div>
       <div className={css.footer}>└ +{added} -{removed} · {labels.files(files)}</div>

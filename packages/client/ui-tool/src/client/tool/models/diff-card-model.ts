@@ -38,11 +38,19 @@ function narrowDiffs(diffs: unknown): DiffHunk[] | null {
   const out: DiffHunk[] = []
   for (const hunk of diffs) {
     if (typeof hunk !== 'object' || hunk === null) return null
-    const { path, oldText, newText } = hunk as Record<string, unknown>
+    const { path, oldText, newText, oldStart, newStart } = hunk as Record<string, unknown>
     if (typeof path !== 'string') return null
     if (oldText !== null && typeof oldText !== 'string') return null
     if (typeof newText !== 'string') return null
-    out.push({ path, oldText, newText })
+    if (oldStart !== undefined && (typeof oldStart !== 'number' || !Number.isSafeInteger(oldStart) || oldStart < 1)) return null
+    if (newStart !== undefined && (typeof newStart !== 'number' || !Number.isSafeInteger(newStart) || newStart < 1)) return null
+    out.push({
+      path,
+      oldText,
+      newText,
+      ...(oldStart === undefined ? {} : { oldStart }),
+      ...(newStart === undefined ? {} : { newStart }),
+    })
   }
   return out
 }

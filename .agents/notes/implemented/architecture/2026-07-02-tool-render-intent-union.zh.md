@@ -12,7 +12,7 @@ Status: implemented
 
 - 调用侧和结果侧的 `terminal` 字段重叠，bridge 需要将每次调用的 `content` 块、`terminal` 块和 `rawInput` 用临时条件逻辑拼接在一起。
 - 哪些组合是*合法的*没有文档说明：一个设置了 `content` 的 `terminal` 调用意味着「卡片上方的描述」；一个设置了 `terminal` 的 generic 调用毫无意义但类型上可表达。类型允许无意义的状态存在。
-- 无法表达编辑器最需要的文件工具能力：**diff 卡片**（`{path, oldText, newText}`，Zed 将其渲染为内联 diff / 新文件预览）。`ToolCallPresentation.content` 使用的是 *LLM（大语言模型）* 的 `ContentBlock[]` 词汇（text/image），工具根本无法请求 diff 展示。
+- 无法表达编辑器最需要的文件工具能力：**diff 卡片**（`{path, oldText, newText, oldStart?, newStart?}`，Zed 将其渲染为内联 diff / 新文件预览）。`ToolCallPresentation.content` 使用的是 *LLM（大语言模型）* 的 `ContentBlock[]` 词汇（text/image），工具根本无法请求 diff 展示。
 
 一个早先被否决的折叠工具自有呈现提案把富渲染推迟到它能够「在至少有两个真实工具和两个真实消费方验证词汇之后，以带标签 render-intent 联合类型的形式回归」之时。该条件已由多个生产者族，加上 TUI 与宿主/客户端运行时（Web）这些消费方满足。
 
@@ -22,7 +22,13 @@ Status: implemented
 
 ```ts ignore-check
 type FileLocation = { path: string; line?: number }
-type FileDiff = { path: string; oldText: string | null; newText: string } // oldText null ⇒ new file
+type FileDiff = {
+  path: string
+  oldText: string | null
+  newText: string
+  oldStart?: number // 1-based old-file hunk start
+  newStart?: number // 1-based new-file hunk start
+} // oldText null ⇒ new file; starts are optional for call-time/legacy data
 
 // presentCall → ToolCallView
 type ToolCallView = GenericCallView | TerminalCallView | DiffCallView
@@ -42,7 +48,7 @@ interface TerminalResultView { card: 'terminal'; title?: string; output?: string
 
 - **无效状态变得不可表达。** generic 卡片不能携带终端输出；terminal 卡片不能携带 diff。旧的字段集合允许所有这些组合。
 - **消费方分发而非拼接。** 每种卡片一个分支，精确产出该卡片所需的视图，而非调和五个交互关系未文档化的可选字段。
-- **`diff` 成为一等意图。** `dsh-tool-fs` 的 write/edit 声明带 `{path, oldText, newText}` 的 `card:'diff'`，让有能力的 UI 无需针对工具名做特殊处理即可渲染行内变更。
+- **`diff` 成为一等意图。** `dsh-tool-fs` 的 write/edit 声明带 `{path, oldText, newText}` 的 `card:'diff'`，并在结果时尽可能附带 hunk 起始行，让有能力的 UI 无需针对工具名做特殊处理即可渲染行内变更。
 
 ### 生产者映射
 

@@ -21,8 +21,9 @@ export type FsDiffMeta = { diffs: FileDiff[] }
 
 /**
  * Compute one {@link FileDiff} per hunk between `before` and `after`, each carrying the
- * applied change plus {@link DIFF_CONTEXT} context lines. Pure insertions use `oldText: null`,
- * patch-only no-newline markers are omitted, and scattered replacements remain separate hunks.
+ * applied change, its 1-based old/new hunk starts, and {@link DIFF_CONTEXT} context lines.
+ * Pure insertions use `oldText: null`, patch-only no-newline markers are omitted, and scattered
+ * replacements remain separate hunks.
  *
  * @param path - the path stamped on every produced diff (the model-facing `file_path`; the
  *   bridge relativizes it).
@@ -51,7 +52,13 @@ export function computeHunkDiffs(path: string, before: string, after: string): F
         newLines.push(text)
       }
     }
-    diffs.push({ path, oldText: oldLines.length > 0 ? oldLines.join('\n') : null, newText: newLines.join('\n') })
+    diffs.push({
+      path,
+      oldText: oldLines.length > 0 ? oldLines.join('\n') : null,
+      newText: newLines.join('\n'),
+      oldStart: hunk.oldStart,
+      newStart: hunk.newStart,
+    })
   }
   return diffs
 }
@@ -59,10 +66,12 @@ export function computeHunkDiffs(path: string, before: string, after: string): F
 /** Whether `value` is a valid {@link FileDiff} (defensive narrowing from opaque `meta`). */
 function isFileDiff(value: unknown): value is FileDiff {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
-  const { path, oldText, newText } = value as Record<string, unknown>
+  const { path, oldText, newText, oldStart, newStart } = value as Record<string, unknown>
   return typeof path === 'string'
     && (oldText === null || typeof oldText === 'string')
     && typeof newText === 'string'
+    && (oldStart === undefined || (typeof oldStart === 'number' && Number.isSafeInteger(oldStart) && oldStart >= 1))
+    && (newStart === undefined || (typeof newStart === 'number' && Number.isSafeInteger(newStart) && newStart >= 1))
 }
 
 /**

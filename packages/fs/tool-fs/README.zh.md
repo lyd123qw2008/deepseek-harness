@@ -48,7 +48,7 @@ kind: "package-reference"
 | `write` | `file_path`、`content` | 创建或完整替换文件；有策略插件时，覆盖要求先在未变版本上执行 `read`，创建不需要 |
 | `edit` | `file_path`、`old_string`、`new_string`、`replace_all?` | 字面量替换，除非 `replace_all` 为 true 否则要求唯一匹配；有策略插件时，要求先执行 `read` 且文件未变 |
 
-字段名使用 snake_case，与 Claude Code 和现有 harness 工具 schema 一致。成功返回紧凑信封——读取窗口、图像引用或 `Created file`/`Updated file` 确认——`write`/`edit` 还会派生可回放的 diff 卡片元数据供 UI 展示。
+字段名使用 snake_case，与 Claude Code 和现有 harness 工具 schema 一致。成功返回紧凑信封——读取窗口、图像引用或 `Created file`/`Updated file` 确认——`write`/`edit` 还会派生可回放的 diff 卡片元数据供 UI 展示。已应用 hunk metadata 包含可选的 1-based 旧／新起始行，使客户端能够渲染中性上下文、变更标记与文件行号槽。
 
 ### 配置
 

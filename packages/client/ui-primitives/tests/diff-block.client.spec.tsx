@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
-import { DEFAULT_DIFF_MAX_LINES, DiffBlock as LocalizedDiffBlock, type DiffHunk } from '../src/index.ts'
+import { DEFAULT_DIFF_MAX_LINES, DiffBlock as LocalizedDiffBlock, diffTotals, type DiffHunk } from '../src/index.ts'
 import { diffBlockLabels } from './labels.client.ts'
 
 function DiffBlock(props: Omit<ComponentProps<typeof LocalizedDiffBlock>, 'labels'>) {
@@ -21,7 +21,9 @@ function bodyRows(container: HTMLElement): string[] {
 }
 
 function changeRows(container: HTMLElement): string[] {
-  return [...container.querySelectorAll('[class*="_del_"], [class*="_add_"]')].map(row => row.textContent ?? '')
+  return [...container.querySelectorAll('[data-diff-line="del"], [data-diff-line="add"]')].map(row => (
+    row.querySelector('[class*="_lineContent_"]')?.textContent ?? ''
+  ))
 }
 
 function added(count: number): string {
@@ -45,6 +47,54 @@ describe('DiffBlock structure', () => {
     expect(container.querySelectorAll('[class*="_del_"]').length).toBe(1)
     expect(container.querySelectorAll('[class*="_add_"]').length).toBe(1)
     expect(changeRows(container)).toEqual(['old', 'new'])
+  })
+
+  it('keeps context neutral and renders old/new line numbers for an applied hunk', () => {
+    const { container } = render(<DiffBlock diffs={[{
+      path: 'dsh-page-demo.md',
+      oldText: 'header\n- 状态：旧内容\n目的',
+      newText: 'header\n- 状态：新内容\n目的',
+      oldStart: 5,
+      newStart: 5,
+    }]} />)
+    const rows = [...container.querySelectorAll('[data-diff-line]')]
+    expect(rows.map(row => row.getAttribute('data-diff-line'))).toEqual(['path', 'context', 'del', 'add', 'context'])
+    expect(rows.map(row => row.querySelector('[class*="_lineNumber_"]')?.textContent ?? '')).toEqual(['', '5', '6', '6', '7'])
+    expect(rows[1]?.className).toContain('_context_')
+    expect(rows[1]?.className).not.toContain('_del_')
+    expect(rows[1]?.className).not.toContain('_add_')
+    expect(rows[2]?.querySelectorAll('mark').length).toBe(1)
+    expect(rows[3]?.querySelectorAll('mark').length).toBe(1)
+  })
+
+  it('renders a backwards-compatible diff without a line-number gutter', () => {
+    const { container } = render(<DiffBlock diffs={[{ path: 'a.ts', oldText: 'old', newText: 'new' }]} />)
+    expect(container.querySelectorAll('[class*="_lineNumber_"]').length).toBe(0)
+    expect(container.querySelectorAll('[class*="_marker_"]').length).toBe(2)
+  })
+
+  it('keeps indentation outside inline highlights and uses plain rows for multi-line changes', () => {
+    const { container } = render(<DiffBlock diffs={[
+      { path: 'indent.ts', oldText: '  old', newText: '  new' },
+      { path: 'spaces.ts', oldText: '   ', newText: 'x' },
+      { path: 'multi.ts', oldText: 'old one\nold two', newText: 'new one\nnew two\nnew three' },
+    ]} />)
+    const firstChanged = container.querySelector('[data-diff-line="del"] [class*="_lineContent_"]')
+    expect(firstChanged?.querySelector('mark')?.textContent).toBe('old')
+    expect(firstChanged?.textContent).toBe('  old')
+    // The two single-line edits yield three marks: indentation-only whitespace
+    // is not marked, and the multi-line replacement stays at line granularity.
+    expect(container.querySelectorAll('[data-diff-line="del"] mark, [data-diff-line="add"] mark').length).toBe(3)
+  })
+
+  it('ignores invalid starts and leaves a missing side number blank', () => {
+    const { container } = render(<DiffBlock diffs={[
+      { path: 'invalid.ts', oldText: 'old', newText: 'new', oldStart: 0, newStart: Number.NaN },
+      { path: 'partial.ts', oldText: 'old', newText: 'new', oldStart: 8 },
+    ]} />)
+    const addedRows = [...container.querySelectorAll('[data-diff-line="add"]')]
+    expect(addedRows.map(row => row.querySelector('[class*="_lineNumber_"]')?.textContent ?? '')).toEqual([' ', ' '])
+    expect(container.querySelectorAll('[class*="_lineNumber_"]').length).toBe(4)
   })
 
   it('opens a same-file second hunk with a gap instead of repeating the path', () => {
@@ -95,10 +145,22 @@ describe('DiffBlock structure', () => {
 })
 
 describe('DiffBlock footer', () => {
-  it('counts added and removed lines and one file', () => {
-    const diffs: DiffHunk[] = [{ path: 'a.ts', oldText: 'a\nb', newText: 'c' }]
+  it('exports changed-line totals without counting context', () => {
+    expect(diffTotals([
+      { path: 'a.ts', oldText: 'before\nold\nafter', newText: 'before\nnew\nafter' },
+      { path: 'b.ts', oldText: null, newText: 'one\ntwo' },
+      { path: 'c.ts', oldText: 'gone\nfile', newText: '' },
+    ])).toEqual({ added: 3, removed: 3 })
+  })
+
+  it('counts changed lines rather than contextual lines', () => {
+    const diffs: DiffHunk[] = [{
+      path: 'a.ts',
+      oldText: 'context before\nold\ncontext after',
+      newText: 'context before\nnew\ncontext after',
+    }]
     render(<DiffBlock diffs={diffs} />)
-    expect(screen.getByText('└ +1 -2 · 1 file')).toBeTruthy()
+    expect(screen.getByText('└ +1 -1 · 1 file')).toBeTruthy()
   })
 
   it('pluralizes the distinct-file count', () => {
@@ -114,7 +176,7 @@ describe('DiffBlock footer', () => {
 describe('DiffBlock height cap', () => {
   it('shows head and tail with an expand control past the cap, then all lines expanded', () => {
     // One added line over the default cap forces the collapse.
-    const diffs: DiffHunk[] = [{ path: 'a.ts', oldText: null, newText: added(DEFAULT_DIFF_MAX_LINES) }]
+    const diffs: DiffHunk[] = [{ path: 'a.ts', oldText: null, newText: added(DEFAULT_DIFF_MAX_LINES), oldStart: 1, newStart: 1 }]
     // The path header counts as a row, so a body of maxLines added lines plus
     // the header is one over the cap.
     const { container } = render(<DiffBlock diffs={diffs} />)
@@ -136,6 +198,16 @@ describe('DiffBlock height cap', () => {
 })
 
 describe('DiffBlock copy', () => {
+  it('copies context and change markers without display-only line numbers', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    render(<DiffBlock diffs={[{
+      path: 'a.ts', oldText: 'before\nold\nafter', newText: 'before\nnew\nafter', oldStart: 4, newStart: 4,
+    }]} />)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '复制' })) })
+    expect(writeText).toHaveBeenCalledWith('a.ts\n  before\n- old\n+ new\n  after')
+  })
+
   it('copies the prefixed diff text and flips the label on success', async () => {
     vi.useFakeTimers()
     const writeText = vi.fn().mockResolvedValue(undefined)

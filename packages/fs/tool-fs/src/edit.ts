@@ -105,7 +105,13 @@ export function applyEditTool(ctx: Context, sandbox: FsSandboxController): void 
       }],
       presentationMeta: (args, value) => ({
         diffs: computeHunkDiffs(args.file_path, value.before, value.after)
-          .map(({ path, oldText, newText }) => ({ path, oldText, newText })),
+          .map(({ path, oldText, newText, oldStart, newStart }) => ({
+            path,
+            oldText,
+            newText,
+            ...(oldStart === undefined ? {} : { oldStart }),
+            ...(newStart === undefined ? {} : { newStart }),
+          })),
       }),
     },
     async execute(args: EditToolArgs, exec) {

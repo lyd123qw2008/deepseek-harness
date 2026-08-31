@@ -12,7 +12,7 @@ A tool declares how its calls render in a UI (an editor's tool-call card) throug
 
 - The call-side and result-side `terminal` fields overlap, and the bridge reconciles a `content` block AND a `terminal` block AND `rawInput` per call, stitching them together with ad-hoc conditionals.
 - Which combinations are *valid* is unwritten: a `terminal` call that also sets `content` means "description above the card"; a generic call that sets `terminal` is meaningless but representable. The type permits nonsense.
-- There is no way to express the one file-tool affordance an editor most wants — a **diff card** (`{path, oldText, newText}`, which Zed renders as an inline diff / new-file preview). `ToolCallPresentation.content` is the *LLM* `ContentBlock[]` vocabulary (text/image), so a tool literally cannot ask for a diff.
+- There is no way to express the one file-tool affordance an editor most wants — a **diff card** (`{path, oldText, newText, oldStart?, newStart?}`, which Zed renders as an inline diff / new-file preview). `ToolCallPresentation.content` is the *LLM* `ContentBlock[]` vocabulary (text/image), so a tool literally cannot ask for a diff.
 
 An earlier rejected collapse-tool-owned-presentation proposal deferred rich rendering until it could "return later as a tagged render-intent union after there are at least two real tools and two real consumers to validate the vocabulary." That bar is met by multiple producer families plus the TUI and host/client-runtime (Web) consumers.
 
@@ -22,7 +22,13 @@ Replace the optional-field bag with a **`card`-tagged discriminated union**. A t
 
 ```ts ignore-check
 type FileLocation = { path: string; line?: number }
-type FileDiff = { path: string; oldText: string | null; newText: string } // oldText null ⇒ new file
+type FileDiff = {
+  path: string
+  oldText: string | null
+  newText: string
+  oldStart?: number // 1-based old-file hunk start
+  newStart?: number // 1-based new-file hunk start
+} // oldText null ⇒ new file; starts are optional for call-time/legacy data
 
 // presentCall → ToolCallView
 type ToolCallView = GenericCallView | TerminalCallView | DiffCallView
@@ -42,7 +48,7 @@ interface TerminalResultView { card: 'terminal'; title?: string; output?: string
 
 - **Invalid states become unrepresentable.** A generic card cannot carry terminal output; a terminal card cannot carry a diff. The old bag permitted all of these.
 - **Consumers switch instead of stitching.** One arm per card kind produces exactly the view that card needs, rather than reconciling five optional fields whose interactions are undocumented.
-- **`diff` is a first-class intent.** `dsh-tool-fs` write/edit declare `card:'diff'` with `{path, oldText, newText}`, allowing capable UIs to render an inline change without tool-name special cases.
+- **`diff` is a first-class intent.** `dsh-tool-fs` write/edit declare `card:'diff'` with `{path, oldText, newText}` and result-time hunk starts when available, allowing capable UIs to render an inline change without tool-name special cases.
 
 ### Producer mapping
 
