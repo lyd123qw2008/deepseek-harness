@@ -20,7 +20,7 @@ Web 客户端忽略了它。write/edit 调用落到 `GenericToolCard`，其行�
 
 - **路径分组。** 新文件开启一个粗体路径头；同文件的第二个 hunk（分散编辑，或 `replace_all`）以一个 `⋯` gap 开启，而非重复路径。TUI 在每个 hunk 上都保留路径头，但两个前端的 `N file(s)` 页脚都按去重路径计数，因此同文件两个 hunk 在两端都读作 `1 file`。
 - **语义行与可读标记。** 上下文行使用中性色；删除和新增行各有独立的 `-`／`+` 标记列与变更颜色。已应用行在右对齐槽中显示 hunk 的旧／新起始行；调用时数据和旧 metadata 没有这些字段时会省略行号槽，但不改变 diff 内容。单行替换还会获得词语级高亮，缩进保持不高亮。源码通过 `white-space: pre` 在横向滚动盒中保持原样，因此缩进不会丢失。新建（`oldText: null`）没有删除侧。
-- **高度上限带展开控件。** 长于 `DEFAULT_DIFF_MAX_LINES`（16）的 diff 显示 `ceil(max/2)` 个头部行加剩余尾部行，中间一个按钮报告隐藏行数。分割算术与 `TerminalBlock` 和 TUI 的折叠卡片一致，因此长 diff 的头尾切片在两个前端一致。
+- **高度上限带展开控件。** `maxLines` 统计内容行，不统计路径或 hunk 间隔行。内容超过上限时，卡片优先折叠上下文行，再折叠变更行；每个隐藏区间都有自己的控件，展开一个区间只恢复该区间。连续的替换块在剩余空间不足以显示全部变更时仍保持完整，因此不会只显示替换的一侧。
 - **行终止符。** 每一侧的内容按 `TerminalBlock` 与 TUI 共用的终止符规则在 `\n` 上切分：空文本是零行（整文件删除的 `newText`、新建缺失的 `oldText` 侧），单个结尾换行终止其最后一行而非新增一条幻影空行，内部空行保留。
 - **页脚与复制。** 暗色 `└ +A -R · N file(s)` 页脚只报告新增和删除行，不把上下文行计入统计。两个前端使用相同的去重路径计数。复制控件复制语义上下文与带前缀的变更行，但不复制仅用于显示的行号（同时保留路径头与 `⋯` gap），使多文件复制保持可辨别归属。
 
@@ -44,7 +44,7 @@ chat 行把 diff 常驻渲染在路径链接摘要之下，上限 `CHAT_DIFF_MAX
 
 ## Testing
 
-`packages/client/ui-primitives/tests/diff-block.client.spec.tsx` 钉住组件：新建支路（只有新增、无删除侧）、编辑支路（删除在新增之上）、中性上下文、旧／新行号槽、词语级行内高亮、旧 hunk 的仅标记列回退、同文件 `⋯` gap 对比新文件自己的头、空 diffs 的 null 渲染、只统计变更行的页脚及其单复数、头尾上限及其 `aria-expanded` 切换，以及带／不带上下文的复制行为。Per-file 100%。
+`packages/client/ui-primitives/tests/diff-block.client.spec.tsx` 钉住组件：新建支路（只有新增、无删除侧）、编辑支路（删除在新增之上）、中性上下文、旧／新行号槽、词语级行内高亮、旧 hunk 的仅标记列回退、同文件 `⋯` gap 对比新文件自己的头、空 diffs 的 null 渲染、只统计变更行的页脚及其单复数、不计结构行的内容上限、优先折叠上下文、多个 hunk 的独立折叠、替换块原子性、`aria-expanded` 切换，以及带／不带上下文的复制行为。Per-file 100%。
 
 `packages/client/ui-tool/tests/diff-card.client.spec.tsx` 钉住每个渲染点的接线：`diffCardModel` 的派生及其每个 null 支路、result hunk 替换 call 时 diff、窗口截断的 call 仍从 result 渲染、chat 行的 diff 体、`FileMutationRow` 的常驻卡片及其路径链接经 host 以 cwd 解析打开、其在 `write` 与 `edit` 下的注册、以及面板的 Output 区。
 
@@ -52,6 +52,6 @@ fixture（`packages/client/connection/src/client/fixture.ts`）携带三个 diff
 
 ## Related
 
-- [Web terminal 卡片](2026-07-28-web-terminal-card.zh.md) —— `terminal` 支路的同一套四层结构；本 note 复用其内联输出决策与头尾上限算术。
+- [Web terminal 卡片](2026-07-28-web-terminal-card.zh.md) —— `terminal` 支路的同一套四层结构；本 note 复用其内联输出决策，而 diff 卡片使用上下文感知的折叠。
 - [工具调用呈现的标签化 render-intent union](../architecture/2026-07-02-tool-render-intent-union.zh.md) —— 本改动消费的 `card` 标签词汇；Web 客户端现在也是 `diff` 支路的消费者。
 - [Web 客户端架构](../architecture/2026-07-19-gui-web-client-architecture.zh.md) —— 两个渲染点所处的 slot 与快照分层。

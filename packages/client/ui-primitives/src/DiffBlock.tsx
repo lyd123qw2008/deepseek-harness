@@ -5,7 +5,7 @@ import { FoldToggle } from './FoldToggle.tsx'
 import { writeClipboard } from './clipboard.ts'
 import css from './DiffBlock.module.css'
 
-/** Output lines shown before the height cap collapses the middle. */
+/** Default diff-content line cap before context folding. */
 export const DEFAULT_DIFF_MAX_LINES = 16
 
 /**
@@ -30,7 +30,9 @@ export interface DiffBlockProps {
   diffs: DiffHunk[]
   /** Localized chrome supplied by the owning render site. */
   labels: DiffBlockLabels
-  /** Height cap in body lines before the middle collapses (default {@link DEFAULT_DIFF_MAX_LINES}). */
+  /** Height cap in content lines before context ranges collapse (default
+   * {@link DEFAULT_DIFF_MAX_LINES}); path and hunk-gap rows do not consume it.
+   */
   maxLines?: number | undefined
   /** Extra class merged onto the wrapper (callers position; this component draws). */
   className?: string | undefined
@@ -54,7 +56,7 @@ interface DiffSegment {
   changed: boolean
 }
 
-/** A single rendered body line and its role, so the height cap slices a flat list. */
+/** A single rendered body line and its role, so folding can protect changes. */
 interface DiffRow {
   kind: DiffRowKind
   text: string
@@ -74,6 +76,21 @@ interface DiffRows {
   removed: number
   files: number
   lineNumberWidth: number
+}
+
+interface DiffFoldRange {
+  start: number
+  end: number
+  hidden: number
+}
+
+type DiffDisplayItem =
+  | { kind: 'row'; index: number; row: DiffRow }
+  | { kind: 'fold'; range: DiffFoldRange }
+
+interface DiffChangeUnit {
+  indices: number[]
+  center: number
 }
 
 /** Local exhaustiveness helper — this package does not depend on `dsh-llm`. */
@@ -339,6 +356,131 @@ function renderRow(row: DiffRow, lineNumberWidth: number): ReactNode {
   )
 }
 
+function isContentRow(row: DiffRow): boolean {
+  return row.kind !== 'path' && row.kind !== 'gap'
+}
+
+function isChangeRow(row: DiffRow): boolean {
+  return row.kind === 'del' || row.kind === 'add'
+}
+
+/** Hide outer context first, leaving rows near the changed blocks visible. */
+function selectContextRows(rows: DiffRow[], count: number): number[] {
+  const contexts = rows.flatMap((row, index) => row.kind === 'context' ? [index] : [])
+  const fromStart = Math.ceil(count / 2)
+  const fromEnd = count - fromStart
+  return [
+    ...contexts.slice(0, fromStart),
+    ...contexts.slice(contexts.length - fromEnd),
+  ].sort((left, right) => left - right)
+}
+
+function buildChangeUnits(rows: DiffRow[]): DiffChangeUnit[] {
+  const blocks: Array<{ start: number; end: number; hasRemoved: boolean; hasAdded: boolean }> = []
+  let block: { start: number; end: number; hasRemoved: boolean; hasAdded: boolean } | undefined
+  for (const [index, row] of rows.entries()) {
+    if (!isChangeRow(row)) {
+      block = undefined
+      continue
+    }
+    if (block === undefined) {
+      block = { start: index, end: index + 1, hasRemoved: row.kind === 'del', hasAdded: row.kind === 'add' }
+      blocks.push(block)
+    } else {
+      block.end = index + 1
+      block.hasRemoved ||= row.kind === 'del'
+      block.hasAdded ||= row.kind === 'add'
+    }
+  }
+
+  const units: DiffChangeUnit[] = []
+  for (const current of blocks) {
+    const indices = Array.from({ length: current.end - current.start }, (_value, offset) => current.start + offset)
+    if (current.hasRemoved && current.hasAdded) {
+      units.push({ indices, center: (current.start + current.end - 1) / 2 })
+      continue
+    }
+    for (const index of indices) units.push({ indices: [index], center: index })
+  }
+  return units
+}
+
+function selectChangeRows(rows: DiffRow[], count: number): number[] {
+  const units = buildChangeUnits(rows)
+  const midpoint = rows.length / 2
+  units.sort((left, right) => {
+    const leftDistance = Math.abs(left.center - midpoint)
+    const rightDistance = Math.abs(right.center - midpoint)
+    if (leftDistance !== rightDistance) return leftDistance - rightDistance
+    return left.center - right.center
+  })
+  const selected: number[] = []
+  let remaining = count
+  for (const unit of units) {
+    if (unit.indices.length > remaining) continue
+    selected.push(...unit.indices)
+    remaining -= unit.indices.length
+    if (remaining === 0) break
+  }
+  return selected.sort((left, right) => left - right)
+}
+
+function buildFoldRanges(indices: number[]): DiffFoldRange[] {
+  const ranges: DiffFoldRange[] = []
+  for (const index of [...indices].sort((left, right) => left - right)) {
+    const previous = ranges[ranges.length - 1]
+    if (previous !== undefined && previous.end === index) {
+      previous.end += 1
+      previous.hidden += 1
+    } else {
+      ranges.push({ start: index, end: index + 1, hidden: 1 })
+    }
+  }
+  return ranges
+}
+
+/**
+ * Select rows to fold without spending the cap on file headers. Context rows
+ * are lower priority than changes; a replacement block is selected as one
+ * unit when dense changes leave no room for every changed row.
+ * @param rows - the flattened diff rows.
+ * @param maxLines - the collapsed content-row cap.
+ * @returns the ranges to fold.
+ */
+function buildDiffFoldPlan(rows: DiffRow[], maxLines: number): DiffFoldRange[] {
+  const contentRows = rows.filter(isContentRow)
+  const hiddenBudget = contentRows.length - maxLines
+  if (hiddenBudget <= 0) return []
+
+  const contextRows = rows.flatMap((row, index) => row.kind === 'context' ? [index] : [])
+  const hiddenRows = contextRows.length >= hiddenBudget
+    ? selectContextRows(rows, hiddenBudget)
+    : [...contextRows, ...selectChangeRows(rows, hiddenBudget - contextRows.length)]
+  return buildFoldRanges(hiddenRows)
+}
+
+function buildDisplayItems(rows: DiffRow[], ranges: DiffFoldRange[], expanded: ReadonlySet<number>): DiffDisplayItem[] {
+  const rangesByStart = new Map(ranges.map(range => [range.start, range]))
+  const items: DiffDisplayItem[] = []
+  let skipUntil = 0
+  for (const [index, row] of rows.entries()) {
+    if (index < skipUntil) continue
+    const range = rangesByStart.get(index)
+    if (range === undefined) {
+      items.push({ kind: 'row', index, row })
+      continue
+    }
+    if (expanded.has(range.start)) {
+      for (const [offset, expandedRow] of rows.slice(range.start, range.end).entries()) {
+        items.push({ kind: 'row', index: range.start + offset, row: expandedRow })
+      }
+    }
+    items.push({ kind: 'fold', range })
+    skipUntil = range.end
+  }
+  return items
+}
+
 /**
  * Render a file mutation as an inline diff surface.
  * @param props - see {@link DiffBlockProps}.
@@ -346,8 +488,10 @@ function renderRow(row: DiffRow, lineNumberWidth: number): ReactNode {
  */
 export function DiffBlock({ diffs, labels, maxLines = DEFAULT_DIFF_MAX_LINES, className }: DiffBlockProps) {
   const { rows, added, removed, files, lineNumberWidth } = useMemo(() => buildRows(diffs), [diffs])
-  const [expanded, setExpanded] = useState(false)
+  const [expandedFolds, setExpandedFolds] = useState<Set<number>>(() => new Set())
   const [copied, setCopied] = useState(false)
+  const foldRanges = useMemo(() => buildDiffFoldPlan(rows, maxLines), [rows, maxLines])
+  const displayItems = useMemo(() => buildDisplayItems(rows, foldRanges, expandedFolds), [rows, foldRanges, expandedFolds])
 
   const onCopy = useCallback(() => {
     if (copied) return
@@ -358,53 +502,49 @@ export function DiffBlock({ diffs, labels, maxLines = DEFAULT_DIFF_MAX_LINES, cl
     })
   }, [copied, rows])
 
-  const onToggle = useCallback(() => { setExpanded(value => !value) }, [])
+  const onToggle = useCallback((start: number) => {
+    setExpandedFolds((current) => {
+      const next = new Set(current)
+      if (next.has(start)) next.delete(start)
+      else next.add(start)
+      return next
+    })
+  }, [])
 
   if (rows.length === 0) return null
 
-  const hidden = rows.length - maxLines
-  const capped = hidden > 0 && !expanded
-  // Same split arithmetic as TerminalBlock and the TUI transcript's collapsed
-  // card, so a body's head and tail slices agree across the front ends.
-  const headLines = Math.ceil(maxLines / 2)
-  const tailLines = maxLines - headLines
-  const head = capped ? rows.slice(0, headLines) : rows
-  const tail = capped ? rows.slice(rows.length - tailLines) : []
   const numbered = lineNumberWidth > 0
-
   return (
     <div className={clsx(css.block, className)} data-diff="">
       <button type="button" className={css.copyButton} onClick={onCopy}>
         {copied ? labels.copied : labels.copy}
       </button>
       <div className={css.body}>
-        {head.map((row, index) => (
-          <div
-            key={index}
-            className={clsx(css.line, ROW_CLASS[row.kind], numbered && css.numbered)}
-            data-diff-line={row.kind}
-          >
-            {renderRow(row, lineNumberWidth)}
-          </div>
-        ))}
-        {hidden > 0 && (
-          <FoldToggle
-            className={css.expand}
-            expanded={expanded}
-            hidden={hidden}
-            labels={labels}
-            onToggle={onToggle}
-          />
-        )}
-        {tail.map((row, index) => (
-          <div
-            key={index}
-            className={clsx(css.line, ROW_CLASS[row.kind], numbered && css.numbered)}
-            data-diff-line={row.kind}
-          >
-            {renderRow(row, lineNumberWidth)}
-          </div>
-        ))}
+        {displayItems.map((item) => {
+          if (item.kind === 'fold') {
+            const expanded = expandedFolds.has(item.range.start)
+            return (
+              <FoldToggle
+                key={`fold-${item.range.start}`}
+                className={css.expand}
+                expanded={expanded}
+                hidden={item.range.hidden}
+                labels={labels}
+                onToggle={() => { onToggle(item.range.start) }}
+              />
+            )
+          }
+          const { row } = item
+          return (
+            <div
+              key={`row-${item.index}`}
+              className={clsx(css.line, ROW_CLASS[row.kind], numbered && css.numbered)}
+              data-diff-line={row.kind}
+            >
+              {renderRow(row, lineNumberWidth)}
+            </div>
+          )
+        })}
       </div>
       <div className={css.footer}>└ +{added} -{removed} · {labels.files(files)}</div>
     </div>

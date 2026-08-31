@@ -20,7 +20,7 @@ The component shares the TUI's single-column framing, line-terminator rule, and 
 
 - **Path grouping.** A new file opens a bold path header; a same-file second hunk (a scattered edit, or a `replace_all`) opens with a `⋯` gap instead of repeating the path. The TUI keeps a path header on every hunk, but both front ends count distinct paths in the `N file(s)` footer, so two hunks in one file read as `1 file`.
 - **Semantic rows and readable markers.** Context rows use a neutral tone, while removed and added rows have independent `-`/`+` marker columns and change colors. Applied rows use the hunk's old/new start lines in a right-aligned gutter; call-time and older metadata omit that gutter without changing the diff content. A one-line replacement also gets word-level highlighting, while indentation remains unhighlighted. Source stays verbatim with `white-space: pre` inside a horizontally scrolling box, so indentation is preserved. A create (`oldText: null`) has no removed side.
-- **Height cap with an expand control.** A diff longer than `DEFAULT_DIFF_MAX_LINES` (16) shows `ceil(max/2)` head rows plus the remaining tail rows, with a button between reporting the hidden count. The split arithmetic matches `TerminalBlock` and the TUI's collapsed card, so a long diff's head and tail slices agree across front ends.
+- **Height cap with an expand control.** `maxLines` counts content rows, not path or hunk-gap headers. When content exceeds the cap, the card folds context rows before changed rows and gives each hidden range its own control; expanding a range reveals only that range. A complete replacement block remains together when dense changes leave no room for every changed row, so the renderer does not show only one side of a replacement.
 - **Line terminator.** A side's content splits on `\n` under the terminator rule `TerminalBlock` and the TUI use: empty text is zero lines (a full deletion's `newText`, a create's absent `oldText` side), a single trailing newline terminates its last line rather than adding a phantom empty one, and an interior blank line survives.
 - **Footer and copy.** A dim `└ +A -R · N file(s)` footer reports only changed added and removed rows, excluding contextual lines. Both front ends use the same distinct-path file count. The copy control copies semantic context and prefixed change lines without display-only line numbers (plus path headers and the `⋯` gap), so a multi-file copy stays attributable.
 
@@ -44,7 +44,7 @@ The multi-file arm of `DiffBlock` (one card, several path headers) has no shippe
 
 ## Testing
 
-`packages/client/ui-primitives/tests/diff-block.client.spec.tsx` pins the component: the create arm (added-only, no removed side), the edit arm (removed above added), neutral context, old/new line-number gutters, inline word highlighting, the marker-only fallback for older hunks, the same-file `⋯` gap versus a new file's own header, the empty-diffs null render, changed-line footer counts and their singular/plural, the head/tail cap with its `aria-expanded` toggle, and copy behavior with and without context. Per-file 100%.
+`packages/client/ui-primitives/tests/diff-block.client.spec.tsx` pins the component: the create arm (added-only, no removed side), the edit arm (removed above added), neutral context, old/new line-number gutters, inline word highlighting, the marker-only fallback for older hunks, the same-file `⋯` gap versus a new file's own header, the empty-diffs null render, changed-line footer counts and their singular/plural, the content cap that excludes structural rows, context-first folding, independent multi-hunk folds, replacement-block atomicity, the `aria-expanded` toggles, and copy behavior with and without context. Per-file 100%.
 
 `packages/client/ui-tool/tests/diff-card.client.spec.tsx` pins the wiring at every render site: `diffCardModel`'s derivation and each of its null arms, the result hunks replacing the call-time diff, a window-truncated call still rendering from the result, the chat row's diff body, `FileMutationRow`'s resident card and its path link opening cwd-resolved through the host, its registration under both `write` and `edit`, and the panel's Output section.
 
@@ -52,6 +52,6 @@ The fixture (`packages/client/connection/src/client/fixture.ts`) carries three d
 
 ## Related
 
-- [Web terminal card](2026-07-28-web-terminal-card.md) — the same four-layer shape for the `terminal` arm; this note reuses its inline-output decision and its head/tail cap arithmetic.
+- [Web terminal card](2026-07-28-web-terminal-card.md) — the same four-layer shape for the `terminal` arm; this note reuses its inline-output decision while the diff card uses context-aware folding.
 - [Tagged render-intent union for tool-call presentation](../architecture/2026-07-02-tool-render-intent-union.md) — the `card`-tagged vocabulary this consumes; the Web client is now a consumer of the `diff` arm too.
 - [Web client architecture](../architecture/2026-07-19-gui-web-client-architecture.md) — the slot and snapshot layering the two render sites sit in.

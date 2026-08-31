@@ -752,8 +752,16 @@ function buildAlphaLog(): SessionEvent[] {
     '已编辑',
     {
       diffs: [
-        { path: 'src/config.ts', oldText: 'const timeout = 30', newText: 'const timeout = 60' },
-        { path: 'src/config.ts', oldText: 'retries: 1', newText: 'retries: 3' },
+        {
+          path: 'src/config.ts',
+          oldText: 'before timeout one\nbefore timeout two\nbefore timeout three\nconst timeout = 30\nafter timeout one\nafter timeout two\nafter timeout three',
+          newText: 'before timeout one\nbefore timeout two\nbefore timeout three\nconst timeout = 60\nafter timeout one\nafter timeout two\nafter timeout three',
+        },
+        {
+          path: 'src/config.ts',
+          oldText: 'before retries one\nbefore retries two\nbefore retries three\nretries: 1\nafter retries one\nafter retries two\nafter retries three',
+          newText: 'before retries one\nbefore retries two\nbefore retries three\nretries: 3\nafter retries one\nafter retries two\nafter retries three',
+        },
       ],
     },
   )

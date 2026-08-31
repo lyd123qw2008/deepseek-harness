@@ -174,19 +174,74 @@ describe('DiffBlock footer', () => {
 })
 
 describe('DiffBlock height cap', () => {
-  it('shows head and tail with an expand control past the cap, then all lines expanded', () => {
-    // One added line over the default cap forces the collapse.
-    const diffs: DiffHunk[] = [{ path: 'a.ts', oldText: null, newText: added(DEFAULT_DIFF_MAX_LINES), oldStart: 1, newStart: 1 }]
-    // The path header counts as a row, so a body of maxLines added lines plus
-    // the header is one over the cap.
+  it('does not fold a replacement at the content cap', () => {
+    const { container } = render(<DiffBlock diffs={[{
+      path: 'a.ts',
+      oldText: 'before one\nbefore two\nbefore three\nold\nafter one\nafter two\nafter three',
+      newText: 'before one\nbefore two\nbefore three\nnew\nafter one\nafter two\nafter three',
+    }]} maxLines={8} />)
+    expect(screen.queryByRole('button', { name: /展开其余|收起差异/ })).toBeNull()
+    expect(changeRows(container)).toEqual(['old', 'new'])
+    expect(bodyRows(container)).toHaveLength(9)
+  })
+
+  it('folds context instead of hiding a changed row', () => {
+    const { container } = render(<DiffBlock diffs={[{
+      path: 'a.ts',
+      oldText: 'before one\nbefore two\nbefore three\nbefore four\nold\nafter one\nafter two\nafter three',
+      newText: 'before one\nbefore two\nbefore three\nbefore four\nnew\nafter one\nafter two\nafter three',
+    }]} maxLines={8} />)
+    const toggle = screen.getByRole('button', { name: '展开其余 1 行差异' })
+    expect(changeRows(container)).toEqual(['old', 'new'])
+    expect(bodyRows(container)).toHaveLength(9)
+    fireEvent.click(toggle)
+    expect(changeRows(container)).toEqual(['old', 'new'])
+    expect(bodyRows(container)).toHaveLength(10)
+    fireEvent.click(screen.getByRole('button', { name: '收起差异' }))
+    expect(bodyRows(container)).toHaveLength(9)
+  })
+
+  it('keeps a replacement pair together when the cap cannot fit both rows', () => {
+    const { container } = render(<DiffBlock diffs={[{ path: 'a.ts', oldText: 'old', newText: 'new' }]} maxLines={1} />)
+    expect(screen.queryByRole('button', { name: /展开其余|收起差异/ })).toBeNull()
+    expect(changeRows(container)).toEqual(['old', 'new'])
+  })
+
+  it('folds separated context ranges without hiding changes', () => {
+    const { container } = render(<DiffBlock diffs={[
+      { path: 'a.ts', oldText: 'before one\nold one\nafter one', newText: 'before one\nnew one\nafter one' },
+      { path: 'a.ts', oldText: 'before two\nold two\nafter two', newText: 'before two\nnew two\nafter two' },
+    ]} maxLines={6} />)
+    const expandToggles = screen.getAllByRole('button', { name: '展开其余 1 行差异' })
+    expect(expandToggles).toHaveLength(2)
+    expect(changeRows(container)).toEqual(['old one', 'new one', 'old two', 'new two'])
+    const firstToggle = expandToggles.at(0)
+    if (firstToggle !== undefined) fireEvent.click(firstToggle)
+    expect(screen.getByRole('button', { name: '收起差异' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '展开其余 1 行差异' })).toBeTruthy()
+    expect(changeRows(container)).toEqual(['old one', 'new one', 'old two', 'new two'])
+  })
+
+  it('keeps a multi-line replacement block together when it exceeds the cap', () => {
+    const { container } = render(<DiffBlock diffs={[{
+      path: 'a.ts', oldText: 'old one\nold two', newText: 'new one\nnew two',
+    }]} maxLines={2} />)
+    expect(screen.queryByRole('button', { name: /展开其余|收起差异/ })).toBeNull()
+    expect(changeRows(container)).toEqual(['old one', 'old two', 'new one', 'new two'])
+  })
+
+  it('shows a dense diff with an expand control past the cap, then all lines expanded', () => {
+    // Two added lines over the default content cap force the collapse.
+    const diffs: DiffHunk[] = [{ path: 'a.ts', oldText: null, newText: added(DEFAULT_DIFF_MAX_LINES + 2), oldStart: 1, newStart: 1 }]
     const { container } = render(<DiffBlock diffs={diffs} />)
     const toggle = screen.getByRole('button', { name: /展开其余/ })
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
-    // Collapsed shows fewer rows than the full body.
-    const collapsedCount = bodyRows(container).length
-    expect(collapsedCount).toBeLessThan(DEFAULT_DIFF_MAX_LINES + 1)
+    // The path header is structural and does not consume the content budget.
+    const collapsedCount = changeRows(container).length
+    expect(collapsedCount).toBe(DEFAULT_DIFF_MAX_LINES)
     fireEvent.click(toggle)
     expect(screen.getByRole('button', { name: '收起差异' }).getAttribute('aria-expanded')).toBe('true')
+    expect(changeRows(container).length).toBe(DEFAULT_DIFF_MAX_LINES + 2)
     expect(bodyRows(container).length).toBeGreaterThan(collapsedCount)
   })
 
