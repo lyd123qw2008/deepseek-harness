@@ -1,0 +1,184 @@
+diff --git a/dist/api/openai-codex-responses.js b/dist/api/openai-codex-responses.js
+index c9fe5d14f51a43142f8d182cf9ac9d7ce69f2175..5bb590bf12dbe5a0423c8edc50fab0b455adb931 100644
+--- a/dist/api/openai-codex-responses.js
++++ b/dist/api/openai-codex-responses.js
+@@ -297,7 +297,13 @@ export const stream = (model, context, options) => {
+                         statusText: response.statusText,
+                     });
+                     const info = await parseErrorResponse(fakeResponse);
+-                    throw new Error(info.friendlyMessage || info.message);
++                    const finalError = new Error(info.friendlyMessage || info.message);
++                    const errorCode = info.code || info.type;
++                    if (errorCode !== undefined)
++                        finalError.code = errorCode;
++                    if (typeof info.status === "number")
++                        finalError.status = info.status;
++                    throw finalError;
+                 }
+                 catch (error) {
+                     if (error instanceof Error) {
+@@ -342,7 +348,16 @@ export const stream = (model, context, options) => {
+                 delete block.customInput;
+             }
+             output.stopReason = options?.signal?.aborted ? "aborted" : "error";
+-            output.errorMessage = formatProviderError(normalizeProviderError(error));
++            const normalized = normalizeProviderError(error);
++            const record = typeof error === "object" && error !== null ? error : undefined;
++            const errorCode = typeof record?.code === "string" && record.code.length > 0 ? record.code : undefined;
++            const payload = record?.payload;
++            const errorStatus = normalized.status ?? (typeof payload?.status === "number" ? payload.status : undefined);
++            output.errorMessage = formatProviderError(normalized);
++            if (errorCode !== undefined)
++                output.errorCode = errorCode;
++            if (errorStatus !== undefined)
++                output.errorStatus = errorStatus;
+             stream.push({ type: "error", reason: output.stopReason, error: output });
+             stream.end();
+         }
+@@ -509,7 +524,13 @@ function isPreviousResponseNotFoundError(error) {
+ function extractCodexEventError(event) {
+     const nested = event.error && typeof event.error === "object" ? event.error : undefined;
+     return {
+-        code: typeof event.code === "string" ? event.code : typeof nested?.code === "string" ? nested.code : undefined,
++        code: typeof event.code === "string" && event.code.length > 0
++            ? event.code
++            : typeof nested?.code === "string" && nested.code.length > 0
++                ? nested.code
++                : typeof nested?.type === "string" && nested.type.length > 0
++                    ? nested.type
++                    : undefined,
+         message: typeof event.message === "string"
+             ? event.message
+             : typeof nested?.message === "string"
+@@ -531,7 +552,11 @@ async function* mapCodexEvents(events, output) {
+         }
+         if (type === "response.failed") {
+             const response = event.response;
+-            const code = response?.error?.code;
++            const code = typeof response?.error?.code === "string" && response.error.code.length > 0
++                ? response.error.code
++                : typeof response?.error?.type === "string" && response.error.type.length > 0
++                    ? response.error.type
++                    : undefined;
+             const message = response?.error?.message;
+             throw new CodexApiError(message || "Codex response failed", { code, payload: event });
+         }
+@@ -1216,11 +1241,15 @@ async function parseErrorResponse(response) {
+     const raw = await response.text();
+     let message = raw || response.statusText || "Request failed";
+     let friendlyMessage;
++    let errorCode;
++    let errorType;
+     try {
+         const parsed = JSON.parse(raw);
+         const err = parsed?.error;
+         if (err) {
+-            const code = err.code || err.type || "";
++            errorCode = typeof err.code === "string" ? err.code : undefined;
++            errorType = typeof err.type === "string" ? err.type : undefined;
++            const code = errorCode || errorType || "";
+             if (/usage_limit_reached|usage_not_included|rate_limit_exceeded/i.test(code) || response.status === 429) {
+                 const plan = err.plan_type ? ` (${err.plan_type.toLowerCase()} plan)` : "";
+                 const mins = err.resets_at
+@@ -1233,7 +1262,7 @@ async function parseErrorResponse(response) {
+         }
+     }
+     catch { }
+-    return { message, friendlyMessage };
++    return { message, friendlyMessage, code: errorCode, type: errorType, status: response.status };
+ }
+ // ============================================================================
+ // Auth & Headers
+diff --git a/dist/api/openai-responses-shared.js b/dist/api/openai-responses-shared.js
+index c35771dcc9b2173d0b459d13c6d86e622de45e9a..ea6c85808a10b21e4557d7209a5fe8afaa5046df 100644
+--- a/dist/api/openai-responses-shared.js
++++ b/dist/api/openai-responses-shared.js
+@@ -635,7 +635,10 @@ export async function processResponsesStream(openaiStream, output, stream, model
+             finalizeResponse(event.response);
+         }
+         else if (event.type === "error") {
+-            throw new Error(`Error Code ${event.code}: ${event.message}` || "Unknown error");
++            const streamError = new Error(`Error Code ${event.code}: ${event.message}` || "Unknown error");
++            if (typeof event.code === "string" && event.code.length > 0)
++                streamError.code = event.code;
++            throw streamError;
+         }
+         else if (event.type === "response.failed") {
+             sawTerminalResponseEvent = true;
+@@ -643,11 +646,19 @@ export async function processResponsesStream(openaiStream, output, stream, model
+             const error = event.response?.error;
+             const details = event.response?.incomplete_details;
+             const msg = error
+-                ? `${error.code || "unknown"}: ${error.message || "no message"}`
++                ? `${error.code || error.type || "unknown"}: ${error.message || "no message"}`
+                 : details?.reason
+                     ? `incomplete: ${details.reason}`
+                     : "Unknown error (no error details in response)";
+-            throw new Error(msg);
++            const streamError = new Error(msg);
++            const streamErrorCode = typeof error?.code === "string" && error.code.length > 0
++                ? error.code
++                : typeof error?.type === "string" && error.type.length > 0
++                    ? error.type
++                    : undefined;
++            if (streamErrorCode !== undefined)
++                streamError.code = streamErrorCode;
++            throw streamError;
+         }
+     }
+     if (!sawTerminalResponseEvent) {
+diff --git a/dist/api/openai-responses.js b/dist/api/openai-responses.js
+index 1023156b9c97e07d355914a641e39091a84bf229..e15228d9c704dd5fcd09046195790e84164d0aca 100644
+--- a/dist/api/openai-responses.js
++++ b/dist/api/openai-responses.js
+@@ -62,8 +62,19 @@ function getCompat(model) {
+ function getPromptCacheRetention(compat, cacheRetention) {
+     return cacheRetention === "long" && compat.supportsLongCacheRetention ? "24h" : undefined;
+ }
+-function formatOpenAIResponsesError(error) {
+-    return formatProviderError(normalizeProviderError(error), "OpenAI API error");
++function openAIResponsesErrorMetadata(error) {
++    const normalized = normalizeProviderError(error);
++    const record = typeof error === "object" && error !== null ? error : undefined;
++    const errorCode = typeof record?.code === "string" && record.code.length > 0
++        ? record.code
++        : typeof record?.type === "string" && record.type.length > 0
++            ? record.type
++            : undefined;
++    return {
++        errorMessage: formatProviderError(normalized, "OpenAI API error"),
++        ...(errorCode === undefined ? {} : { errorCode }),
++        ...(normalized.status === undefined ? {} : { errorStatus: normalized.status }),
++    };
+ }
+ /**
+  * Generate function for OpenAI Responses API
+@@ -139,7 +150,12 @@ export const stream = (model, context, options) => {
+                 delete block.customInput;
+             }
+             output.stopReason = options?.signal?.aborted ? "aborted" : "error";
+-            output.errorMessage = formatOpenAIResponsesError(error);
++            const normalized = normalizeProviderError(error);
++            const record = typeof error === "object" && error !== null ? error : undefined;
++            const responseHeaders = record?.headers instanceof Headers ? headersToRecord(record.headers) : undefined;
++            if (normalized.status !== undefined && responseHeaders !== undefined)
++                await options?.onResponse?.({ status: normalized.status, headers: responseHeaders }, model);
++            Object.assign(output, openAIResponsesErrorMetadata(error));
+             stream.push({ type: "error", reason: output.stopReason, error: output });
+             stream.end();
+         }
+diff --git a/dist/types.d.ts b/dist/types.d.ts
+index 77b46da2d31e472e519772b0d739766fa86dc3d0..3272e1fd5ca94570c71a89c9965162dc9708e770 100644
+--- a/dist/types.d.ts
++++ b/dist/types.d.ts
+@@ -307,6 +307,10 @@ export interface AssistantMessage {
+     stopReason: StopReason;
+     deferred?: DeferredHandle;
+     errorMessage?: string;
++    /** Provider-defined machine error identifier, when the API supplies one. */
++    errorCode?: string;
++    /** HTTP status from the provider response, when one is available. */
++    errorStatus?: number;
+     rawStopReason?: string;
+     /**
+      * Provider indication of whether the model explicitly ended its turn.
