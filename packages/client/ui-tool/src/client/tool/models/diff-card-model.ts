@@ -3,8 +3,16 @@ import type { DiffBlockProps, DiffHunk } from '@deepseek-ai/dsh-client-ui-primit
 import type { ToolCallBlock } from './tool-call-model.ts'
 import { parsedToolCall, validEscalationFields } from './raw-tool-call.ts'
 
-/** Room for a path, one removed/added pair, and three context lines on each side. */
-export const CHAT_DIFF_MAX_LINES = 9
+/**
+ * Diff-body lines the chat row keeps visible before folding unchanged context
+ * — half the primitive's own default, which the details panel keeps. A chat row
+ * is a summary surface inside the message flow: the flow must stay scannable
+ * across many calls, while the details panel is the single-call reading
+ * surface. The same split {@link CHAT_TERMINAL_MAX_LINES} draws for a terminal
+ * card, so the two card kinds cap a long body at the same place in the flow. A
+ * design constant of this UI's row geometry, not a deployment choice.
+ */
+export const CHAT_DIFF_MAX_LINES = 8
 
 /**
  * The {@link DiffBlock} props this derivation owns. Picked off the primitive's
@@ -30,18 +38,26 @@ function narrowDiffs(diffs: unknown): DiffHunk[] | null {
   const out: DiffHunk[] = []
   for (const hunk of diffs) {
     if (typeof hunk !== 'object' || hunk === null) return null
-    const { path, oldText, newText } = hunk as Record<string, unknown>
+    const { path, oldText, newText, oldStart, newStart } = hunk as Record<string, unknown>
     if (typeof path !== 'string') return null
     if (oldText !== null && typeof oldText !== 'string') return null
     if (typeof newText !== 'string') return null
-    out.push({ path, oldText, newText })
+    if (oldStart !== undefined && (typeof oldStart !== 'number' || !Number.isSafeInteger(oldStart) || oldStart < 1)) return null
+    if (newStart !== undefined && (typeof newStart !== 'number' || !Number.isSafeInteger(newStart) || newStart < 1)) return null
+    out.push({
+      path,
+      oldText,
+      newText,
+      ...(oldStart === undefined ? {} : { oldStart }),
+      ...(newStart === undefined ? {} : { newStart }),
+    })
   }
   return out
 }
 
 type IntendedDiff = { tool: 'write' | 'edit' | 'str_replace_editor'; diff: DiffHunk }
 
-function intendedDiff(block: ToolCallBlock): IntendedDiff | null {
+function intendedDiff(block: ToolCallBlock, allowAppliedMetadata = false): IntendedDiff | null {
   const parsed = parsedToolCall(block)
   if (parsed === null) return null
   if (parsed.name === 'str_replace_editor') {
@@ -66,7 +82,7 @@ function intendedDiff(block: ToolCallBlock): IntendedDiff | null {
   }
   const { file_path: path } = parsed.args
   if (typeof path !== 'string' || path.trim() === '') return null
-  if (!validEscalationFields(parsed.args)) return null
+  if (!allowAppliedMetadata && !validEscalationFields(parsed.args)) return null
   if (parsed.name === 'write') {
     const { content } = parsed.args
     return typeof content === 'string'
@@ -91,20 +107,24 @@ function appliedDiffs(meta: unknown): DiffHunk[] | 'empty' | null {
 /**
  * Derive running diffs for root write/edit and `str_replace_editor`
  * create/replace calls, plus applied settled diffs for root write/edit calls.
- * A successful write with valid empty metadata uses its argument-derived
- * whole-file diff, matching create and identical-overwrite presentation;
+ * A successful root write/edit with a non-empty, well-formed `meta.diffs` uses
+ * that result metadata even when optional escalation fields fail Client
+ * validation; mutation fields remain validated. A successful write with valid
+ * empty or unusable metadata uses its argument-derived whole-file diff.
  * `str_replace_editor` settles through Generic because it has no result view.
  * @param block - running or settled Tool block.
  * @returns the diff-card props, or null for the generic path.
  */
 export function diffCardModel(block: ToolCallBlock): DiffCardModel | null {
   if (block.parentCallId !== undefined) return null
-  const intended = intendedDiff(block)
+  const settled = 'kind' in block
+  const applied = settled && !block.isError ? appliedDiffs(block.meta) : null
+  const allowAppliedMetadata = applied !== null && applied !== 'empty'
+  const intended = intendedDiff(block, allowAppliedMetadata)
   if (intended === null) return null
-  if (!('kind' in block)) return { card: { diffs: [intended.diff] } }
+  if (!settled) return { card: { diffs: [intended.diff] } }
   if (intended.tool === 'str_replace_editor') return null
   if (block.isError) return null
-  const applied = appliedDiffs(block.meta)
   if (applied === null || applied === 'empty') {
     return intended.tool === 'write' ? { card: { diffs: [intended.diff] } } : null
   }

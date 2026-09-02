@@ -37,6 +37,10 @@ export interface FileDiff {
   oldText: string | null
   /** Content after the change. */
   newText: string
+  /** 1-based old-file line where this hunk starts; omitted by call-time presenters and older metadata. */
+  oldStart?: number
+  /** 1-based new-file line where this hunk starts; omitted by call-time presenters and older metadata. */
+  newStart?: number
 }
 
 /**
