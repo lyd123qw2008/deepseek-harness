@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-tool-pwsh` 为 agent 提供 `pwsh` 工具，通过已挂载的 shell 执行器运行 PowerShell 命令——它是 `dsh-tool-bash` 的 Windows 对应物，逐调用镜像。每次调用都运行在全新 pwsh 进程中，因此状态不会保留；`run_in_background` 把长时间运行的命令变成后台任务。命令是 PowerShell 方言：原生 `C:\...` 路径与 `$env:NAME` 变量，不做方言翻译。每次调用都运行在受管 `DSH_*` 环境中；在沙箱执行器下，工具会教授并执行 Windows 特有的语言模式与命名管道约定。请与 `dsh-pwsh-local` 等 PowerShell 执行器以及 `dsh-shell-env` 插件一起挂载。
+`dsh-tool-pwsh` 为 agent 提供 `pwsh` 工具，通过已挂载的 shell 执行器运行 PowerShell 命令——它是 `dsh-tool-bash` 的 Windows 对应物，逐调用镜像。每次调用都运行在全新 pwsh 进程中，因此状态不会保留；`run_in_background` 把长时间运行的命令变成后台任务。命令是 PowerShell 方言：原生 `C:\...` 路径与 `$env:NAME` 变量，不做方言翻译。每次调用都运行在受管 `DSH_*` 环境中；在沙箱执行器下，工具会教授并执行 Windows 特有的语言模式与命名管道约定。已经被会话常驻策略覆盖的已知目标会按该策略运行，不需要理由或审批提示。请与 `dsh-pwsh-local` 等 PowerShell 执行器以及 `dsh-shell-env` 插件一起挂载。
 
 ## 目录
 
@@ -55,7 +55,7 @@ kind: "package-reference"
 
 ### Windows 特有的沙箱行为
 
-在沙箱执行器下，被拒绝的命令会报告 `[sandbox: file access denied under <mode> mode]`，并适用相同的单次升权路径：用 `sandbox_permissions` 加一句 `justification`，经用户审批后重试完全相同的命令一次。工具还会在其描述中教授两条 Windows 受限令牌约定：只读 pwsh 运行在 ConstrainedLanguage 中（`.NET` 静态调用、`Add-Type`、COM 与反射会以 "only core types" 错误失败）；两种受限模式下程序都无法打开命名管道，因此通过管道 stdio 捕获另一程序输出的命令会以 EPERM 失败——请升权该确切命令一次，或重构命令以避免捕获输出。
+在沙箱执行器下，被拒绝的命令会报告 `[sandbox: file access denied under <mode> mode]`，并适用相同的单次升权路径：用 `sandbox_permissions` 加一句 `justification`，经用户审批后重试完全相同的命令一次。已经被会话有效策略覆盖的已知目标会被视为无操作元数据，并按常驻策略运行，即使继承的理由为空或缺失。工具还会在其描述中教授两条 Windows 受限令牌约定：只读 pwsh 运行在 ConstrainedLanguage 中（`.NET` 静态调用、`Add-Type`、COM 与反射会以 "only core types" 错误失败）；两种受限模式下程序都无法打开命名管道，因此通过管道 stdio 捕获另一程序输出的命令会以 EPERM 失败——请升权该确切命令一次，或重构命令以避免捕获输出。
 
 ### 可能出什么问题
 
