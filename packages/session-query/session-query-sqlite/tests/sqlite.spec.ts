@@ -1800,6 +1800,34 @@ describe('SQLite schema, cancellation, and real persistence integration', () => 
     await persistence.dispose()
   })
 
+  it('fingerprints persisted logs without serializing the complete event array', async () => {
+    const durable = header('large-fingerprint')
+    TestPersistence.reset([{ meta: durable, events: messageEvents('fingerprint needle') }])
+    const ctx = await liveContext()
+    const persistence = await ctx.plugin(TestPersistence)
+    const originalStringify = JSON.stringify.bind(JSON)
+    const stringify = vi.spyOn(JSON, 'stringify').mockImplementation((value, replacer, space) => {
+      if (
+        value !== null
+        && typeof value === 'object'
+        && !Array.isArray(value)
+        && 'header' in value
+        && 'events' in value
+      ) {
+        throw new Error('complete event-array serialization is not allowed')
+      }
+      return originalStringify(value, replacer, space)
+    })
+
+    try {
+      await expect(ctx.sessionQuery.searchSessions({ query: 'fingerprint needle' }))
+        .resolves.toMatchObject({ items: [{ header: durable }] })
+    } finally {
+      stringify.mockRestore()
+      await persistence.dispose()
+    }
+  })
+
   it('reconciles colliding local revisions when a derived index reopens against another JSONL store', async () => {
     const persistenceRootA = await temporaryPath('canonical-a')
     const persistenceRootB = await temporaryPath('canonical-b')

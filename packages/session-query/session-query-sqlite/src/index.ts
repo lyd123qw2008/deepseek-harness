@@ -863,10 +863,21 @@ function observeSession(header: SessionHeader, events: readonly SessionEvent[]):
   return {
     header: detachedHeader,
     documents: buildSessionEventSearchDocuments(detachedHeader.id, detachedEvents),
-    fingerprint: createHash('sha256')
-      .update(JSON.stringify({ header: detachedHeader, events: detachedEvents }))
-      .digest('base64url'),
+    fingerprint: fingerprintSession(detachedHeader, detachedEvents),
   }
+}
+
+/** Hash the header and each event separately so one large session never becomes one string. */
+function fingerprintSession(header: SessionHeader, events: readonly SessionEvent[]): string {
+  const hash = createHash('sha256')
+  hash.update(JSON.stringify(header))
+  hash.update('\n')
+  for (const event of events) {
+    const serialized = JSON.stringify(event)
+    hash.update(`${serialized.length}:`)
+    hash.update(serialized)
+  }
+  return hash.digest('base64url')
 }
 
 function materializePersistenceSnapshots(
