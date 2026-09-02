@@ -134,6 +134,18 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
   const footers = diffCards.map(card => card.textContent ?? '')
   expect(footers.some(text => text.includes('hello fixture') && text.includes('+1 -0 · 1 file'))).toBe(true)
 
+  // The multi-hunk fixture exceeds the chat content cap. Its assembled card
+  // keeps every changed row visible and folds only context ranges initially.
+  const contextualDiff = diffCards.find(card => card.textContent?.includes('const timeout = 60'))
+  if (contextualDiff === undefined) throw new Error('contextual diff card missing')
+  expect(contextualDiff.querySelectorAll('[data-diff-line="del"], [data-diff-line="add"]').length).toBe(4)
+  const contextFolds = [...contextualDiff.querySelectorAll('button')]
+    .filter(button => button.getAttribute('aria-label')?.includes('more diff lines'))
+  expect(contextFolds.length).toBeGreaterThan(0)
+  for (const fold of contextFolds) fireEvent.click(fold)
+  expect(contextualDiff.querySelectorAll('[data-diff-line="context"]').length).toBe(12)
+  expect(contextualDiff.querySelectorAll('[data-diff-line="del"], [data-diff-line="add"]').length).toBe(4)
+
   // The web render intent reaches the assembled boot graph: the fixture's
   // web_search / web_fetch turns render their keyed WebRow cards, proving the
   // registration, wire projection, and card rendering survive the real bundle
