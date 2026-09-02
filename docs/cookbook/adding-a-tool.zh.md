@@ -75,11 +75,11 @@ spec 提供同步的 `cancel`、在资源清理后 settle 且不 reject 的 `don
 - `presentCall(args)` → 一个 `ToolCallView`（PENDING 卡片）：
   - `{ card: 'generic', title, kind?, rawInput?, content?, locations? }`——默认。设置 `kind` 获取图标（`read`／`search`／…）；设置 `locations: [{ path, line? }]` 标注工具涉及的文件，使有能力的编辑器跟随／跳转。
   - `{ card: 'terminal', title, description?, cwd? }`——你的调用本身就是 shell 命令。`title` 是命令，`description` 渲染在终端卡片上方。（tool-bash。）
-  - `{ card: 'diff', title, diffs, locations? }`——你的调用创建或修改文件。`diffs: [{ path, oldText, newText }]`（新文件时 `oldText: null`）渲染为内联 diff 卡片。（tool-fs `write`／`edit`。）
+  - `{ card: 'diff', title, diffs, locations? }`——你的调用创建或修改文件。`diffs: [{ path, oldText, newText, oldStart?, newStart? }]`（新文件时 `oldText: null`；可选起始值是 1-based hunk 行号）渲染为内联 diff 卡片。（tool-fs `write`／`edit`。）
 - `presentResult(args, { content, isError, meta? })` 返回完成后的卡片：
   - `generic` 提供可选的标题和内容。
   - `terminal` 提供原始输出和可选的退出元数据；各 UI 根据自身能力渲染对应视图或回退视图。
-  - `diff` 提供已应用的 hunk，通常由 `output.presentationMeta` 派生并通过持久化的 `result.meta` 携带，使回放能重现它们。变更类工具保留 diff 结果，因为完成后的视图会替换 pending 卡片。
+  - `diff` 提供已应用的 hunk，通常由 `output.presentationMeta` 派生并通过持久化的 `result.meta` 携带，使回放能重现它们。hunk 可包含可选的 1-based `oldStart`／`newStart` 行号，供带行号槽的 UI 使用。变更类工具保留 diff 结果，因为完成后的视图会替换 pending 卡片。
   - `read` 提供从持久化 `result.meta` 重建的已完成文件窗口：文件 `path`、从 1 开始的 `offset`、返回的 `lines`（每行保留其文件行号）、`totalLines`，以及可选的 `lang` 高亮提示；不具备 `read` 能力的 UI 回退到原始结果内容。没有 `read` 调用视图——读取调用的 pending 状态保持为 generic 卡片，因为内容只在 `execute` 之后才存在。（tool-fs `read`。）
   - `search` 提供从持久化 `result.meta` 重建的发现型结果：按文件分组的匹配（`shape: 'matches'`，grep）或扁平路径列表（`shape: 'paths'`，glob），外加 `truncated`／`total` 使 UI 永不把被截断的结果当作完整结果呈现。该视图不携带结果文本（无 search 卡片的 UI 回退到原始结果内容），也没有 `search` 调用视图——发现型调用的 pending 状态保持为 generic 卡片，因为匹配只在 `execute` 之后才存在。（tool-fs-search 的 `grep`／`glob`。）
   - `web` 提供已完成的 web 检索，以 `kind: 'search' | 'fetch'` 区分（结构化的搜索来源或抓取摘要），由 `result.meta` 派生；它不携带正文副本，因此不具备 `web` 能力的 UI 回退到原始结果内容。（tool-web `web_search`／`web_fetch`。）
