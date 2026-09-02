@@ -34,46 +34,88 @@
   overflow-y: hidden;
 }
 
-/* No wrapping, no word-break: a diff is read by its indentation. */
+/* No wrapping, no word-break: a diff is read by its indentation. The two
+   fixed leading columns keep markers and file line numbers aligned while the
+   content column remains intrinsically wide and scrollable. */
 .line {
+  display: grid;
+  grid-template-columns: 2ch max-content;
+  column-gap: 0.75ch;
   min-height: var(--dsl-diff-line-height);
+  width: max-content;
+  min-width: 100%;
+  white-space: pre;
+}
+
+.numbered {
+  grid-template-columns: 2ch max-content max-content;
+}
+
+.marker {
+  width: 2ch;
+  color: var(--dsw-alias-label-tertiary);
+  text-align: center;
+  user-select: none;
+}
+
+.lineNumber {
+  min-width: 1ch;
+  color: var(--dsw-alias-label-tertiary);
+  text-align: right;
+  user-select: none;
+}
+
+.lineContent {
+  min-width: 0;
   white-space: pre;
 }
 
 /* A file header: the path in the primary tone, set apart by weight. The copy
-   button floats over this first row's top-right corner, so reserve space at the
-   line's end for it — a long path scrolls under the button otherwise, and the
-   button's hit area would eat clicks on the path's tail. */
+   button floats over this first row's top-right corner, so reserve space at
+   the line's end for it — a long path scrolls under the button otherwise, and
+   the button's hit area would eat clicks on the path's tail. */
 .path {
+  display: block;
+  padding-right: 56px;
   color: var(--dsw-alias-label-primary);
   font-weight: 600;
-  padding-right: 56px;
 }
 
 /* A same-file second hunk's separator (a scattered edit), in the dim tone. */
 .gap {
+  display: block;
   color: var(--dsw-alias-label-tertiary);
 }
 
-/* The diff's own meaning-carrying colors: removed on the error token, added on
-   the success token. A `- `/`+ ` prefix is drawn here so a copied line and the
-   shown line agree, and so the sign reads without relying on color alone. */
-.del::before {
-  content: '- ';
-  color: var(--dsw-alias-state-error-primary);
+/* Context has its own neutral row treatment. A diff marker and line number
+   remain visible without making unchanged source look like a change. */
+.context {
+  color: var(--dsw-alias-label-secondary);
 }
 
+/* The diff's meaning-carrying colors stay on the marker and content columns,
+   while inlineChanged adds a second, word-level cue for one-line replacements. */
 .del {
   color: var(--dsw-alias-state-error-primary);
 }
 
-.add::before {
-  content: '+ ';
+.add {
   color: var(--dsw-alias-state-success-primary);
 }
 
-.add {
-  color: var(--dsw-alias-state-success-primary);
+.inlineChanged {
+  padding: 1px 2px;
+  border-radius: 3px;
+  color: inherit;
+  font-weight: 600;
+}
+
+.del .inlineChanged {
+  background-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 22%, transparent);
+}
+
+.add .inlineChanged {
+  background-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 22%, transparent);
 }
 
 .expand {
