@@ -965,17 +965,20 @@ export function fixtureIdentity(
  * @returns the realized fixture text.
  */
 export function realizeSeedFixture(scaffold: WebScaffold, fixtureText: string, id: string): string {
+  // Paths appear inside JSON string values. Escape the replacement before
+  // inserting it; Windows separators are otherwise parsed as JSON escapes.
+  const encodedWorkspaceCwd = JSON.stringify(scaffold.workspaceCwd).slice(1, -1)
   const realized = fixtureText
     .split('{{sessionId}}').join(id)
     .split('{{session:1}}').join(id)
     .replace(/\{\{session:([2-9]\d*)\}\}/g, (_token, ordinal: string) => `${id}-child-${ordinal}`)
     .replace(/\{\{(message|approval|workflow|command|rpc|retry|id):([1-9]\d*)\}\}/g, (_token, kind: string, ordinal: string) =>
       fixtureIdentity(kind as 'message' | 'approval' | 'workflow' | 'command' | 'rpc' | 'retry' | 'id', Number(ordinal)))
-    .split('{{cwd}}').join(scaffold.workspaceCwd)
+    .split('{{cwd}}').join(encodedWorkspaceCwd)
   const fixtureCwd = (JSON.parse(realized.split('\n', 1)[0]!) as { cwd?: string }).cwd
-  return fixtureCwd === undefined
-    ? realized
-    : realized.split(fixtureCwd).join(scaffold.workspaceCwd)
+  if (fixtureCwd === undefined) return realized
+  const encodedFixtureCwd = JSON.stringify(fixtureCwd).slice(1, -1)
+  return realized.split(encodedFixtureCwd).join(encodedWorkspaceCwd)
 }
 
 /**
