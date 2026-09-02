@@ -884,10 +884,23 @@ function observeSession(
     header: detachedHeader,
     inheritedEventCount,
     documents: buildSessionEventSearchDocuments(detachedHeader.id, detachedEvents),
-    fingerprint: createHash('sha256')
-      .update(JSON.stringify({ header: detachedHeader, inheritedEventCount, events: detachedEvents }))
-      .digest('base64url'),
+    fingerprint: fingerprintSession(detachedHeader, inheritedEventCount, detachedEvents),
   }
+}
+
+/** Hash the header, inherited log count, and each event separately. */
+function fingerprintSession(
+  header: SessionHeader,
+  inheritedEventCount: SessionLogOffset,
+  events: readonly SessionEvent[],
+): string {
+  const hash = createHash('sha256')
+  for (const value of [header, inheritedEventCount, ...events]) {
+    const serialized = JSON.stringify(value)
+    hash.update(`${serialized.length}:`)
+    hash.update(serialized)
+  }
+  return hash.digest('base64url')
 }
 
 function materializePersistenceSnapshots(
