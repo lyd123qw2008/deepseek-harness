@@ -13,6 +13,7 @@ import LlmRuntime, { createToolResultMessage, createUserMessage, CONTEXT_WINDOW_
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
+import { stream as codexResponsesStream } from '@earendil-works/pi-ai/api/openai-codex-responses'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { DEFAULT_MAX_REQUEST_IMAGE_BYTES, resolveProfiles } from '../src/config.ts'
 import { memoryAuth } from './auth-double.ts'
@@ -238,6 +239,85 @@ describe('PiAiAdapter provider routing', () => {
     const result = await assemble(ctx, { provider: 'openai', model: 'gpt-4.1', messages: [] })
     expect(result.finish.kind).toBe('error')
     expect(server.paths).toEqual(['/v1/responses'])
+  })
+
+  it('disables Codex strict sampling without materializing optional tool fields', async () => {
+    const model = getBuiltinModels('openai-codex').find(candidate => candidate.id === 'gpt-5.5')
+    if (model === undefined) throw new Error('gpt-5.5 is missing from the Codex catalog')
+
+    const parameters = {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        session_ids: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['query'],
+    }
+    const tool = {
+      name: 'session_search',
+      description: 'Search historical sessions.',
+      parameters,
+    }
+    let payload: unknown
+    const stream = codexResponsesStream(
+      { ...model, baseUrl: 'https://example.invalid' },
+      { messages: [], tools: [tool] },
+      {
+        apiKey: `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'test-account' } })).toString('base64url')}.signature`,
+        onPayload: (body) => {
+          payload = body
+          throw new Error('capture request')
+        },
+      },
+    )
+
+    const result = await stream.result()
+
+    expect(result.errorMessage).toBe('capture request')
+    expect(payload).toEqual(expect.objectContaining({
+      tools: [expect.objectContaining({
+        type: 'function',
+        name: 'session_search',
+        parameters,
+        strict: false,
+      })],
+    }))
+
+    let deferredPayload: unknown
+    const deferredStream = codexResponsesStream(
+      { ...model, baseUrl: 'https://example.invalid' },
+      {
+        messages: [{
+          role: 'toolResult',
+          toolCallId: 'load-tool',
+          toolName: 'tool-loader',
+          content: [{ type: 'text', text: 'loaded' }],
+          addedToolNames: ['session_search'],
+          isError: false,
+          timestamp: 0,
+        }],
+        tools: [tool],
+      },
+      {
+        apiKey: `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'test-account' } })).toString('base64url')}.signature`,
+        onPayload: (body) => {
+          deferredPayload = body
+          throw new Error('capture deferred request')
+        },
+      },
+    )
+
+    const deferredResult = await deferredStream.result()
+
+    expect(deferredResult.errorMessage).toBe('capture deferred request')
+    expect(deferredPayload).toEqual(expect.objectContaining({
+      input: expect.arrayContaining([
+        expect.objectContaining({
+          type: 'tool_search_output',
+          tools: [expect.objectContaining({ parameters, strict: false })],
+        }),
+      ]),
+    }))
   })
 
   it('resolves attachment and filesystem services mounted after the adapter when dispatching an image', async () => {
