@@ -20,6 +20,8 @@ describe('computeHunkDiffs', () => {
       path: 'f.txt',
       oldText: 'line1\nline2\nline3\nline4\nline5\nline6\nline7',
       newText: 'line1\nline2\nline3\nCHANGED\nline5\nline6\nline7',
+      oldStart: 1,
+      newStart: 1,
     }])
   })
 
@@ -44,18 +46,18 @@ describe('computeHunkDiffs', () => {
 
   it('a pure insertion into empty content reports oldText null (nothing to diff against)', () => {
     const diffs = computeHunkDiffs('f.txt', '', 'brand new\n')
-    expect(diffs).toEqual([{ path: 'f.txt', oldText: null, newText: 'brand new' }])
+    expect(diffs).toEqual([{ path: 'f.txt', oldText: null, newText: 'brand new', oldStart: 1, newStart: 1 }])
   })
 
   it('a pure deletion of the whole file reports newText empty', () => {
     const diffs = computeHunkDiffs('f.txt', 'gone\n', '')
-    expect(diffs).toEqual([{ path: 'f.txt', oldText: 'gone', newText: '' }])
+    expect(diffs).toEqual([{ path: 'f.txt', oldText: 'gone', newText: '', oldStart: 1, newStart: 1 }])
   })
 
   it('drops the "\\ No newline at end of file" marker from a no-trailing-newline change', () => {
     const diffs = computeHunkDiffs('f.txt', 'x', 'y')
     // The marker line (starting with "\\") must never leak into a diff block.
-    expect(diffs).toEqual([{ path: 'f.txt', oldText: 'x', newText: 'y' }])
+    expect(diffs).toEqual([{ path: 'f.txt', oldText: 'x', newText: 'y', oldStart: 1, newStart: 1 }])
     expect(diffs[0]?.oldText).not.toContain('\\')
     expect(diffs[0]?.newText).not.toContain('\\')
   })
@@ -69,6 +71,8 @@ describe('computeHunkDiffs', () => {
     expect(diff?.oldText?.split('\n')).toHaveLength(7)
     expect(diff?.newText.split('\n')).toHaveLength(7)
     expect(diff?.oldText?.split('\n')[0]).toBe('line7')
+    expect(diff?.oldStart).toBe(7)
+    expect(diff?.newStart).toBe(7)
   })
 })
 
@@ -84,7 +88,7 @@ describe('diffsFromMeta (defensive narrowing)', () => {
   })
 
   it('accepts a diff whose oldText is null (a create-style hunk)', () => {
-    const meta = { diffs: [{ path: 'f.txt', oldText: null, newText: 'x' }] }
+    const meta = { diffs: [{ path: 'f.txt', oldText: null, newText: 'x', oldStart: 1, newStart: 3 }] }
     expect(diffsFromMeta(m(meta))).toEqual(meta.diffs)
   })
 
@@ -106,6 +110,8 @@ describe('diffsFromMeta (defensive narrowing)', () => {
     expect(diffsFromMeta(m({ diffs: [{ path: 1, oldText: 'a', newText: 'b' }] }))).toBeUndefined()
     expect(diffsFromMeta(m({ diffs: [{ path: 'f', oldText: 5, newText: 'b' }] }))).toBeUndefined()
     expect(diffsFromMeta(m({ diffs: [{ path: 'f', oldText: 'a', newText: 7 }] }))).toBeUndefined()
+    expect(diffsFromMeta(m({ diffs: [{ path: 'f', oldText: 'a', newText: 'b', oldStart: 0 }] }))).toBeUndefined()
+    expect(diffsFromMeta(m({ diffs: [{ path: 'f', oldText: 'a', newText: 'b', newStart: Number.NaN }] }))).toBeUndefined()
     expect(diffsFromMeta(m({ diffs: [null] }))).toBeUndefined()
     expect(diffsFromMeta(m({ diffs: ['x'] }))).toBeUndefined()
     expect(diffsFromMeta(m({ diffs: [[]] }))).toBeUndefined()
