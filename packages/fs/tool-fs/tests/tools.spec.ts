@@ -921,8 +921,8 @@ describe('sandbox escalation API (write/edit)', () => {
     }, escalationAgent([{ type: 'sandbox/mode', data: { mode: 'danger-full-access' } }]))
     expect(covered.isError).toBe(false)
     expect(fs.stamped).toEqual([
-      { mode: 'workspace-write', workspaceRoot: resolve('/session-project') },
-      { mode: 'danger-full-access', workspaceRoot: resolve('/session-project') },
+      { mode: 'workspace-write', workspaceRoot: resolve('/session-project'), sessionId: SessionId('sess-fs-esc') },
+      { mode: 'danger-full-access', workspaceRoot: resolve('/session-project'), sessionId: SessionId('sess-fs-esc') },
     ])
   })
 
