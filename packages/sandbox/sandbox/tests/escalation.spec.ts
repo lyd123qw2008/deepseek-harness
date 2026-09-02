@@ -12,6 +12,7 @@ import {
   WIDER_MODES,
   approveEscalation,
   escalationHintMarker,
+  isRedundantEscalation,
   sandboxDenialMarker,
   validateEscalationArgs,
 } from '@deepseek-ai/dsh-sandbox'
@@ -39,6 +40,21 @@ describe('validateEscalationArgs', () => {
     expect(() => { validateEscalationArgs('workspace-write', undefined) }).toThrow(/requires a justification/)
     expect(() => { validateEscalationArgs(undefined, 'orphan reason') }).toThrow(/only valid together with sandbox_permissions/)
     expect(() => { validateEscalationArgs('workspace-write', '   ') }).toThrow(/non-empty sentence/)
+  })
+})
+
+describe('isRedundantEscalation', () => {
+  it('normalizes only known equal-or-narrower targets under a known standing mode', () => {
+    expect(isRedundantEscalation('workspace-write', 'workspace-write')).toBe(true)
+    expect(isRedundantEscalation('workspace-write', 'danger-full-access')).toBe(true)
+    expect(isRedundantEscalation('danger-full-access', 'danger-full-access')).toBe(true)
+    expect(isRedundantEscalation('danger-full-access', 'workspace-write')).toBe(false)
+  })
+
+  it('keeps missing and unknown values on the fail-closed path', () => {
+    expect(isRedundantEscalation(undefined, 'danger-full-access')).toBe(false)
+    expect(isRedundantEscalation('unknown-mode', 'danger-full-access')).toBe(false)
+    expect(isRedundantEscalation('workspace-write', 'unknown-mode' as never)).toBe(false)
   })
 })
 
