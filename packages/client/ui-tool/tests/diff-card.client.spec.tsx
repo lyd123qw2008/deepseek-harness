@@ -27,6 +27,12 @@ const ARGS = '{"file_path":"notes/demo.txt","old_string":"hello","new_string":"h
 
 const DIFFS = [{ path: 'notes/demo.txt', oldText: 'hello', newText: 'hello fixture' }]
 
+function addedDiffText(container: HTMLElement): string {
+  return [...container.querySelectorAll('[data-diff-line="add"] [class*="_lineContent_"]')]
+    .map(row => row.textContent ?? '')
+    .join('\n')
+}
+
 const running = (over?: Partial<StartedToolCall>): StartedToolCall => ({
   phase: 'start' as const, callId: 'c1', name: 'edit', argsRaw: ARGS,
   turn: 1, step: 1, time: 1_000, subCalls: [], ...over,
@@ -104,6 +110,52 @@ describe('diffCardModel', () => {
     })
   })
 
+  it('preserves optional hunk line starts and rejects invalid starts', () => {
+    const numbered = { path: 'notes/demo.txt', oldText: 'old', newText: 'new', oldStart: 12, newStart: 13 }
+    expect(diffCardModel(settled({ meta: { diffs: [numbered] } }))).toEqual({ card: { diffs: [numbered] } })
+    expect(diffCardModel(settled({ meta: { diffs: [{ ...numbered, oldStart: 0 }] } }))).toBeNull()
+    expect(diffCardModel(settled({ meta: { diffs: [{ ...numbered, newStart: Number.POSITIVE_INFINITY }] } }))).toBeNull()
+  })
+
+  it('renders applied edit diff when redundant full-access fields have blank justification', () => {
+    const argsRaw = JSON.stringify({
+      file_path: 'notes/demo.txt',
+      old_string: 'hello',
+      new_string: 'hello fixture',
+      replace_all: false,
+      sandbox_permissions: 'danger-full-access',
+      justification: '',
+    })
+    expect(diffCardModel(settled({
+      call: { name: 'edit', argsRaw },
+      meta: { diffs: DIFFS },
+    }))).toEqual({ card: { diffs: DIFFS } })
+  })
+
+  it('renders an applied write diff when redundant escalation fields have blank justification', () => {
+    const argsRaw = JSON.stringify({
+      file_path: 'notes/new.txt',
+      content: 'hello fixture\n',
+      sandbox_permissions: 'danger-full-access',
+      justification: '',
+    })
+    expect(diffCardModel(settled({
+      call: { name: 'write', argsRaw },
+      meta: { diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture\n' }] },
+    }))).toEqual({ card: { diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture\n' }] } })
+  })
+
+  it('keeps running invalid escalation calls generic', () => {
+    const argsRaw = JSON.stringify({
+      file_path: 'notes/demo.txt',
+      old_string: 'hello',
+      new_string: 'hello fixture',
+      sandbox_permissions: 'danger-full-access',
+      justification: '',
+    })
+    expect(diffCardModel(running({ argsRaw }))).toBeNull()
+  })
+
   it('uses the intended write diff when successful metadata reports no applied hunk', () => {
     const writeArgs = JSON.stringify({ file_path: 'notes/new.txt', content: 'hello fixture\n' })
     expect(diffCardModel(settled({
@@ -172,7 +224,7 @@ describe('chat row diff body', () => {
     // The path link is not the expand control; the leading toggle is.
     fireEvent.click(view.container.querySelector('[data-expandable]')!)
     expect(view.container.querySelector('[data-diff]')).not.toBeNull()
-    expect(view.getByText('hello fixture')).toBeTruthy()
+    expect(addedDiffText(view.container)).toContain('hello fixture')
   })
 
   it('a running diff call expands to its intended change', () => {
@@ -225,8 +277,8 @@ describe('FileMutationRow diff card', () => {
     expect(view.queryByText('hello fixture')).toBeNull()
     toggleRow(view)
     expect(view.container.querySelector('[data-diff]')).not.toBeNull()
-    expect(view.getByText('hello fixture')).toBeTruthy()
-    expect(view.getByRole('button', { name: '复制' })).toBeTruthy()
+    expect(addedDiffText(view.container)).toContain('hello fixture')
+    expect(view.getByText('复制')).toBeTruthy()
   })
 
   it('the summary is a path link that opens the tool path through the host', () => {
@@ -247,9 +299,9 @@ describe('FileMutationRow diff card', () => {
     }), 'write')} />)
     // The collapsed row already carries the card's +/- totals beside the path.
     expect(view.getByText('+1 -0')).toBeTruthy()
+    // The footer counts live inside the collapsed diff card.
     toggleRow(view)
-    expect(view.getAllByText('+1 -0')).toHaveLength(1)
-    expect(view.getByText('hello fixture')).toBeTruthy()
+    expect(view.getByText('└ +1 -0 · 1 个文件')).toBeTruthy()
   })
 
   it('reflects the run state on its leading slot', () => {
