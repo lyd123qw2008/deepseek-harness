@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-tool-pwsh` gives the agent a `pwsh` tool that runs PowerShell commands through the mounted shell executor — the Windows counterpart of `dsh-tool-bash`, mirroring it call-for-call. Each call runs in a fresh pwsh process, so no state survives; `run_in_background` turns long-running commands into background jobs. Commands are PowerShell-dialect: native `C:\...` paths and `$env:NAME` variables, with no dialect translation. Every call runs with the managed `DSH_*` environment, and under a sandboxing executor the tool teaches and enforces the Windows-specific language-mode and named-pipe contracts. Mount it with a PowerShell executor such as `dsh-pwsh-local` and the `dsh-shell-env` plugin.
+`dsh-tool-pwsh` gives the agent a `pwsh` tool that runs PowerShell commands through the mounted shell executor — the Windows counterpart of `dsh-tool-bash`, mirroring it call-for-call. Each call runs in a fresh pwsh process, so no state survives; `run_in_background` turns long-running commands into background jobs. Commands are PowerShell-dialect: native `C:\...` paths and `$env:NAME` variables, with no dialect translation. Every call runs with the managed `DSH_*` environment, and under a sandboxing executor the tool teaches and enforces the Windows-specific language-mode and named-pipe contracts. A known target already covered by the standing per-session policy runs under that policy without a justification or approval prompt. Mount it with a PowerShell executor such as `dsh-pwsh-local` and the `dsh-shell-env` plugin.
 
 ## Table of Contents
 
@@ -55,7 +55,7 @@ The tool executes `pwsh -Command <command>` and returns the combined output. Com
 
 ### Windows-specific sandbox behavior
 
-Under a sandboxing executor, denied commands report `[sandbox: file access denied under <mode> mode]`, and the same one-shot escalation path applies: retry the exact command once with `sandbox_permissions` plus a `justification` through user approval. The tool also teaches two Windows-restricted-token contracts in its description: read-only pwsh runs in ConstrainedLanguage (`.NET` static calls, `Add-Type`, COM, and reflection fail with "only core types" errors), and in both confined modes programs cannot open named pipes, so a command that captures another program's output through piped stdio fails with EPERM — escalate the exact command once or restructure it to avoid capturing output.
+Under a sandboxing executor, denied commands report `[sandbox: file access denied under <mode> mode]`, and the same one-shot escalation path applies: retry the exact command once with `sandbox_permissions` plus a `justification` through user approval. A known target already covered by the effective per-session policy is treated as no-op metadata and runs under the standing policy even when its inherited `justification` is blank or absent. The tool also teaches two Windows-restricted-token contracts in its description: read-only pwsh runs in ConstrainedLanguage (`.NET` static calls, `Add-Type`, COM, and reflection fail with "only core types" errors), and in both confined modes programs cannot open named pipes, so a command that captures another program's output through piped stdio fails with EPERM — escalate the exact command once or restructure it to avoid capturing output.
 
 ### What can go wrong
 
