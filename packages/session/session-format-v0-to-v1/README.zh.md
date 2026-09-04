@@ -9,7 +9,7 @@ kind: "package-library"
 
 ## 概述
 
-`dsh-session-format-v0-to-v1` 逐个物理行解码已发布 v0 JSONL 记录语言，并把它转换为共享布局的 v1 格式。除把 `version: 0` 改为 `version: 1` 外，该迁移边会保留经过校验的 header 与事件事实；它也会应用 v0 持久化曾接受的有限旧格式规范化。该包冻结 v0 reader、严格的 v1 迁移目标校验器，以及词汇中立的 v1 物理 codec，使后续迁移边无需导入最新 Session 表示即可复用它。它的大部分源码是冻结的已发布 v0/v1 事件词表而不是恒等转换本身：`payload-validation.ts` 与 `relationships.ts` 钉住每种第一方事件类型的 payload 成员与生命周期配对，使畸形历史日志在已安装的 current restorer 运行之前就以「不支持的迁移」被拒绝并保留源文件，也使后续重构已发布事件的迁移边无需导入当前 Session 包即可信任其字段。
+`dsh-session-format-v0-to-v1` 逐个物理行解码已发布 v0 JSONL 记录语言，并把它转换为共享布局的 v1 格式。除把 `version: 0` 改为 `version: 1` 外，该迁移边会保留经过校验的 header 与事件事实；它也会应用 v0 持久化曾接受的有限旧格式规范化，并把已发布的 subagent descriptor version 2 payload 提升为当前 version 3。该包冻结 v0 reader、严格的 v1 迁移目标校验器，以及词汇中立的 v1 物理 codec，使后续迁移边无需导入最新 Session 表示即可复用它。它的大部分源码是冻结的已发布 v0/v1 事件词表而不是恒等转换本身：`payload-validation.ts` 与 `relationships.ts` 钉住每种第一方事件类型的 payload 成员与生命周期配对，使畸形历史日志在已安装的 current restorer 运行之前就以「不支持的迁移」被拒绝并保留源文件，也使后续重构已发布事件的迁移边无需导入当前 Session 包即可信任其字段。
 
 ## 目录
 
@@ -42,9 +42,9 @@ const targetInheritedEventCount = stage.finish(migrationContext)
 
 `releasedV0SessionFormatCodec` 读取精确的 v0 header 与物理行，包括打包的 Assistant 增量和范围编码的来源序号。它的 decoder 通过 `emitEvent()` 与 `emitRun()` 发出单个事件或 codec 自有的紧凑 run。`sessionFormatV0ToV1` 为每次还原创建一个有状态 Stage；静态 catalog 连接该 decoder 与 Stage，使迁移无需保留物理行数组。`releasedV1SessionFormatCodec` 为 v1 物理布局暴露相同的逐行 decoder，同时不冻结普通事件词表。
 
-Alpha 迁移边会拒绝冻结清单之外的所有事件类型，包括带有 `ignorable: true` 标记的未知事件。它也会拒绝意外的 payload 成员。`tool/result.meta` 与嵌套 PTC `arguments` 是显式的不透明 JSON 字段；迁移会原样保留它们，不把其中的数字解释为 Session 序号。未知 content-block `type`、message-source `kind`、assistant finish-reason `kind` 与 `turn/end` reason `kind` 分支保持 owner-opaque JSON，已知分支则接受结构校验。
+Alpha 迁移边会拒绝冻结清单之外的所有事件类型，包括带有 `ignorable: true` 标记的未知事件。清单包含已停用的 `web/codex-search-llm-request` 信息事件；迁移会校验其精确的 Responses 端点与请求体，然后在不改变 payload 的前提下添加 `ignorable: true`，使当前读取器可以保留它而不解释它。迁移边也会拒绝意外的 payload 成员。`tool/result.meta` 与嵌套 PTC `arguments` 是显式的不透明 JSON 字段；迁移会原样保留它们，不把其中的数字解释为 Session 序号。未知 content-block `type`、message-source `kind`、assistant finish-reason `kind` 与 `turn/end` reason `kind` 分支保持 owner-opaque JSON，已知分支则接受结构校验。
 
-有限的历史规范化会把 `steering/message` 转换为 `user/message`、把 `compact/*` 事件重命名为 `compaction/*`、移除 `turn/start.trigger`、转换已停用的 `turn/end` reason、添加当前消息包装层，并为旧 message、retry chain 与 compaction group 补充确定性 id，同时移除已停用且重复的 `request/header.header.messagePrefix`。已停用的 `request/header-delta`、`mode/set` 和 `request/header` fallback reason 会使迁移失败。除此之外，任何事件、引用、来源或 payload 事实都不得改变。
+有限的历史规范化会把 `steering/message` 转换为 `user/message`、把 `compact/*` 事件重命名为 `compaction/*`、移除 `turn/start.trigger`、转换已停用的 `turn/end` reason、添加当前消息包装层，并为旧 message、retry chain 与 compaction group 补充确定性 id，同时移除已停用且重复的 `request/header.header.messagePrefix`。已发布的 subagent descriptor version 2 payload 会先按其 mode 对应的历史字段校验，再提升为 version 3；未知 descriptor version 会使迁移失败。已停用的 `request/header-delta`、`mode/set` 和 `request/header` fallback reason 会使迁移失败。除此之外，任何事件、引用、来源或 payload 事实都不得改变。
 
 -----
 
@@ -99,7 +99,7 @@ Alpha 迁移边会拒绝冻结清单之外的所有事件类型，包括带有 `
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **封闭的第一方清单**——按照当前 Alpha 策略，未知的外部插件事件会使迁移失败。
+- **明确的历史外部例外**——只有冻结的 `web/codex-search-llm-request` 信息事件具有迁移规则；按照当前 Alpha 策略，其他所有未知的外部插件事件都会使迁移失败。
 - **单个相邻迁移边**——本包不执行发布，也不选择后续迁移。
 
 <a id="dev-note"></a>

@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-04-windows-jsonl-lease-native-loading.md
+2026-09-04-windows-jsonl-lease-native-loading.md: afe09404a7f99c8602ac82225ed60e0d8830ea37
+2026-09-04-windows-jsonl-lease-native-loading.zh.md: d441bc81f070d70a7aca3cbb7560d23088806df4
