@@ -284,6 +284,9 @@ export function assertReleasedPayloadSemantics(event: SessionFormatEvent, versio
     case 'user/message':
       messageValue(data, label, version, 'user')
       return
+    case 'web/codex-search-llm-request':
+      codexSearchRequestValue(data, label)
+      return
     case 'web/deepseek-search-llm-request':
       nonEmptyString(data['endpoint'], `${label} endpoint`)
       nonEmptyString(data['apiVersion'], `${label} apiVersion`)
@@ -703,6 +706,28 @@ function sessionReferenceSourceValue(source: JsonRecord, label: string, version:
     sessionIds.add(sessionId)
   })
   if (references.length === 0) throw new SessionFormatError(`${label} references must be non-empty`)
+}
+
+function codexSearchRequestValue(data: JsonRecord, label: string): void {
+  assertReleasedV0Keys(data, ['endpoint', 'body'], [], label)
+  nonEmptyString(data['endpoint'], `${label} endpoint`)
+  const body = exactRecord(
+    data['body'],
+    `${label} body`,
+    ['model', 'input', 'tools', 'stream', 'store'],
+    ['max_output_tokens'],
+  )
+  nonEmptyString(body['model'], `${label} body model`)
+  stringValue(body['input'], `${label} body input`)
+  const tools = arrayValue(body['tools'], `${label} body tools`, (value, toolLabel) => {
+    const tool = exactRecord(value, toolLabel, ['type', 'search_context_size'])
+    literalValue(tool['type'], ['web_search'], `${toolLabel} type`)
+    literalValue(tool['search_context_size'], ['low', 'medium', 'high'], `${toolLabel} search_context_size`)
+  })
+  if (tools.length !== 1) throw new SessionFormatError(`${label} body tools must contain exactly one tool`)
+  booleanValue(body['stream'], `${label} body stream`)
+  literalValue(body['store'], [false], `${label} body store`)
+  if (body['max_output_tokens'] !== undefined) positiveIntegerValue(body['max_output_tokens'], `${label} body max_output_tokens`)
 }
 
 function streamChunkValue(value: SessionFormatJsonValue | undefined, label: string): void {

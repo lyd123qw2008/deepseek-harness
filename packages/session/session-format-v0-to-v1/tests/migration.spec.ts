@@ -116,6 +116,131 @@ describe('released Session format v0 to v1', () => {
     expect(output.values).toEqual([marker])
   })
 
+  it('promotes the released v2 subagent descriptor to the current v3 payload', () => {
+    const header = {
+      type: 'session', version: 0, id: 'descriptor-upgrade', createdAt: 1, delegationDepth: 0,
+    }
+    const rows = [
+      {
+        type: 'subagent/descriptor', seq: 0, time: 2,
+        data: { version: 2, mode: 'continuable', provider: 'spawn', label: 'child', agentProvider: 'p', agentModel: 'm' },
+      },
+    ]
+
+    const source = releasedV0SessionFormatCodec.decodeArtifact(header, rows)
+    expect(sessionFormatV0ToV1.migrate(source).events).toEqual([{
+      ...rows[0],
+      data: {
+        version: 3, mode: 'continuable', provider: 'spawn', label: 'child', agentProvider: 'p', agentModel: 'm',
+      },
+    }])
+  })
+
+  it('rejects a released v2 descriptor that does not match its historical schema', () => {
+    const header = {
+      type: 'session', version: 0, id: 'descriptor-upgrade-invalid', createdAt: 1, delegationDepth: 0,
+    }
+    const rows = [{
+      type: 'subagent/descriptor', seq: 0, time: 2,
+      data: { version: 2, mode: 'one-shot', provider: 'spawn' },
+    }]
+
+    const source = releasedV0SessionFormatCodec.decodeArtifact(header, rows)
+    expect(() => sessionFormatV0ToV1.migrate(source)).toThrow(/lacks required member "label"/)
+  })
+
+  it('marks the retired Codex search request as an ignorable preserved event', () => {
+    const header = {
+      type: 'session', version: 0, id: 'codex-search-compat', createdAt: 1, delegationDepth: 0,
+    }
+    const row = {
+      type: 'web/codex-search-llm-request', seq: 0, time: 2,
+      data: {
+        endpoint: 'https://example.test/responses',
+        body: {
+          model: 'search-model', input: 'Search query: search',
+          tools: [{ type: 'web_search', search_context_size: 'medium' }],
+          stream: true, store: false, max_output_tokens: 100,
+        },
+      },
+    }
+
+    const migrated = sessionFormatV0ToV1.migrate(releasedV0SessionFormatCodec.decodeArtifact(header, [row]))
+    expect(migrated.events).toEqual([{ ...row, ignorable: true }])
+  })
+
+  it('promotes the released v1 pi-ai replay envelope in chunks and messages', () => {
+    const replayState = {
+      kind: 'pi-ai', version: 1, api: 'openai', provider: 'p', model: 'm', responseId: 'response',
+      stopReason: 'stop', blocks: [],
+    }
+    const header = {
+      type: 'session', version: 0, id: 'replay-upgrade', createdAt: 1, delegationDepth: 0,
+    }
+    const rows = [
+      { type: 'turn/start', seq: 0, time: 2, data: { turn: 1 } },
+      { type: 'step/start', seq: 1, time: 3, data: { turn: 1, step: 1 } },
+      {
+        type: 'assistant/chunk', seq: 2, time: 4,
+        data: { turn: 1, step: 1, chunk: { type: 'finish', reason: { kind: 'stop' }, replayState } },
+      },
+      {
+        type: 'assistant/message', seq: 3, time: 5, surfaceOp: 'append',
+        data: {
+          turn: 1, step: 1,
+          message: {
+            id: 'assistant', role: 'assistant', content: [],
+            source: { kind: 'model', provider: 'p', model: 'm', replayState },
+          },
+        },
+      },
+      { type: 'step/end', seq: 4, time: 6, data: { turn: 1, step: 1 } },
+      { type: 'turn/end', seq: 5, time: 7, data: { turn: 1, reason: { kind: 'completed' } } },
+    ]
+
+    const migrated = sessionFormatV0ToV1.migrate(releasedV0SessionFormatCodec.decodeArtifact(header, rows))
+    const currentReplayState = {
+      response: {
+        kind: 'pi-ai', version: 2, api: 'openai', provider: 'p', model: 'm', responseId: 'response',
+        stopReason: 'stop',
+      },
+      blocks: [],
+    }
+    expect(migrated.events[2]?.data).toEqual({
+      turn: 1, step: 1, chunk: { type: 'finish', reason: { kind: 'stop' }, replayState: currentReplayState },
+    })
+    expect(migrated.events[3]?.data).toEqual({
+      turn: 1, step: 1,
+      message: {
+        id: 'assistant', role: 'assistant', content: [],
+        source: { kind: 'model', provider: 'p', model: 'm', replayState: currentReplayState },
+      },
+    })
+  })
+
+  it('rejects an unrecognized member in a released flat replay envelope', () => {
+    const replayState = {
+      kind: 'pi-ai', version: 1, api: 'openai', provider: 'p', model: 'm', stopReason: 'stop', blocks: [],
+      unexpected: true,
+    }
+    const header = {
+      type: 'session', version: 0, id: 'replay-upgrade-invalid', createdAt: 1, delegationDepth: 0,
+    }
+    const rows = [{
+      type: 'assistant/message', seq: 0, time: 2, surfaceOp: 'append',
+      data: {
+        turn: 1, step: 1,
+        message: {
+          id: 'assistant', role: 'assistant', content: [],
+          source: { kind: 'model', provider: 'p', model: 'm', replayState },
+        },
+      },
+    }]
+
+    expect(() => sessionFormatV0ToV1.migrate(releasedV0SessionFormatCodec.decodeArtifact(header, rows)))
+      .toThrow(/unexpected member "unexpected"/)
+  })
+
   it('recovers only the complete row prefix and refuses a later committing turn end', () => {
     const header = {
       type: 'session',

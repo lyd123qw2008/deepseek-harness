@@ -1,4 +1,4 @@
-# Agent Note: Alpha Session migration refuses every unknown historical event
+# Agent Note: Alpha Session migration refuses unrecognized historical events
 
 Status: implemented
 
@@ -12,21 +12,21 @@ Silently copying such an event can leave stale numeric references after a later 
 
 ## Decision
 
-The alpha v0-to-v1 edge owns a frozen complete released-v0 event and payload inventory. It refuses every unknown historical event type before target staging, including an event marked `ignorable: true`, and refuses unexpected members of known payloads except fields explicitly classified as owner-opaque JSON. Merge-extensible nested discriminants remain part of that explicit policy: unknown content-block types, message-source kinds, assistant finish-reason kinds, and turn-ending reason kinds are preserved as owner-opaque JSON, while known arms receive structural validation. The diagnostic names the event type, its sequence number, and the unchanged source generation.
+The alpha v0-to-v1 edge owns a frozen complete released-v0 event and payload inventory plus one explicitly frozen retired external informational event, `web/codex-search-llm-request`. It validates that event's exact Responses request payload and adds `ignorable: true` without changing its data, so current readers can retain it without interpreting it. Every other unknown historical event type is refused before target staging, including an event marked `ignorable: true`, and unexpected members of known payloads are refused except fields explicitly classified as owner-opaque JSON. Merge-extensible nested discriminants remain part of that explicit policy: unknown content-block types, message-source kinds, assistant finish-reason kinds, and turn-ending reason kinds are preserved as owner-opaque JSON, while known arms receive structural validation. The diagnostic names the event type, its sequence number, and the unchanged source generation.
 
 The rule applies only while crossing a historical format edge. Ordinary current-format reading retains the established envelope behavior: an unknown required event refuses, while an unknown event carrying `ignorable: true` remains readable. Native current-format external events therefore keep the existing equal-version extension seam, but they do not become implicitly migratable by a future format edge.
 
-Every first-party source event type has an executable disposition and target validator in the edge package. The catalog is build-static and profile-independent, so mounting or omitting the producer plugin cannot change whether an old artifact migrates.
+Every first-party source event type and the named retired external event have an executable disposition and target validator in the edge package. The catalog is build-static and profile-independent, so mounting or omitting the producer plugin cannot change whether an old artifact migrates.
 
 ## Consequences
 
-Some v0 Sessions produced by repository-external informational plugins may refuse alpha migration even though the v0 codec can decode them. Refusal publishes no successor, so the suffixless v0 path, bytes, and inode remain authoritative and unchanged. Operators can identify the blocking type from the diagnostic and retain full access to its raw text.
+V0 Sessions containing an external event other than the named retired Codex search event may refuse alpha migration even though the v0 codec can decode them. Refusal publishes no successor, so the suffixless v0 path, bytes, and inode remain authoritative and unchanged. Operators can identify the blocking type from the diagnostic and retain full access to its raw text.
 
-Community feedback will determine the next policy. A later release may add an explicit external-owner migration interface, permit omission of explicitly ignorable historical events while retaining the exact source generation, or keep strict refusal. No option is implied by the alpha marker.
+The named exception is limited to this exact informational payload and does not authorize inference for another external event. A later release may add an explicit external-owner migration interface, permit omission of explicitly ignorable historical events while retaining the exact source generation, or keep strict refusal for events without a static migration rule. No option is implied by the alpha marker.
 
 `SessionSeq` and `SessionLogOffset` make known first-party numeric fields auditable, but they cannot classify numbers inside an unknown runtime object. The migration rule therefore cannot infer safety from the absence of a recognized branded field.
 
-This note supersedes [Retain ignorable external Session events](2026-08-30-retain-ignorable-external-session-events.md) only for historical format migration. That decision remains current for equal-version append and reload.
+This note supersedes [Retain ignorable external Session events](2026-08-30-retain-ignorable-external-session-events.md) only for historical format migration, and only the named exception changes the default refusal rule. That decision remains current for equal-version append and reload.
 
 ## Alternatives considered
 
