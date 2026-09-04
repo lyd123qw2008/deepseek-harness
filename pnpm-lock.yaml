@@ -7275,12 +7275,13 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      fs-ext:
-        specifier: 2.1.1
-        version: 2.1.1
       koffi:
         specifier: ^3.1.0
         version: 3.1.1
+    optionalDependencies:
+      fs-ext:
+        specifier: 2.1.1
+        version: 2.1.1
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^

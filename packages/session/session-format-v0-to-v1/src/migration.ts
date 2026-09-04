@@ -20,6 +20,11 @@ import {
 } from './validation.ts'
 import { assertReleasedV0Keys, releasedV0Record } from './validation-helpers.ts'
 
+const CURRENT_SUBAGENT_DESCRIPTOR_VERSION = 3
+const PREVIOUS_SUBAGENT_DESCRIPTOR_VERSION = 2
+const PREVIOUS_PI_AI_REPLAY_VERSION = 1
+const CURRENT_PI_AI_REPLAY_VERSION = 2
+
 /** Identity format edge that promotes released v0 into released v1. */
 export const sessionFormatV0ToV1 = defineSessionFormatMigration({
   name: '@deepseek-ai/dsh-session-format-v0-to-v1',
@@ -56,15 +61,18 @@ function normalizeReleasedV0Events(
   const messageIds = new Map<number, string>()
   const output: SessionFormatEvent[] = []
   for (const event of events) {
-    assertSupportedLegacyType(event, sessionId)
-    const start = normalizeLegacyTurnStart(event, sessionId)
+    const externalNormalized = normalizeLegacyExternalEvent(event)
+    assertSupportedLegacyType(externalNormalized, sessionId)
+    const start = normalizeLegacyTurnStart(externalNormalized, sessionId)
     const end = normalizeLegacyTurnEnd(start, sessionId)
     const header = normalizeLegacyRequestHeader(end, sessionId)
     const steering = normalizeLegacySteering(header, sessionId)
     const message = normalizeLegacyMessage(steering, sessionId, messageIds)
-    assertReleasedEventPayload(message, 0)
-    output.push(message)
-    const messageId = eventMessageId(message)
+    const normalized = normalizeLegacyReplayState(message)
+    const descriptorNormalized = normalizeLegacySubagentDescriptor(normalized)
+    assertReleasedEventPayload(descriptorNormalized, 0)
+    output.push(descriptorNormalized)
+    const messageId = eventMessageId(descriptorNormalized)
     if (messageId !== undefined) messageIds.set(message.seq, messageId)
   }
   return Object.freeze(output)
@@ -204,6 +212,112 @@ function normalizeLegacyErrorReason(
       message: reason['message'],
       code: typeof reason['code'] === 'string' ? reason['code'] : 'UNKNOWN',
     },
+  }
+}
+
+function normalizeLegacyExternalEvent(event: SessionFormatEvent): SessionFormatEvent {
+  if (event.type !== 'web/codex-search-llm-request' || event.ignorable === true) return event
+  return { ...event, ignorable: true }
+}
+
+function normalizeLegacyReplayState(event: SessionFormatEvent): SessionFormatEvent {
+  if (event.type === 'assistant/chunk') {
+    const data = releasedV0Record(event.data, `assistant/chunk ${event.seq} data`)
+    const chunk = releasedV0Record(data['chunk'], `assistant/chunk ${event.seq} chunk`)
+    if (chunk['type'] !== 'finish' || chunk['replayState'] === undefined) return event
+    return {
+      ...event,
+      data: {
+        ...data,
+        chunk: {
+          ...chunk,
+          replayState: normalizeLegacyReplayStateValue(
+            chunk['replayState'],
+            `assistant/chunk ${event.seq} replayState`,
+          ),
+        },
+      },
+    }
+  }
+  if (event.type !== 'assistant/message') return event
+  const data = releasedV0Record(event.data, `assistant/message ${event.seq} data`)
+  const message = releasedV0Record(data['message'], `assistant/message ${event.seq} message`)
+  const source = releasedV0Record(message['source'], `assistant/message ${event.seq} source`)
+  if (source['replayState'] === undefined) return event
+  return {
+    ...event,
+    data: {
+      ...data,
+      message: {
+        ...message,
+        source: {
+          ...source,
+          replayState: normalizeLegacyReplayStateValue(
+            source['replayState'],
+            `assistant/message ${event.seq} replayState`,
+          ),
+        },
+      },
+    },
+  }
+}
+
+function normalizeLegacyReplayStateValue(
+  value: SessionFormatJsonValue,
+  label: string,
+): SessionFormatJsonValue {
+  const replay = releasedV0Record(value, label)
+  if (replay['version'] !== PREVIOUS_PI_AI_REPLAY_VERSION || Object.hasOwn(replay, 'response')) return value
+  assertReleasedV0Keys(
+    replay,
+    ['kind', 'version', 'api', 'provider', 'model', 'stopReason', 'blocks'],
+    ['responseId'],
+    label,
+  )
+  if (replay['kind'] !== 'pi-ai') {
+    throw new SessionFormatUnsupportedMigrationError(`${label} has unsupported legacy replay kind`)
+  }
+  const response: SessionFormatJsonObject = {
+    kind: requiredLegacyReplayMember(replay, 'kind', label),
+    version: CURRENT_PI_AI_REPLAY_VERSION,
+    api: requiredLegacyReplayMember(replay, 'api', label),
+    provider: requiredLegacyReplayMember(replay, 'provider', label),
+    model: requiredLegacyReplayMember(replay, 'model', label),
+    ...(replay['responseId'] === undefined ? {} : { responseId: replay['responseId'] }),
+    stopReason: requiredLegacyReplayMember(replay, 'stopReason', label),
+  }
+  return { response, blocks: requiredLegacyReplayMember(replay, 'blocks', label) }
+}
+
+function requiredLegacyReplayMember(
+  replay: Record<string, SessionFormatJsonValue>,
+  key: string,
+  label: string,
+): SessionFormatJsonValue {
+  const value = replay[key]
+  if (value === undefined) throw new SessionFormatError(`${label} lacks required member "${key}"`)
+  return value
+}
+
+function normalizeLegacySubagentDescriptor(event: SessionFormatEvent): SessionFormatEvent {
+  if (event.type !== 'subagent/descriptor') return event
+  const data = releasedV0Record(event.data, `subagent/descriptor ${event.seq} data`)
+  if (data['version'] !== PREVIOUS_SUBAGENT_DESCRIPTOR_VERSION) return event
+  if (data['mode'] === 'one-shot') {
+    assertReleasedV0Keys(data, ['mode', 'version', 'provider', 'label'], [], `subagent/descriptor ${event.seq} data`)
+  } else if (data['mode'] === 'continuable') {
+    assertReleasedV0Keys(
+      data,
+      ['mode', 'version', 'provider', 'label'],
+      ['agentProvider', 'agentModel', 'persona', 'toolFilter'],
+      `subagent/descriptor ${event.seq} data`,
+    )
+  } else {
+    throw new SessionFormatError(`subagent/descriptor ${event.seq} mode must be "one-shot" or "continuable"`)
+  }
+  return {
+    ...event,
+    data: { ...data, version: CURRENT_SUBAGENT_DESCRIPTOR_VERSION },
   }
 }
 
