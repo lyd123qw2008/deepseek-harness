@@ -1,4 +1,4 @@
-# Agent Note: Alpha Session 迁移拒绝所有未知历史事件
+# Agent Note: Alpha Session 迁移拒绝未识别的历史事件
 
 Status: implemented
 
@@ -12,21 +12,21 @@ Status: implemented
 
 ## 决策
 
-Alpha v0-to-v1 迁移边拥有冻结且完整的已发布 v0 事件与 payload 清单。它在目标 staging 前拒绝每个未知历史事件类型，包括标记了 `ignorable: true` 的事件；除明确分类为 owner 不透明 JSON 的字段外，它也拒绝已知 payload 的意外成员。可合并扩展的嵌套判别字段同样属于这项显式策略：未知 content-block type、message-source kind、assistant finish-reason kind 与 turn-ending reason kind 会作为 owner 不透明 JSON 保留，已知分支则接受结构校验。诊断会点名事件类型、序号和保持不变的源 generation。
+Alpha v0-to-v1 迁移边拥有冻结且完整的已发布 v0 事件与 payload 清单，以及一个明确冻结的已停用外部信息事件 `web/codex-search-llm-request`。它会校验该事件精确的 Responses 请求 payload，并在不改变其数据的前提下添加 `ignorable: true`，使当前读取器可以保留它而不解释它。除此之外的每个未知历史事件类型都会在目标 staging 前被拒绝，包括标记了 `ignorable: true` 的事件；除明确分类为 owner 不透明 JSON 的字段外，它也拒绝已知 payload 的意外成员。可合并扩展的嵌套判别字段同样属于这项显式策略：未知 content-block type、message-source kind、assistant finish-reason kind 与 turn-ending reason kind 会作为 owner 不透明 JSON 保留，已知分支则接受结构校验。诊断会点名事件类型、序号和保持不变的源 generation。
 
 该规则只适用于跨越历史格式迁移边。普通当前格式读取保留既有信封行为：未知必需事件被拒绝，带 `ignorable: true` 的未知事件仍可读取。因此原生当前格式的外部事件继续使用既有同版本扩展 seam，但不会自动获得未来格式迁移能力。
 
-每个第一方源事件类型都在迁移边包中拥有可执行 disposition 与目标 validator。catalog 在构建时静态确定且与 profile 无关，因此 producer 插件是否挂载不会改变旧产物能否迁移。
+每个第一方源事件类型和这个已命名的已停用外部事件都在迁移边包中拥有可执行 disposition 与目标 validator。catalog 在构建时静态确定且与 profile 无关，因此 producer 插件是否挂载不会改变旧产物能否迁移。
 
 ## 后果
 
-某些由仓库外信息型插件产生的 v0 Session 可能拒绝 alpha 迁移，即使 v0 codec 能解码它们。拒绝不会发布后继，因此无后缀 v0 路径、字节与 inode 仍然权威且不变。操作者可以从诊断识别阻塞类型，并完整访问其原始文本。
+包含其他外部事件的 v0 Session 可能拒绝 alpha 迁移，即使 v0 codec 能解码它们。拒绝不会发布后继，因此无后缀 v0 路径、字节与 inode 仍然权威且不变。操作者可以从诊断识别阻塞类型，并完整访问其原始文本。
 
-社区反馈将决定下一步策略。后续版本可以添加显式外部 owner 迁移接口、在保留精确源代际时允许省略明确 ignorable 的历史事件，或继续严格拒绝。Alpha 标记不预先承诺任何选项。
+这个例外仅适用于精确的信息 payload，不授权对其他外部事件进行推断。后续版本可以添加显式外部 owner 迁移接口、在保留精确源代际时允许省略明确 ignorable 的历史事件，或继续拒绝没有静态迁移规则的事件。Alpha 标记不预先承诺任何选项。
 
 `SessionSeq` 与 `SessionLogOffset` 让已知第一方数字字段可审计，但无法分类未知 runtime 对象中的数字。因此迁移规则不能根据没有识别到品牌字段来推断安全。
 
-本记录仅在历史格式迁移方面取代 [保留可忽略外部 Session 事件](2026-08-30-retain-ignorable-external-session-events.zh.md)。原决定对同版本 append 与 reload 仍然有效。
+本记录仅在历史格式迁移方面取代 [保留可忽略外部 Session 事件](2026-08-30-retain-ignorable-external-session-events.zh.md)，且只有这个已命名的例外改变默认拒绝规则。原决定对同版本 append 与 reload 仍然有效。
 
 ## 考虑过的替代方案
 
