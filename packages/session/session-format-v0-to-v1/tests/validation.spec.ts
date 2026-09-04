@@ -132,6 +132,14 @@ const validPayloads: Readonly<Record<string, SessionFormatJsonValue>> = {
   'turn/end': { turn: 1, reason: { kind: 'completed' } },
   'turn/start': { turn: 1 },
   'user/message': userMessage,
+  'web/codex-search-llm-request': {
+    endpoint: 'https://example.test/responses',
+    body: {
+      model: 'search-model', input: 'Search query: search',
+      tools: [{ type: 'web_search', search_context_size: 'medium' }],
+      stream: true, store: false, max_output_tokens: 100,
+    },
+  },
   'web/deepseek-search-llm-request': {
     endpoint: 'https://example.test/messages', apiVersion: '2023-06-01',
     body: {
@@ -214,14 +222,11 @@ function replaceAtPath(value: SessionFormatJsonValue, path: string, replacement:
 describe('released event and payload inventory', () => {
   it('has an executable valid fixture for every frozen released-v0 event type', () => {
     expect(Object.keys(validPayloads).sort()).toEqual([...RELEASED_V0_EVENT_TYPES].sort())
-    expect(RELEASED_V0_EVENT_TYPES).toHaveLength(51)
-    expect(RELEASED_V0_EVENT_TYPES.filter(type => !KNOWN_SESSION_EVENT_TYPES.has(type))).toEqual([
-      'assistant/chunk',
-      'tool/code-dispatch',
-      'tool/code-dispatch-start',
-    ])
-    expect(KNOWN_SESSION_EVENT_TYPES.has('tool/ptc-dispatch')).toBe(true)
-    expect(KNOWN_SESSION_EVENT_TYPES.has('tool/ptc-dispatch-start')).toBe(true)
+    expect(RELEASED_V0_EVENT_TYPES).toHaveLength(52)
+    expect(RELEASED_V0_EVENT_TYPES
+      .filter(type => type !== 'assistant/chunk' && type !== 'web/codex-search-llm-request')
+      .every(type => KNOWN_SESSION_EVENT_TYPES.has(type))).toBe(true)
+    expect(KNOWN_SESSION_EVENT_TYPES.has('assistant/chunk')).toBe(false)
     for (const [type, data] of Object.entries(validPayloads)) {
       expect(() => { assertPayload(type, data) }, type).not.toThrow()
     }

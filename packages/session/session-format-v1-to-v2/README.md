@@ -49,7 +49,7 @@ The edge also closes the bounded legacy restart pattern in which a non-empty `ne
 
 The migration refuses a reference to a consumed chunk instead of redirecting it to a different semantic event. It remaps declared source-event references, surface replacements, command source events, compaction ranges and lists, and title message lists. The already model-visible `session/title-llm-request.messages` text remains byte-identical after source validation, so target validation does not reinterpret the old sequence numbers embedded in that prompt. A seeded source also refuses an inherited cut that splits an Assistant attempt; the target marks the exact cut with `session/end-seed { inherited: true }`.
 
-The v2 physical header requires `isSeeded` and does not store a numeric cut. The codec derives the cut from the last inherited end-seed marker, writes one event per row, range-encodes only `sourceEventSeqs`, and remains neutral to ordinary event vocabulary and payload growth. Released-current restoration admits event types known to the installed Session package plus unknown events carrying `ignorable: true`, and validates event members and relationships. Ordinary Session restoration checks runtime-required settlement fields without replaying embedded streams; persistence publication and the frozen writer-image fixture validator retain full stream verification.
+The v2 physical header requires `isSeeded` and does not store a numeric cut. The codec derives the cut from the last inherited end-seed marker, writes one event per row, range-encodes only `sourceEventSeqs`, and remains neutral to ordinary event vocabulary and payload growth. Strict migration-target validation freezes the released-v2 inventory, including the retired `web/codex-search-llm-request` informational event, and rejects unknown types or members. Installed-current restoration admits event types known to the installed Session package plus unknown events carrying `ignorable: true`, then delegates payload and stream semantics to the installed current restorer. Ordinary Session restoration checks runtime-required settlement fields without replaying embedded streams; persistence publication and the frozen writer-image fixture validator retain full stream verification. All paths retain strict header, event-envelope, sequence, and inherited-cut validation.
 
 -----
 
@@ -103,7 +103,7 @@ The restored model-message sequence stays unchanged, so the migration alone does
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **Closed first-party source inventory** — an unknown v1 event refuses migration, including an event marked `ignorable: true`.
+- **Closed source inventory with one historical external exception** — the retired `web/codex-search-llm-request` informational event is validated by the reused v0 disposition; every other unknown v1 event refuses migration, including one marked `ignorable: true`.
 - **Linear remap state** — streaming retains no complete v1 event array, but the final v2 event array and old-to-new sequence map remain O(event count).
 - **No publication or compatibility fallback** — persistence owns exclusive successor publication, and retained v1 generations are not automatic downgrade or restore inputs.
 
