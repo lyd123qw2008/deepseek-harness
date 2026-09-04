@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package restores released v0 Session JSONL by decoding each physical row and producing the shared-layout v1 format. It preserves validated headers and events apart from changing version 0 to version 1, while applying only the finite legacy normalizations accepted by v0 persistence. Malformed or unsupported historical records fail migration before the current restorer runs, with the source retained for recovery. The migration accepts only the frozen first-party event inventory and does not publish or select later format migrations.
+`dsh-session-format-v0-to-v1` decodes the released-v0 JSONL record language one physical row at a time and converts it into the shared-layout v1 format. The edge preserves validated header and event facts except for `version: 0` becoming `version: 1`; it also applies the finite legacy normalizers that v0 persistence accepted and promotes released subagent descriptor version 2 payloads to the current version 3. The package freezes the v0 reader, the strict v1 migration target validator, and a vocabulary-neutral v1 physical codec that a later edge can reuse without importing the latest Session representation. Most of its source is the frozen released v0/v1 event vocabulary rather than the identity conversion: `payload-validation.ts` and `relationships.ts` pin the payload members and lifecycle pairings of every first-party event type, so a malformed historical log is refused as an unsupported migration with its source retained before the installed current restorer runs, and a later edge that restructures released events can trust their fields without importing the current Session package.
 
 ## Table of Contents
 
@@ -42,9 +42,9 @@ const targetInheritedEventCount = stage.finish(migrationContext)
 
 `releasedV0SessionFormatCodec` reads the exact v0 header and physical rows, including packed Assistant deltas and range-encoded source-event references. Its decoder emits either a scalar event or a codec-owned compact run through `emitEvent()` and `emitRun()`. `sessionFormatV0ToV1` creates one stateful stage per restore; the static catalog connects that decoder and stage so migration does not retain a physical-row array. `releasedV1SessionFormatCodec` exposes the same row-at-a-time decoder for the v1 physical layout without freezing the ordinary event vocabulary.
 
-The alpha edge refuses every event type outside its frozen inventory, including an unknown event marked `ignorable: true`. It also refuses unexpected payload members. `tool/result.meta` and nested PTC `arguments` remain explicit opaque JSON fields and are preserved without Session-sequence interpretation. Unknown content-block `type`, message-source `kind`, assistant finish-reason `kind`, and `turn/end` reason `kind` arms remain owner-opaque JSON while their known arms receive structural validation.
+The alpha edge refuses every event type outside its frozen inventory, including an unknown event marked `ignorable: true`. The inventory includes the retired `web/codex-search-llm-request` informational event; migration validates its exact endpoint and Responses body, then adds `ignorable: true` without changing its payload so current readers can retain it without interpreting it. The edge also refuses unexpected payload members. `tool/result.meta` and nested PTC `arguments` remain explicit opaque JSON fields and are preserved without Session-sequence interpretation. Unknown content-block `type`, message-source `kind`, assistant finish-reason `kind`, and `turn/end` reason `kind` arms remain owner-opaque JSON while their known arms receive structural validation.
 
-The bounded historical normalizers convert `steering/message` to `user/message`, rename `compact/*` events to `compaction/*`, remove `turn/start.trigger`, convert retired `turn/end` reasons, add current message wrappers and deterministic ids for legacy messages, retry chains, and compaction groups, and remove the obsolete `request/header.header.messagePrefix` duplicate. Retired `request/header-delta`, `mode/set`, and the `request/header` fallback reason refuse migration. No other event, reference, source, or payload fact may change.
+The bounded historical normalizers convert `steering/message` to `user/message`, rename `compact/*` events to `compaction/*`, remove `turn/start.trigger`, convert retired `turn/end` reasons, add current message wrappers and deterministic ids for legacy messages, retry chains, and compaction groups, and remove the obsolete `request/header.header.messagePrefix` duplicate. Released subagent descriptor version 2 payloads are validated against their mode-specific historical keys and promoted to version 3; unknown descriptor versions refuse migration. Retired `request/header-delta`, `mode/set`, and the `request/header` fallback reason refuse migration. No other event, reference, source, or payload fact may change.
 
 -----
 
@@ -99,7 +99,7 @@ No direct effect for canonical v0 history. Bounded normalizers preserve model-vi
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **Closed first-party inventory** — unknown external-plugin events refuse migration in this alpha policy.
+- **Explicit historical external exception** — only the frozen `web/codex-search-llm-request` informational event has a migration rule; every other unknown external-plugin event refuses migration in this alpha policy.
 - **One adjacent edge** — this package does not perform publication or select later migrations.
 
 <a id="dev-note"></a>
