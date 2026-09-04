@@ -316,7 +316,7 @@ describe('PiAiAdapter provider routing', () => {
           type: 'tool_search_output',
           tools: [expect.objectContaining({ parameters, strict: false })],
         }),
-      ]),
+      ]) as unknown as readonly unknown[],
     }))
   })
 
