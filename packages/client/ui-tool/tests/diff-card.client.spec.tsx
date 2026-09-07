@@ -216,14 +216,15 @@ describe('chat row diff body', () => {
     useDisclosure, callId: 'c1', toolName: 'edit', ...('kind' in block ? { phase: 'result' as const, block: block } : { phase: block.phase, block: block }), openFile: vi.fn(), t,
   })
 
-  it('the expanded body is the applied diff, capped tighter than the panel', () => {
-    expect(CHAT_DIFF_MAX_LINES).toBeLessThan(16)
+  it('the expanded body is the applied diff with a ten-line scroll viewport', () => {
+    expect(CHAT_DIFF_MAX_LINES).toBe(10)
     const view = render(<GenericToolCard {...ownerProps(settled())} />)
     // Collapsed: the summary row (path) only, no diff body.
     expect(view.queryByText('hello fixture')).toBeNull()
     // The path link is not the expand control; the leading toggle is.
     fireEvent.click(view.container.querySelector('[data-expandable]')!)
     expect(view.container.querySelector('[data-diff]')).not.toBeNull()
+    expect(view.container.querySelector('[data-diff] [class*="_body_"]')?.getAttribute('style')).toContain('* 10 + 24px)')
     expect(addedDiffText(view.container)).toContain('hello fixture')
   })
 
