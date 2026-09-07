@@ -9,6 +9,7 @@ overrides:
   '@deepseek-ai/schemastery': link:vendor/schemastery
 
 patchedDependencies:
+  '@earendil-works/pi-ai@0.85.1': 09b5c8b136170aac9e5e38ee36b350b7e021f3a1c83050bb704c0024f22a5c3f
   '@yao-pkg/pkg@6.21.0': 28edd2180c36691c481522ef81f6f6614505f45e491aad542ac4663d4e6b3ff8
   node-pty@1.2.0-beta.15: b40ae545608897914bd25fb009c97eeac478c34e8a910298ddcb01b746534bb0
 
@@ -6452,7 +6453,7 @@ importers:
         version: link:../../../vendor/schemastery
       '@earendil-works/pi-ai':
         specifier: ^0.85.1
-        version: 0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
+        version: 0.85.1(patch_hash=09b5c8b136170aac9e5e38ee36b350b7e021f3a1c83050bb704c0024f22a5c3f)(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
@@ -7509,10 +7510,6 @@ importers:
       koffi:
         specifier: ^3.1.0
         version: 3.1.1
-    optionalDependencies:
-      fs-ext:
-        specifier: 2.1.1
-        version: 2.1.1
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
@@ -7529,6 +7526,10 @@ importers:
       '@types/fs-ext':
         specifier: 2.0.3
         version: 2.0.3
+    optionalDependencies:
+      fs-ext:
+        specifier: 2.1.1
+        version: 2.1.1
 
   packages/session/session-projection:
     dependencies:
@@ -17252,7 +17253,7 @@ snapshots:
     transitivePeerDependencies:
       - '@algolia/client-search'
 
-  '@earendil-works/pi-ai@0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)':
+  '@earendil-works/pi-ai@0.85.1(patch_hash=09b5c8b136170aac9e5e38ee36b350b7e021f3a1c83050bb704c0024f22a5c3f)(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)':
     dependencies:
       '@anthropic-ai/sdk': 0.123.0(zod@4.4.3)
       '@aws-sdk/client-bedrock-runtime': 3.1048.0
@@ -20259,6 +20260,7 @@ snapshots:
   fs-ext@2.1.1:
     dependencies:
       nan: 2.28.0
+    optional: true
 
   fs-extra@11.3.1:
     dependencies:
@@ -21289,7 +21291,8 @@ snapshots:
       once: 1.4.0
       readable-stream: 3.6.2
 
-  nan@2.28.0: {}
+  nan@2.28.0:
+    optional: true
 
   nanoid@3.3.12: {}
 
