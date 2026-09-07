@@ -3,7 +3,7 @@
 import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import type {
   AssistantMessageNode, ChatNode, ChatNodeOwnerProps, ChatNodeViewProps, ChatSnapshot,
   ChatViewSlotProps, CommandNode, CompactionSummaryNode, ContextMessageNode, ConversationNode,
@@ -2609,6 +2609,63 @@ describe('ChatView', () => {
     act(() => { notify?.() })
     expect(scroller.scrollTop).toBe(200)
     expect(observe).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps a clicked disclosure row visible when pinned body growth expands it', () => {
+    let notify: (() => void) | undefined
+    class ResizeObserverStub {
+      constructor(callback: ResizeObserverCallback) {
+        notify = () => { callback([], this as unknown as ResizeObserver) }
+      }
+
+      observe = vi.fn()
+      disconnect = vi.fn()
+    }
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+
+    function ExpandableTool() {
+      const [open, setOpen] = useState(false)
+      return (
+        <>
+          <div
+            role="button"
+            tabIndex={0}
+            data-disclosure-row
+            data-expandable
+            aria-expanded={open}
+            onClick={() => { setOpen(value => !value) }}
+          >
+            edit
+          </div>
+          {open && <div data-testid="expanded-edit-body">long diff body</div>}
+        </>
+      )
+    }
+
+    const h = makeHarness({ nodes: [toolResult(3, 'edit', 'edit')] })
+    h.setNodeRenderer((_key, owner) => {
+      const routed = owner as RoutedChatNodeOwner
+      return routed.node.kind === 'tool-call' ? <ExpandableTool /> : null
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const scroller = view.container.querySelector('[class*="scroll"]') as HTMLDivElement
+    const metrics = installScrollMetrics(scroller, 1_000, 300)
+    readerScroll(scroller, 700)
+
+    fireEvent.click(view.getByRole('button', { name: 'edit' }))
+    metrics.setHeight(1_400)
+    // A streamed row can commit before ResizeObserver delivers the expansion;
+    // the disclosure click must already have disarmed live-tail following.
+    act(() => {
+      h.set({ nodes: [toolResult(3, 'edit', 'edit'), assistant(4, 'streamed after edit')] })
+    })
+    expect(scroller.scrollTop).toBe(700)
+    act(() => { notify?.() })
+
+    expect(scroller.scrollTop).toBe(700)
+    expect(view.getByRole('button', { name: 'edit' }).getAttribute('aria-expanded')).toBe('true')
+    expect(view.getByTestId('expanded-edit-body')).toBeTruthy()
+    expect(view.getByLabelText('回到底部')).toBeTruthy()
   })
 
   it('pinned dynamic-height updates select the latest Turn without reading row geometry', () => {
