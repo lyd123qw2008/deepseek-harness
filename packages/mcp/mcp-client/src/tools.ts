@@ -26,12 +26,24 @@ import { assertSupportedJsonSchema } from '@deepseek-ai/dsh-tools'
 import type { JsonSchemaNode } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
+/** Raw JSON object returned by an MCP `tools/call` request. */
+export type RawMcpResult = Record<string, unknown>
+
+/** Execute one raw MCP tool call for a specific Harness tool execution. */
+export type ToolCall = (
+  rawName: string,
+  args: Record<string, unknown>,
+  exec: ToolExecution,
+) => Promise<RawMcpResult>
+
 /** Resolved options relevant to tool bridging. */
 export interface ToolBridgeOptions {
   /** Whether a registry conflict is contained or rejects this synchronization. */
   registrationFailure: 'contain' | 'throw'
   serverName: string
   toolCallTimeoutMs: number
+  /** Optional execution router used by session-scoped MCP connections. */
+  callTool?: ToolCall
 }
 
 /** State for one sync generation: the current set of disposers keyed by public name. */
@@ -78,13 +90,13 @@ function listToolsUncached(client: Client, cursor?: string) {
 }
 
 /** Call without the SDK pre-validating an output schema the bridge may not support. */
-function callToolUncached(
+export function callToolUncached(
   client: Client,
   rawName: string,
   args: Record<string, unknown>,
   exec: ToolExecution,
   opts: ToolBridgeOptions,
-) {
+): Promise<RawMcpResult> {
   return client.request(
     { method: 'tools/call', params: { name: rawName, arguments: args } },
     RawCallToolResultSchema,
@@ -318,7 +330,9 @@ function createExecutor(
     // string/number/null). Fallback to {} lets the MCP server produce a
     // specific "missing required param" error the model can learn from.
     const argsObj = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
-    const result = await callToolUncached(client, rawName, argsObj, exec, opts)
+    const result = await (opts.callTool === undefined
+      ? callToolUncached(client, rawName, argsObj, exec, opts)
+      : opts.callTool(rawName, argsObj, exec))
 
     // The SDK may return a legacy `toolResult` shape; normalize to content array.
     if (!Array.isArray(result.content)) {

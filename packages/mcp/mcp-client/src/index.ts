@@ -1,8 +1,9 @@
 /**
  * MCP client bridge plugin: connects to an external MCP server and registers
  * its tools on `ctx.tools` under server-qualified public names
- * (`mcp__<serverName>__<rawName>`). Each plugin instance connects to one MCP
- * server; load multiple instances in `cordis.yml` for multiple servers.
+ * (`mcp__<serverName>__<rawName>`). A global plugin instance connects to one
+ * MCP server; opt-in `session-project` stdio scope creates one supervised child
+ * per DSH Session while keeping one public tool namespace.
  *
  * Namespace plugin (named exports, no default export). Lifecycle is
  * effect-scoped: disposal disconnects from the server, unregisters all tools,
@@ -17,8 +18,13 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { scopeOf } from '@deepseek-ai/dsh-scope'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
-import { RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
-import type { ReconnectConfig } from './connection.ts'
+import {
+  RECONNECT_DEFAULTS,
+  resolveReconnectPolicy,
+  startConnection,
+} from './connection.ts'
+import type { ConnectionHandle, ReconnectConfig, ResolvedReconnectPolicy } from './connection.ts'
+import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 // Side-effect type import: declaration-merges `ctx.tools` onto Context.
 import type {} from '@deepseek-ai/dsh-tools'
 
@@ -64,6 +70,12 @@ export interface StdioConfig {
   env: Record<string, string>
   /** Working directory for the child process. */
   cwd: string
+  /**
+   * Connection scope. `global` preserves the historical one-child behavior;
+   * `session-project` creates one child per DSH Session cwd and routes calls
+   * through the child without changing the public tool names.
+   */
+  scope?: 'global' | 'session-project'
   /** Per-tool-call timeout in milliseconds. */
   toolCallTimeoutMs: number
   /** Fail plugin activation when the initial connection or tool synchronization fails. */
@@ -118,6 +130,7 @@ export const Config = z.union([
     args: z.array(String).default([]),
     env: z.dict(String).default({}),
     cwd: z.string().default(''),
+    scope: z.union([z.const('global'), z.const('session-project')]).default('global'),
     toolCallTimeoutMs: z.number().default(DEFAULT_TOOL_CALL_TIMEOUT_MS),
     failOnStartupError: z.boolean().default(false),
     reconnect: Reconnect,
@@ -167,22 +180,120 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     return () => void names.delete(config.serverName)
   }, 'mcp-client.serverName')
 
-  // The supervisor owns the client/transport generations, the reconnect
-  // loop, and the live tool registrations; disposal stops reconnection,
-  // quiesces in-flight work, and unregisters the current generation.
-  const connection = startConnection(ctx, config, reconnect)
+  // The supervisor owns the client/transport generations, reconnect loop, and
+  // live tool registrations. Session-project mode keeps those same semantics
+  // while routing each execution to a child whose cwd is fixed by its Session.
+  const sessionPool = config.transport === 'stdio' && config.scope === 'session-project'
+    ? new SessionProjectPool(ctx, config, reconnect)
+    : undefined
+  const connection = sessionPool === undefined
+    ? startConnection(ctx, config, reconnect)
+    : sessionPool.start()
 
   ctx.effect(() => {
-    return () => connection.dispose()
+    return () => sessionPool === undefined ? connection.dispose() : sessionPool.dispose()
   }, 'mcp-client.connection')
 
   // Block plugin activation on the initial connection + tool discovery so
   // Cordis consumers observe the tools immediately after the fiber activates.
   // When failOnStartupError is true, a failed initial attempt rejects the
-  // fiber (Cordis rolls it back); otherwise the error is logged and the
-  // supervisor enters its reconnect loop.
+  // fiber (Cordis rolls it back); otherwise the supervisor enters its reconnect
+  // loop and reports the failure through the normal diagnostics.
   const outcome = await connection.ready
   if (outcome.error !== undefined && config.failOnStartupError) {
     throw new Error(`mcp-client(${config.serverName}): initial connection or tool synchronization failed`, { cause: outcome.error })
   }
+}
+
+/**
+ * Routes one registered tool generation to a stable Session-scoped stdio
+ * connection. The public tool registry remains one generation, so existing
+ * namespace, output, and reconnect behavior are reused rather than copied.
+ */
+class SessionProjectPool {
+  private readonly sessions = new Map<string, Promise<ConnectionHandle>>()
+  private defaultConnection: ConnectionHandle | undefined
+  private disposed = false
+
+  constructor(
+    private readonly ctx: Context,
+    private readonly config: StdioConfig,
+    private readonly policy: ResolvedReconnectPolicy,
+  ) {}
+
+  start(): ConnectionHandle {
+    const connection = startConnection(this.ctx, this.config, this.policy, {
+      callTool: (rawName, args, exec) => this.callTool(rawName, args, exec),
+    })
+    this.defaultConnection = connection
+    return connection
+  }
+
+  private async callTool(
+    rawName: string,
+    args: Record<string, unknown>,
+    exec: ToolExecution,
+  ): Promise<Record<string, unknown>> {
+    const session = sessionContext(exec)
+    const defaultConnection = this.defaultConnection
+    if (session === undefined) {
+      if (defaultConnection === undefined) throw new Error('mcp-client: session pool is not started')
+      return defaultConnection.callTool(rawName, args, exec)
+    }
+    const connection = await this.sessionConnection(session)
+    return connection.callTool(rawName, args, exec)
+  }
+
+  private async sessionConnection(session: SessionContext): Promise<ConnectionHandle> {
+    if (this.disposed) throw new Error('mcp-client: session pool is disposed')
+    const existing = this.sessions.get(session.key)
+    if (existing !== undefined) return existing
+
+    const pending = this.openSession(session)
+    this.sessions.set(session.key, pending)
+    try {
+      return await pending
+    } catch (error) {
+      if (this.sessions.get(session.key) === pending) this.sessions.delete(session.key)
+      throw error
+    }
+  }
+
+  private async openSession(session: SessionContext): Promise<ConnectionHandle> {
+    const connection = startConnection(this.ctx, {
+      ...this.config,
+      cwd: session.cwd,
+      // Initial failure is surfaced to the first caller; the supervisor still
+      // owns bounded reconnects after a successful connection.
+      failOnStartupError: false,
+    }, this.policy, { registerTools: false })
+    const outcome = await connection.ready
+    if (outcome.error !== undefined) {
+      await connection.dispose()
+      throw new Error(`mcp-client(${this.config.serverName}): Session MCP connection failed`, { cause: outcome.error })
+    }
+    return connection
+  }
+
+  async dispose(): Promise<void> {
+    this.disposed = true
+    const defaultConnection = this.defaultConnection
+    this.defaultConnection = undefined
+    const pending = [...this.sessions.values()]
+    this.sessions.clear()
+    const settled = await Promise.allSettled(pending)
+    const connections = settled.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])
+    if (defaultConnection !== undefined) connections.push(defaultConnection)
+    await Promise.allSettled(connections.map(connection => connection.dispose()))
+  }
+}
+
+type SessionContext = { key: string; cwd: string }
+
+function sessionContext(exec: ToolExecution): SessionContext | undefined {
+  const session = exec.agent?.session
+  const cwd = session?.header?.cwd
+  if (typeof cwd !== 'string' || cwd.length === 0) return undefined
+  const id = session?.header?.id
+  return { key: typeof id === 'string' && id.length > 0 ? id : cwd, cwd }
 }
