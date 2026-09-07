@@ -4,6 +4,7 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { createScope } from '@deepseek-ai/dsh-scope'
@@ -13,7 +14,7 @@ import type { Config } from '@deepseek-ai/dsh-mcp-client'
 
 // vi.mock factories are hoisted above every import/const, so the mock fns and
 // class must be created inside vi.hoisted to exist when the factories run.
-const { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotificationHandler, MockClient } = vi.hoisted(() => {
+const { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotificationHandler, mockTransport, MockClient } = vi.hoisted(() => {
   const mockConnect = vi.fn<() => Promise<void>>()
   const mockClose = vi.fn<() => Promise<void>>()
   const mockListTools = vi.fn<(_params?: Record<string, unknown>) => Promise<unknown>>()
@@ -21,6 +22,7 @@ const { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotification
     _params?: Record<string, unknown>, _compatibilitySchema?: unknown, _options?: unknown,
   ) => Promise<unknown>>()
   const mockSetNotificationHandler = vi.fn()
+  const mockTransport = vi.fn(function (_options: Record<string, unknown>) { return {} })
   const mockRequest = vi.fn(async (
     request: { method: string; params?: Record<string, unknown> },
     _schema: unknown,
@@ -38,7 +40,7 @@ const { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotification
     request = mockRequest
     setNotificationHandler = mockSetNotificationHandler
   }
-  return { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotificationHandler, MockClient }
+  return { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotificationHandler, mockTransport, MockClient }
 })
 
 vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
@@ -46,7 +48,7 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
 }))
 
 vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
-  StdioClientTransport: vi.fn(),
+  StdioClientTransport: mockTransport,
 }))
 
 vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({
@@ -124,6 +126,17 @@ describe('mcp-client plugin module exports', () => {
       command: 'echo',
     } as never)
     expect(resolved.serverName).toBe('github-prod_1')
+    expect((resolved as Extract<Config, { transport: 'stdio' }>).scope).toBe('global')
+  })
+
+  it('Config schema accepts the opt-in session-project scope', () => {
+    const resolved = ConfigSchema({
+      transport: 'stdio',
+      serverName: 'session-srv',
+      command: 'echo',
+      scope: 'session-project',
+    } as never)
+    expect((resolved as Extract<Config, { transport: 'stdio' }>).scope).toBe('session-project')
   })
 
   it('Config schema materializes reconnect defaults and merges partial overrides', () => {
@@ -199,6 +212,35 @@ describe('apply (plugin lifecycle)', () => {
     await activation
     expect(ctx.tools.get('mcp__srv__remote')).toBeDefined()
     await fiber.dispose()
+  })
+
+  it('routes session-project calls to one child per immutable Session cwd', async () => {
+    await apply(ctx, { ...stdioConfig, scope: 'session-project' })
+    expect(mockTransport).toHaveBeenCalledTimes(1)
+
+    const execute = (id: string, cwd: string) => ctx.tools.execute({
+      signal: new AbortController().signal,
+      callId: ToolCallId(`session-${id}`),
+      name: 'mcp__srv__remote',
+      arguments: {},
+      agent: { session: { header: { id, cwd } } } as never,
+    })
+
+    try {
+      const first = await execute('a', 'D:\\repo-a')
+      expect(first.isError).toBe(false)
+      expect(mockTransport).toHaveBeenLastCalledWith(expect.objectContaining({ cwd: 'D:\\repo-a' }))
+      expect(mockTransport).toHaveBeenCalledTimes(2)
+
+      await execute('a', 'D:\\repo-a')
+      expect(mockTransport).toHaveBeenCalledTimes(2)
+
+      await execute('b', 'D:\\repo-b')
+      expect(mockTransport).toHaveBeenLastCalledWith(expect.objectContaining({ cwd: 'D:\\repo-b' }))
+      expect(mockTransport).toHaveBeenCalledTimes(3)
+    } finally {
+      await ctx.fiber.dispose()
+    }
   })
 
   it('rejects a duplicate serverName at load and leaves the first instance intact', async () => {
