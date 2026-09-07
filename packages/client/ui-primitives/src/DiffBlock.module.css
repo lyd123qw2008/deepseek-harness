@@ -28,10 +28,10 @@
 }
 
 .body {
+  box-sizing: border-box;
   padding: 12px 14px;
   font: var(--dsw-font-markdown-code-block);
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: auto;
 }
 
 /* No wrapping, no word-break: a diff is read by its indentation. The two
@@ -116,30 +116,6 @@
 
 .add .inlineChanged {
   background-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 22%, transparent);
-}
-
-.context {
-  color: var(--dsw-alias-label-secondary);
-}
-
-.context::before {
-  content: '  ';
-}
-
-.expand {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: none;
-  background-color: transparent;
-  color: var(--dsw-alias-label-tertiary);
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
-.expand:hover {
-  color: var(--dsw-alias-label-secondary);
 }
 
 /* The change summary, dim under the body: `└ +A -R · N file(s)`, the same
