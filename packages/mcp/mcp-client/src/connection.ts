@@ -22,7 +22,8 @@ import type { ServerContext } from './server-context.ts'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { createTransport } from './transport.ts'
 import { syncTools } from './tools.ts'
-import type { ToolBridgeOptions, ToolDisposers } from './tools.ts'
+import type { ToolBridgeOptions, ToolCall, ToolDisposers } from './tools.ts'
+import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { Config } from './index.ts'
 
 /** Automatic reconnect policy for one MCP server connection. */
@@ -99,6 +100,14 @@ export interface ConnectionOutcome {
   error?: unknown
 }
 
+/** Optional behavior for a supervised MCP connection. */
+export interface ConnectionStartOptions {
+  /** Skip tool discovery and registration for pool members that only serve calls. */
+  registerTools?: boolean
+  /** Route registered tool executions through an outer connection pool. */
+  callTool?: ToolCall
+}
+
 /** Handle for one plugin instance's supervised connection. */
 export interface ConnectionHandle extends ServerContext {
   /**
@@ -113,6 +122,8 @@ export interface ConnectionHandle extends ServerContext {
    * unregister every tool this server still owns.
    */
   dispose(): Promise<void>
+  /** Execute one raw MCP tool call on the connection's current generation. */
+  callTool(rawName: string, args: Record<string, unknown>, exec: ToolExecution): Promise<unknown>
 }
 
 /**
@@ -122,15 +133,22 @@ export interface ConnectionHandle extends ServerContext {
  * @param ctx - Cordis context providing the `tools` registry and logger.
  * @param config - Resolved plugin config selecting the transport and server identity.
  * @param policy - Resolved reconnect policy from {@link resolveReconnectPolicy}.
+ * @param options - Optional tool-registration and execution-routing behavior.
  * @returns Handle with a `ready` promise for startup-await and a `dispose` for teardown.
  */
-export function startConnection(ctx: Context, config: Config, policy: ResolvedReconnectPolicy): ConnectionHandle {
+export function startConnection(
+  ctx: Context,
+  config: Config,
+  policy: ResolvedReconnectPolicy,
+  options: ConnectionStartOptions = {},
+): ConnectionHandle {
   const label = `mcp-client(${config.serverName})`
   const incompleteDisposalMessage = `${label}: transport closure could not be confirmed during disposal — server shutdown may be incomplete`
   const opts: ToolBridgeOptions = {
     registrationFailure: 'contain',
     serverName: config.serverName,
     toolCallTimeoutMs: config.toolCallTimeoutMs,
+    ...options.callTool === undefined ? {} : { callTool: options.callTool },
   }
   // The initial sync uses 'throw' when failOnStartupError is configured, so
   // a registration conflict propagates to the startup-await path. Re-syncs
@@ -264,7 +282,9 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
           tools: {
             autoRefresh: false,
             debounceMs: 0,
-            onChanged: () => { void refreshTools() },
+            onChanged: () => {
+              if (options.registerTools !== false) void refreshTools()
+            },
           },
         },
       },
@@ -320,7 +340,9 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
       if (Buffer.byteLength(instructions) > maxInstructionBytes) {
         throw new Error(`${label}: server instructions exceed maxInstructionBytes (${maxInstructionBytes})`)
       }
-      await enqueueSync(generation, startup ? startupOpts : opts)
+      if (options.registerTools !== false) {
+        await enqueueSync(generation, startup ? startupOpts : opts)
+      }
     } catch (error) {
       if (firstAttemptError === undefined) firstAttemptError = error
       // Disposal clears current ownership before it closes the generation, so
@@ -384,6 +406,14 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
             return assertNever(request)
         }
       },
+    },
+    async callTool(rawName: string, args: Record<string, unknown>, exec: ToolExecution): Promise<unknown> {
+      const generation = client
+      if (!generation || connectedAt === undefined) throw new Error(`${label}: server is disconnected`)
+      return generation.callTool(
+        { name: rawName, arguments: args },
+        { signal: exec.signal, timeout: config.toolCallTimeoutMs },
+      )
     },
     async dispose(): Promise<void> {
       disposed = true
