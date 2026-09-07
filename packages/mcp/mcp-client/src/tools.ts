@@ -24,12 +24,21 @@ import { assertSupportedJsonSchema } from '@deepseek-ai/dsh-tools'
 import type { JsonSchemaNode } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
+/** Route one MCP tool call to the connection selected for its execution. */
+export type ToolCall = (
+  rawName: string,
+  args: Record<string, unknown>,
+  exec: ToolExecution,
+) => Promise<unknown>
+
 /** Resolved options relevant to tool bridging. */
 export interface ToolBridgeOptions {
   /** Whether a registry conflict is contained or rejects this synchronization. */
   registrationFailure: 'contain' | 'throw'
   serverName: string
   toolCallTimeoutMs: number
+  /** Optional execution router used by session-scoped MCP connections. */
+  callTool?: ToolCall
 }
 
 /** State for one sync generation: the current set of disposers keyed by public name. */
@@ -135,10 +144,12 @@ export async function syncTools(
       inputSchema: tool.inputSchema,
       outputSchema: tool.outputSchema,
       taskRequired: tool.execution?.taskSupport === 'required',
-      call: (args, execution) => client.callTool(
-        { name: tool.name, arguments: args },
-        { signal: execution.signal, timeout: opts.toolCallTimeoutMs, toolDefinition: tool },
-      ),
+      call: (args, execution) => opts.callTool === undefined
+        ? client.callTool(
+          { name: tool.name, arguments: args },
+          { signal: execution.signal, timeout: opts.toolCallTimeoutMs, toolDefinition: tool },
+        )
+        : opts.callTool(tool.name, args, execution),
     }))
   }
 
