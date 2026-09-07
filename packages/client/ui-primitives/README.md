@@ -78,7 +78,7 @@ The nearest `MarkdownDelegateProvider` supplies optional `openExternalLink` and 
 
 `MarkdownText` defaults to `variant="body"`. Use `variant="compact"` for secondary content: its 13px text and 20px line height follow the content-size setting, all heading levels use the same size with weight 600, and paragraphs and lists use tighter spacing. Text, links, and code keep the tertiary color; dotted underlines distinguish links. Code headers scroll with their blocks. Tables and math stay enabled at the surrounding text size and scroll horizontally within the available width. Both variants share the parser and streaming cache.
 
-`DiffBlock` compares the old and new content by line. It shows actual additions and deletions with up to three neutral context lines on each side, separates distant changes with `⋯`, and excludes shared context from both summary and footer totals. Search stops beyond 256 line additions/deletions per fragment; those fragments display and count the complete old and new contents as a coarse replacement, including shared lines. Copy includes the full displayed diff with its prefixes. A final newline is treated as a terminator; differences only in the presence of a final newline are not displayed.
+`DiffBlock` reconstructs neutral context and change rows, shows optional old/new file line numbers, and highlights changed words for one-line replacements; it keeps every changed row, reduces each unchanged segment to one context preview line, and puts a vertical scrollbar on the body after its ten-line default viewport is filled. Call-time or older hunks without line starts keep the marker-only fallback.
 
 `JsonTree` clamps collapsed strings to `collapsedStringLines` (three by default). Expanded strings show raw text, retain sibling commas, and fit within the window and outer scrolling containers. Resize and ancestor-scroll events update that limit. Row copy feedback updates independently of JSON value rendering; pending clipboard writes cannot update a different row or an unmounted tree.
 
@@ -114,7 +114,7 @@ While a reply streams, `MarkdownText` parses incrementally: all but the trailing
 
 ### Geometry and overflow
 
-The output cards share one geometry model: `white-space: pre` with horizontal scrolling so column-aligned content keeps its alignment, and a head-plus-tail slice behind an expand button past `maxLines` (default 16) so a long body never stretches the card. `TerminalBlock` parses ANSI into React spans with a per-line column buffer for cursor movement, honoring erase-in-line, tab stops, and character width.
+The output cards share one geometry model: `white-space: pre` with horizontal scrolling so column-aligned content keeps its alignment. `TerminalBlock` uses a head-plus-tail slice past `maxLines` (default 16); `DiffBlock` keeps all changed rows, renders one line from each unchanged segment, and gives the body a ten-line default viewport with vertical scrolling for additional rows. Diff rows use separate marker, optional line-number, and content columns; the footer counts changed rows rather than contextual rows. `TerminalBlock` parses ANSI into React spans with a per-line column buffer for cursor movement, honoring erase-in-line, tab stops, and character width.
 
 </details>
 

@@ -1,7 +1,10 @@
 // An enclosing `[data-conversation-scroll]` owns scrolling when present;
 // otherwise this view owns it. Each row subscribes to one stable node key.
 
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
+import {
+  memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
+  type ComponentProps, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent,
+} from 'react'
 import type {
   ConversationTimelineSnapshot, RenderMessageImages,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -304,6 +307,8 @@ export function ChatView({
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const columnRef = useRef<HTMLDivElement | null>(null)
+  /** One pinned-row disclosure must not be mistaken for streaming growth. */
+  const disclosureResizeRef = useRef<{ scrollTop: number } | null>(null)
   // A saved position starts disarmed; the first layout effect synchronously
   // restores it and normalizes a floor-clamped position back to following.
   const [atBottom, setAtBottom] = useState(() => chatScroll.read() === null)
@@ -630,6 +635,29 @@ export function ChatView({
       chatScroll.save(null)
     }
   }
+
+  const captureDisclosureTarget = (target: EventTarget | null): void => {
+    if (!atBottomRef.current || !(target instanceof Element)) return
+    const row = target.closest<HTMLElement>('[data-disclosure-row][data-expandable][role="button"]')
+    if (row === null || row.getAttribute('aria-expanded') === 'true' || target.closest('button') !== null) return
+    const local = listRef.current
+    if (local === null) return
+    const scrollport = scrollerOf(local)
+    disclosureResizeRef.current = { scrollTop: scrollport.scrollTop }
+    // A disclosure is reader input. Disarm live-tail following before the
+    // expanded body changes the column or a new streamed row commits.
+    atBottomRef.current = false
+    setAtBottom(false)
+    const position = scrollPosition(local, scrollport)
+    if (position !== null) chatScroll.save(position)
+  }
+  const captureDisclosureClick = (event: ReactMouseEvent<HTMLDivElement>): void => {
+    captureDisclosureTarget(event.target)
+  }
+  const captureDisclosureKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    if (event.key === 'Enter' || event.key === ' ') captureDisclosureTarget(event.target)
+  }
+
   // Streaming, tool disclosures, and other flow changes resize the column;
   // the sticky composer resizes outside it. This observer owns ChatView's
   // dynamic-height follow decisions and writes only while the reader is pinned.
@@ -642,7 +670,22 @@ export function ChatView({
     // Flow-height changes (image loads, tool disclosures) move rows across the
     // reading line without a scroll event, so the active mark resyncs here too.
     const observer = new ResizeObserver(() => {
-      followRef.current?.()
+      const preserved = disclosureResizeRef.current
+      disclosureResizeRef.current = null
+      if (preserved === null) {
+        followRef.current?.()
+      } else {
+        scrollport.scrollTop = preserved.scrollTop
+        observedTopRef.current = scrollport.scrollTop
+        const isAtBottom = scrollport.scrollHeight - scrollport.scrollTop - scrollport.clientHeight <= FOLLOW_THRESHOLD + 1
+        atBottomRef.current = isAtBottom
+        setAtBottom(isAtBottom)
+        if (isAtBottom) chatScroll.save(null)
+        else {
+          const position = scrollPosition(local, scrollport)
+          if (position !== null) chatScroll.save(position)
+        }
+      }
       activeTurnRef.current?.()
     })
     observer.observe(column)
@@ -760,7 +803,12 @@ export function ChatView({
 
   return (
     <div className={css.root}>
-      <div ref={listRef} className={css.scroll}>
+      <div
+        ref={listRef}
+        className={css.scroll}
+        onClickCapture={captureDisclosureClick}
+        onKeyDownCapture={captureDisclosureKeyDown}
+      >
         <TurnNavigator
           items={railItems}
           activeTurn={activeTurn}
