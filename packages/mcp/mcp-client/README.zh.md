@@ -57,6 +57,7 @@ kind: "package-reference"
 | `transport` | 必填 | `stdio` 或 `streamable-http` |
 | `serverName` | 必填 | 服务器工具名称的 namespace；`[A-Za-z0-9_-]{1,32}`，在一个注册作用域内唯一 |
 | `command` / `args` / `env` / `cwd` | — | stdio：可执行文件、参数、合并到清洗过的环境之上的额外环境变量、工作目录 |
+| `scope` | `global` | 仅限 stdio：`global` 保持一个子进程；`session-project` 为每个 DSH Session cwd 创建一个子进程并通过它调用 |
 | `url` / `headers` | — | streamable-http：端点 URL 与额外请求标头 |
 | `toolCallTimeoutMs` | `60,000` | 每次 `tools/call` 调用的超时 |
 | `failOnStartupError` | `false` | 初始连接或工具同步失败时拒绝插件激活 |
@@ -66,6 +67,32 @@ kind: "package-reference"
 | `reconnect.maxAttempts` | `10` | 每次中断内连续失败尝试次数上限，超出后放弃 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-mcp-client)是每个受支持字段及其 JSDoc 的穷尽式真源。
+
+### Session-project stdio 作用域
+
+当 MCP 服务器必须继承 DSH Session 创建时固定的工程上下文时，使用
+`scope: session-project`。桥接层仍然只注册一组公开工具，但会为每个
+Session 创建并复用一个受监督的 stdio 子进程。该子进程继承 Session 不可变
+`header.cwd` 作为进程工作目录；调用不会修改共享进程，也不会注入某个服务
+专用的 project 参数。默认的 `global` 作用域保持原有行为。
+
+这适合 Engram 这类根据 cwd 自动识别工程的服务。Streamable HTTP 没有进程工作
+目录，因此仍然使用全局作用域。Session 子进程随 MCP 插件一起 dispose；每个
+子进程独立使用重连策略。
+
+```yaml
+- id: memory-engram
+  name: '@deepseek-ai/dsh-mcp-client'
+  config:
+    serverName: engram
+    transport: stdio
+    scope: session-project
+    command: engram
+    args: [mcp, '--tools=agent']
+    cwd: !!js dshHomePath('.')
+    env:
+      ENGRAM_DATA_DIR: !!js dshHomePath('storages/engram')
+```
 
 启动后，服务器的工具会以 `mcp__<serverName>__<tool>` 形式出现——试着用一条提示词调用其中一个。如果初始连接失败，harness 仍会启动，但该服务器的工具不会出现，并会记录一条错误；设置 `failOnStartupError: true` 可让启动失败改为中止 harness。
 
@@ -113,15 +140,15 @@ kind: "package-reference"
 
 | 文件 | 职责 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | 插件入口：`Config` schema、`serverName` 预留、激活等待 |
-| [`src/connection.ts`](src/connection.ts) | 连接监督器：客户端世代、重连策略、尝试预算、dispose |
+| [`src/index.ts`](src/index.ts) | 插件入口：`Config` schema、`serverName` 预留、激活等待、session-project 连接池 |
+| [`src/connection.ts`](src/connection.ts) | 连接监督器：客户端世代、重连策略、尝试预算、dispose、原始调用句柄 |
 | [`src/tools.ts`](src/tools.ts) | 工具桥接：发现、命名、注册交换、执行、图片投影 |
 | [`src/transport.ts`](src/transport.ts) | 传输工厂：带清洗环境的 stdio spawn、Streamable HTTP |
 | — | 不发布运行时不变式伴生入口；世代只能通过工具注册表观察。 |
 
 ### 生命周期与同步
 
-`apply` 解析重连策略、在当前注册作用域内预留 `serverName`、启动监督器，并等待初始连接加发现完成。独立 Agent 作用域可以复用相同 namespace，因为其工具与传输彼此隔离；同一作用域内重复会在加载时失败。监督器把所有同步——初始、通知与重连——串行到同一条队列，因此两次同步绝不会交错执行各自的先 dispose 后注册交换。dispose 会取消待执行的重连、关闭活动客户端、等待进行中的尝试与排队同步完全停稳，然后注销当前世代。
+`apply` 解析重连策略、在当前注册作用域内预留 `serverName`、启动监督器，并等待初始连接加发现完成。独立 Agent 作用域可以复用相同 namespace，因为其工具与传输彼此隔离；同一作用域内重复会在加载时失败。在 `session-project` 作用域中，初始连接负责发现并注册一组公开工具，而每个调用 Session 会路由到一个 cwd 固定为该 Session 不可变 header 的受监督子进程。监督器把所有同步——初始、通知与重连——串行到同一条队列，因此两次同步绝不会交错执行各自的先 dispose 后注册交换。dispose 会取消待执行的重连、关闭活动客户端与所有 Session 子进程、等待进行中的尝试与排队同步完全停稳，然后注销当前世代。[自动重连 Agent Note](../../../.agents/notes/implemented/feature/2026-08-06-mcp-client-auto-reconnect.zh.md) 拥有重连决策。
 
 监督器监听 `notifications/tools/list_changed` 并排队一次重新同步；获取阶段失败时保留上一世代注册，注册冲突则回滚本次尝试的世代。每次中断共享一个尝试预算：连续失败达到 `maxAttempts` 次后工具被注销、重连停止；连接存活超过 `maxDelayMs` 会重置预算。
 
@@ -194,6 +221,7 @@ kind: "package-reference"
 - **图片是唯一的持久丰富结果桥接**——PNG、JPEG、WebP 与 GIF 在确切能力得到证明后进入 Native 上下文。音频与嵌入资源载荷仍只存在于执行局部并带明确诊断，资源链接只以文本保留名称与 URI。
 - **不强制执行不受支持的 MCP 输出 schema**——已声明 schema 使用 harness 子集之外的词汇时，`structuredContent` 回退为 `JsonValue`。
 - **要求基于任务的 MCP 工具在调用时被拒绝**——要求使用基于任务的执行（task-based execution）扩展的工具会抛出异常而非被桥接；该扩展未实现。
+- **session-project stdio 为每个 Session 保留一个受监督子进程**——这样可以防止后续调用扩大已有 Session 的 cwd，但并发 Session 较多时，直到插件 dispose 前也会保留相应数量的 MCP 子进程。
 
 <a id="dev-note"></a>
 ### 开发备注

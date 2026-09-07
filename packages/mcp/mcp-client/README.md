@@ -57,6 +57,7 @@ Add one entry per server; nothing else is required. After the harness starts, th
 | `transport` | required | `stdio` or `streamable-http` |
 | `serverName` | required | Namespace for the server's tool names; `[A-Za-z0-9_-]{1,32}`, unique inside one registration scope |
 | `command` / `args` / `env` / `cwd` | — | stdio: executable, arguments, extra env merged over scrubbed ambient env, working directory |
+| `scope` | `global` | stdio only: `global` keeps one child; `session-project` creates one child per DSH Session cwd and routes calls through it |
 | `url` / `headers` | — | streamable-http: endpoint URL and extra request headers |
 | `toolCallTimeoutMs` | `60,000` | Timeout per `tools/call` invocation |
 | `failOnStartupError` | `false` | Reject plugin activation when the initial connection or tool synchronization fails |
@@ -66,6 +67,34 @@ Add one entry per server; nothing else is required. After the harness starts, th
 | `reconnect.maxAttempts` | `10` | Consecutive failed attempts per outage before giving up |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-mcp-client) is the exhaustive source for every accepted field.
+
+### Session-project stdio scope
+
+Use `scope: session-project` when the MCP server must inherit the project
+context that was fixed when a DSH Session was created. The bridge keeps the
+public tool generation global, but creates and reuses a supervised stdio child
+for each Session. That child receives the Session's immutable `header.cwd` as
+its process cwd; calls do not mutate a shared process or inject a server-
+specific project argument. The default `global` scope remains unchanged.
+
+This is useful for servers such as Engram that auto-detect their project from
+cwd. Streamable HTTP remains global because it has no process working directory.
+Session-scoped children are disposed with the MCP plugin; reconnect policy is
+applied independently to each child.
+
+```yaml
+- id: memory-engram
+  name: '@deepseek-ai/dsh-mcp-client'
+  config:
+    serverName: engram
+    transport: stdio
+    scope: session-project
+    command: engram
+    args: [mcp, '--tools=agent']
+    cwd: !!js dshHomePath('.')
+    env:
+      ENGRAM_DATA_DIR: !!js dshHomePath('storages/engram')
+```
 
 After startup, the server's tools appear as `mcp__<serverName>__<tool>` — try a prompt that uses one. If the initial connection fails, the harness still starts but no tools from that server appear, and an error is logged; set `failOnStartupError: true` to make a startup failure abort the harness instead.
 
@@ -113,15 +142,15 @@ This section explains the design decisions behind the bridge and points at the c
 
 | File | Role |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Plugin entry: `Config` schema, `serverName` reservation, activation await |
-| [`src/connection.ts`](src/connection.ts) | Connection supervisor: client generations, reconnect policy, attempt budget, disposal |
+| [`src/index.ts`](src/index.ts) | Plugin entry: `Config` schema, `serverName` reservation, activation await, session-project pool |
+| [`src/connection.ts`](src/connection.ts) | Connection supervisor: client generations, reconnect policy, attempt budget, disposal, raw call handle |
 | [`src/tools.ts`](src/tools.ts) | Tool bridge: discovery, naming, registration swap, execution, image projection |
 | [`src/transport.ts`](src/transport.ts) | Transport factory: stdio spawn with scrubbed env, Streamable HTTP |
 | — | No runtime invariant companion is published; MCP generations contribute through the tool registry, but the bridge exposes no independent server-to-tool snapshot after an asynchronous resync. |
 
 ### Lifecycle and sync
 
-`apply` resolves the reconnect policy, reserves the `serverName` inside the current registration scope, starts the supervisor, and awaits the initial connection plus discovery. Independent Agent scopes may reuse the same namespace because their tools and transports are isolated; a duplicate inside one scope fails at load. The supervisor serializes every sync — initial, notification, and reconnect — through one queue so two syncs can never interleave their dispose-previous/register-next swap. Disposal cancels pending reconnects, closes the live client, waits for the in-flight attempt and queued syncs to quiesce, and unregisters the current generation.
+`apply` resolves the reconnect policy, reserves the `serverName` inside the current registration scope, starts the supervisor, and awaits the initial connection plus discovery. Independent Agent scopes may reuse the same namespace because their tools and transports are isolated; a duplicate inside one scope fails at load. In `session-project` scope, the initial connection discovers and registers one public tool generation, while each calling Session is routed to a supervised child whose cwd is fixed from that Session's immutable header. The supervisor serializes every sync — initial, notification, and reconnect — through one queue so two syncs can never interleave their dispose-previous/register-next swap. Disposal cancels pending reconnects, closes the live client and all Session children, waits for in-flight attempts and queued syncs to quiesce, and unregisters the current generation. The [auto-reconnect Agent Note](../../../.agents/notes/implemented/feature/2026-08-06-mcp-client-auto-reconnect.md) owns the reconnect decision.
 
 The supervisor listens for `notifications/tools/list_changed` and queues a re-sync; a fetch-phase failure keeps the previous generation registered, while a registration conflict rolls back the attempted generation. Each outage shares one attempt budget: after `maxAttempts` consecutive failures the tools are unregistered and reconnection stops, and a connection that stays up past `maxDelayMs` resets the budget.
 
@@ -194,6 +223,7 @@ These limits describe what you cannot do with this plugin and when it needs oper
 - **Image is the only durable rich-result bridge** — PNG, JPEG, WebP, and GIF enter Native context after exact capability proof. Audio and embedded-resource payloads remain execution-local with explicit diagnostics, while resource links preserve only their name and URI as text.
 - **Unsupported MCP output schemas are not enforced** — `structuredContent` falls back to `JsonValue` when the advertised schema uses vocabulary outside the harness subset.
 - **Task-required MCP tools are rejected at call time** — a tool that requires the task-based execution extension throws instead of bridging; the extension is not implemented.
+- **Session-project stdio uses one supervised child per Session** — this prevents a later call from widening an earlier Session's cwd, but a deployment with many concurrent Sessions also owns many MCP child processes until the plugin is disposed.
 
 <a id="dev-note"></a>
 ### Dev Note
