@@ -1,0 +1,22 @@
+diff --git a/dist/api/openai-codex-responses.js b/dist/api/openai-codex-responses.js
+index bf979d439f531c62494291050722f7e93435280d..04e4019805023f83964f87ad500c403c76ac3f0e 100644
+--- a/dist/api/openai-codex-responses.js
++++ b/dist/api/openai-codex-responses.js
+@@ -383,7 +383,7 @@ function buildRequestBody(model, context, options, cacheSessionId, grammarToolIn
+         deferredTools: toolPlacement.deferred,
+         deferredToolsMode,
+         toolOptions: {
+-            strict: null,
++            strict: false,
+             supportsStrictMode,
+             supportsOpenAIGrammarTools,
+         },
+@@ -408,7 +408,7 @@ function buildRequestBody(model, context, options, cacheSessionId, grammarToolIn
+     }
+     if (toolPlacement.immediate.length > 0) {
+         body.tools = convertResponsesTools(toolPlacement.immediate, {
+-            strict: null,
++            strict: false,
+             supportsStrictMode,
+             supportsOpenAIGrammarTools,
+         });
