@@ -2652,7 +2652,7 @@ describe('ChatView', () => {
     }
 
     const h = makeHarness({ nodes: [toolResult(3, 'edit', 'edit')] })
-    h.setNodeRenderer((_key, owner) => {
+    h.setNodeRenderer((_key: string, owner: object) => {
       const routed = owner as RoutedChatNodeOwner
       return routed.node.kind === 'tool-call' ? <ExpandableTool /> : null
     })
