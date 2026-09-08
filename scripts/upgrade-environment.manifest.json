@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "path": "sessions",
+      "kind": "session-log",
+      "strategy": "union",
+      "sourceMustExist": true,
+      "copyTime": "exact"
+    },
+    {
+      "path": "attachments",
+      "kind": "attachment",
+      "strategy": "union",
+      "sourceMustExist": true,
+      "copyTime": "exact"
+    },
+    {
+      "path": ".agent-presets",
+      "kind": "agent-preset",
+      "strategy": "union",
+      "sourceMustExist": true,
+      "copyTime": "presence"
+    },
+    {
+      "path": "profiles",
+      "kind": "profile",
+      "strategy": "union",
+      "sourceMustExist": true,
+      "copyTime": "presence",
+      "ignoredDescendants": ["node_modules"]
+    },
+    {
+      "path": "settings.yaml",
+      "kind": "settings",
+      "strategy": "union",
+      "sourceMustExist": true,
+      "copyTime": "exact"
+    },
+    {
+      "path": "storages/workspace.json",
+      "kind": "workspace",
+      "strategy": "union",
+      "sourceMustExist": true,
+      "copyTime": "exact"
+    },
+    {
+      "path": "tools",
+      "kind": "runtime-tool",
+      "strategy": "union",
+      "sourceMustExist": false,
+      "copyTime": "exact"
+    },
+    {
+      "path": "storages/engram/engram.db",
+      "kind": "engram-sqlite",
+      "strategy": "sqlite",
+      "sourceMustExist": false,
+      "copyTime": "skip",
+      "companions": [
+        "storages/engram/engram.db-shm",
+        "storages/engram/engram.db-wal"
+      ]
+    },
+    {
+      "path": "storages/session-query.sqlite",
+      "kind": "session-query-sqlite",
+      "strategy": "sqlite",
+      "sourceMustExist": false,
+      "copyTime": "skip",
+      "companions": [
+        "storages/session-query.sqlite-shm",
+        "storages/session-query.sqlite-wal"
+      ]
+    },
+    {
+      "path": "storages/session_projcache",
+      "kind": "session-projection-cache",
+      "strategy": "union",
+      "sourceMustExist": false,
+      "copyTime": "presence"
+    },
+    {
+      "path": "storages/lsp",
+      "kind": "lsp-state",
+      "strategy": "union",
+      "sourceMustExist": false,
+      "copyTime": "presence"
+    },
+    {
+      "path": ".dsh/skills",
+      "kind": "user-skill",
+      "strategy": "union",
+      "sourceMustExist": false,
+      "copyTime": "presence"
+    }
+  ],
+  "excluded": [
+    {
+      "path": ".credentials.yaml",
+      "kind": "secret",
+      "policy": "isolate"
+    },
+    {
+      "path": ".anonymous-user-id",
+      "kind": "machine-identity",
+      "policy": "isolate"
+    },
+    {
+      "path": "logs",
+      "kind": "runtime-log",
+      "policy": "recreate"
+    },
+    {
+      "path": "profiles/node_modules",
+      "kind": "profile-install-tree",
+      "policy": "reinstall"
+    },
+    {
+      "path": "profiles/web/node_modules",
+      "kind": "profile-install-tree",
+      "policy": "reinstall"
+    }
+  ]
+}
