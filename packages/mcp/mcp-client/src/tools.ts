@@ -89,7 +89,15 @@ function listToolsUncached(client: Client, cursor?: string) {
   )
 }
 
-/** Call without the SDK pre-validating an output schema the bridge may not support. */
+/**
+ * Call without the SDK pre-validating an output schema the bridge may not support.
+ * @param client - Connected MCP Client instance used for the raw call.
+ * @param rawName - The MCP server's tool name on the wire.
+ * @param args - Validated tool arguments sent to the server.
+ * @param exec - Harness execution supplying cancellation and identity.
+ * @param opts - Bridge options supplying the call timeout.
+ * @returns The raw MCP result record.
+ */
 export function callToolUncached(
   client: Client,
   rawName: string,

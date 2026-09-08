@@ -30,4 +30,4 @@ The first search still pays the cost of inspecting and indexing sessions absent 
 
 The derived index remains disposable and separate from JSONL session persistence. A changed event still produces a different fingerprint through the length-framed sequence, while event contents are not exposed through the fingerprint itself.
 
-This fix is an implementation correction under the [SQLite FTS5 session search decision](../feature/2026-07-10-sqlite-session-query-provider.md); it does not change search authorization, indexing scope, tokenizer behavior, or cursor semantics.
+This fix is an implementation correction under the [SQLite FTS5 session search decision](../../archived/feature/2026-07-10-sqlite-session-query-provider.md); it does not change search authorization, indexing scope, tokenizer behavior, or cursor semantics.
