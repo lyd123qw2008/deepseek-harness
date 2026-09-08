@@ -78,10 +78,7 @@ Session. That child receives the Session's immutable `header.cwd` as its process
 cwd; calls do not mutate a shared process or inject a server-specific project
 argument. The default `global` scope remains unchanged.
 
-This is useful for servers such as Engram that auto-detect their project from
-cwd. Streamable HTTP remains global because it has no process working directory.
-Session-scoped children are disposed with the MCP plugin; reconnect policy is
-applied independently to each child.
+This is useful for servers such as Engram that auto-detect their project from cwd. Streamable HTTP remains global because it has no process working directory. Session-scoped children are disposed with the MCP plugin; reconnect policy is applied independently to each child.
 
 ```yaml
 - id: memory-engram
@@ -154,7 +151,7 @@ The exported `createMcpToolDefinition(ctx, options)` adapts an upstream tool sch
 
 ### Lifecycle and sync
 
-`apply` resolves the reconnect policy, reserves the `serverName` inside the current registration scope, starts the supervisor, and awaits the initial connection plus discovery. Independent Agent scopes may reuse the same namespace because their tools and transports are isolated; a duplicate inside one scope fails at load. In `session-project` scope, the initial connection discovers and registers one public tool generation, while each calling Session is routed to a supervised child whose cwd is fixed from that Session's immutable header. The supervisor serializes every sync — initial, notification, and reconnect — through one queue so two syncs can never interleave their dispose-previous/register-next swap. Disposal cancels pending reconnects, closes the live client and all Session children, waits for in-flight attempts and queued syncs to quiesce, and unregisters the current generation.
+`apply` resolves the reconnect policy, reserves the `serverName` inside the current registration scope, starts the supervisor, and awaits the initial connection plus discovery. Independent Agent scopes may reuse the same namespace because their tools and transports are isolated; a duplicate inside one scope fails at load. In `session-project` scope, the initial connection discovers and registers one public tool generation, while each calling Session is routed to a supervised child whose cwd is fixed from that Session's immutable header. The supervisor serializes every sync — initial, notification, and reconnect — through one queue so two syncs can never interleave their dispose-previous/register-next swap. Disposal cancels pending reconnects, closes the live client and all Session children, waits for in-flight attempts and queued syncs to quiesce, and unregisters the current generation. The [auto-reconnect Agent Note](../../../.agents/notes/archived/feature/2026-08-06-mcp-client-auto-reconnect.md) owns the reconnect decision.
 
 The SDK receives tool-list changes through legacy notifications or a modern subscription. The supervisor queues each re-sync; a fetch failure keeps the previous generation registered, while a registration conflict rolls back the attempted generation. Each outage shares one attempt budget: after `maxAttempts` consecutive failures the tools are unregistered and reconnection stops, and a connection that stays up past `maxDelayMs` resets the budget.
 

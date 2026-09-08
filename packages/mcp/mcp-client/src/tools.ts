@@ -73,6 +73,7 @@ const IMAGE_MEDIA_TYPES: readonly ImageMediaType[] = [
 /** Canonical RFC 4648 base64, excluding whitespace and URL-safe aliases. */
 const CANONICAL_BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
 
+
 /**
  * Derive the model-facing public name for one MCP tool.
  *
