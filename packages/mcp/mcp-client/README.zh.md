@@ -70,15 +70,9 @@ kind: "package-reference"
 
 ### Session-project stdio 作用域
 
-当 MCP 服务器必须继承 DSH Session 创建时固定的工程上下文时，使用
-`scope: session-project`。桥接层仍然只注册一组公开工具，但会为每个
-Session 创建并复用一个受监督的 stdio 子进程。该子进程继承 Session 不可变
-`header.cwd` 作为进程工作目录；调用不会修改共享进程，也不会注入某个服务
-专用的 project 参数。默认的 `global` 作用域保持原有行为。
+当 MCP 服务器必须继承 DSH Session 创建时固定的工程上下文时，使用 `scope: session-project`。桥接层仍然只注册一组公开工具，但会为每个 Session 创建并复用一个受监督的 stdio 子进程。该子进程继承 Session 不可变 `header.cwd` 作为进程工作目录；调用不会修改共享进程，也不会注入某个服务专用的 project 参数。默认的 `global` 作用域保持原有行为。
 
-这适合 Engram 这类根据 cwd 自动识别工程的服务。Streamable HTTP 没有进程工作
-目录，因此仍然使用全局作用域。Session 子进程随 MCP 插件一起 dispose；每个
-子进程独立使用重连策略。
+这适合 Engram 这类根据 cwd 自动识别工程的服务。Streamable HTTP 没有进程工作目录，因此仍然使用全局作用域。Session 子进程随 MCP 插件一起 dispose；每个子进程独立使用重连策略。
 
 ```yaml
 - id: memory-engram
@@ -147,7 +141,7 @@ Session 创建并复用一个受监督的 stdio 子进程。该子进程继承 S
 
 ### 生命周期与同步
 
-`apply` 解析重连策略、在当前注册作用域内预留 `serverName`、启动监督器，并等待初始连接加发现完成。独立 Agent 作用域可以复用相同 namespace，因为其工具与传输彼此隔离；同一作用域内重复会在加载时失败。在 `session-project` 作用域中，初始连接负责发现并注册一组公开工具，而每个调用 Session 会路由到一个 cwd 固定为该 Session 不可变 header 的受监督子进程。监督器把所有同步——初始、通知与重连——串行到同一条队列，因此两次同步绝不会交错执行各自的先 dispose 后注册交换。dispose 会取消待执行的重连、关闭活动客户端与所有 Session 子进程、等待进行中的尝试与排队同步完全停稳，然后注销当前世代。[自动重连 Agent Note](../../../.agents/notes/implemented/feature/2026-08-06-mcp-client-auto-reconnect.zh.md) 拥有重连决策。
+`apply` 解析重连策略、在当前注册作用域内预留 `serverName`、启动监督器，并等待初始连接加发现完成。独立 Agent 作用域可以复用相同 namespace，因为其工具与传输彼此隔离；同一作用域内重复会在加载时失败。在 `session-project` 作用域中，初始连接负责发现并注册一组公开工具，而每个调用 Session 会路由到一个 cwd 固定为该 Session 不可变 header 的受监督子进程。监督器把所有同步——初始、通知与重连——串行到同一条队列，因此两次同步绝不会交错执行各自的先 dispose 后注册交换。dispose 会取消待执行的重连、关闭活动客户端与所有 Session 子进程、等待进行中的尝试与排队同步完全停稳，然后注销当前世代。[自动重连 Agent Note](../../../.agents/notes/archived/feature/2026-08-06-mcp-client-auto-reconnect.md) 拥有重连决策。
 
 监督器监听 `notifications/tools/list_changed` 并排队一次重新同步；获取阶段失败时保留上一世代注册，注册冲突则回滚本次尝试的世代。每次中断共享一个尝试预算：连续失败达到 `maxAttempts` 次后工具被注销、重连停止；连接存活超过 `maxDelayMs` 会重置预算。
 

@@ -30,4 +30,4 @@ SQLite 对账套件用 sentinel 拒绝 header 与事件的聚合序列化，同�
 
 派生索引仍可丢弃，并且与 JSONL 会话持久化分离。带长度前缀的序列保证事件变化会产生不同 fingerprint，但 fingerprint 本身不会暴露事件内容。
 
-本修复属于[SQLite FTS5 会话搜索决策](../feature/2026-07-10-sqlite-session-query-provider.zh.md)下的实现纠正；它不改变搜索授权、索引范围、tokenizer 行为或游标语义。
+本修复属于[SQLite FTS5 会话搜索决策](../../archived/feature/2026-07-10-sqlite-session-query-provider.md)下的实现纠正；它不改变搜索授权、索引范围、tokenizer 行为或游标语义。
