@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-04-right-sidebar-docking-infrastructure.md
-2026-09-04-right-sidebar-docking-infrastructure.md: 936f73c9210baf4297eace2deb270bb9594d7e8d
-2026-09-04-right-sidebar-docking-infrastructure.zh.md: d234dbcbb2f60ba1dd3b3d9fca2936a16521751d
+2026-09-04-right-sidebar-docking-infrastructure.md: 7ec614cde2a8d7f9826ab593f4d99fa726801ac9
+2026-09-04-right-sidebar-docking-infrastructure.zh.md: d6cd119efa582594c8aac17f5004c40846417251

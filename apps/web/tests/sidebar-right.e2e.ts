@@ -720,16 +720,16 @@ describe('web e2e: shipped right Sidebar', () => {
         if (request.url().includes('workspaceFiles')) wire.sent += 1
       })
 
-      // The product's own entry point: the turn tail's produced-file chip. It
-      // reaches the Sidebar through openFile → ctx.sidebarRight.openResource, and the
-      // text type claims the address.
-      const chip = page.getByRole('button', { name: `Open ${SAMPLE_NAME}` })
-      await chip.click()
+      // The Sidebar's explicit Files tree opens a preview; the produced-file
+      // chip remains a Host default-application action.
+      const fileRow = column.locator('[data-files-entry="file"]').filter({ hasText: SAMPLE_NAME })
+      await fileRow.waitFor({ timeout: 15_000 })
+      await fileRow.locator('button').click()
       await expect.poll(async () => await tabTitles(column)).toEqual(['Files', SAMPLE_NAME])
 
       // Opening the same content again focuses rather than duplicating.
-      await panes.first().locator('[data-dockkit-tab]').first().click()
-      await chip.click()
+      await panes.first().locator('[data-dockkit-tab]').filter({ hasText: 'Files' }).click()
+      await fileRow.locator('button').click()
       await expect.poll(async () => await tabTitles(column)).toEqual(['Files', SAMPLE_NAME])
 
       // The body arrives through the text type's keyed registration, and its
@@ -739,9 +739,8 @@ describe('web e2e: shipped right Sidebar', () => {
         .waitFor({ timeout: 15_000 })
         .catch(() => { throw new Error(`preview never settled; wire=${JSON.stringify(wire)}`) })
       expect(await column.locator('pre').first().innerText()).toContain('produced by the seeded turn')
-      // The whole batch-E chain in one frame: a produced-file chip in the
-      // conversation, the tab it opened, and the file's real content read over
-      // the workspace endpoint.
+      // The whole batch-E chain in one frame: the Files tree, the preview tab,
+      // and the file's real content read over the workspace endpoint.
       await shot(page, '06-produced-chip-to-preview')
 
       // The directory scenario's V1 behaviour, asserted in the shipped product:
@@ -805,7 +804,9 @@ describe('web e2e: shipped right Sidebar', () => {
         const column = fx.locator('[data-rightbar-col]')
         await ensureExpanded(fx, column)
         await width(column)
-        await fx.getByRole('button', { name: `Open ${SAMPLE_NAME}` }).click()
+        const fileRow = column.locator('[data-files-entry="file"]').filter({ hasText: SAMPLE_NAME })
+        await fileRow.waitFor({ timeout: 15_000 })
+        await fileRow.locator('button').click()
         await column.locator('[data-textpreview-state="text"]').waitFor({ timeout: 15_000 })
         const wrap = column.locator('[data-textpreview-tool="wrap"]')
         expect(await wrap.getAttribute('aria-pressed')).toBe('true')
@@ -856,7 +857,9 @@ describe('web e2e: shipped right Sidebar', () => {
       //    leave it standing, since a pane emptied by a move is dropped.
       const first = panes.first()
       const strip = first.locator('[data-dockkit-strip]')
-      await page.getByRole('button', { name: `Open ${SAMPLE_NAME}` }).click()
+      const fileRow = first.locator('[data-files-entry="file"]').filter({ hasText: SAMPLE_NAME })
+      await fileRow.waitFor({ timeout: 15_000 })
+      await fileRow.locator('button').click()
       await expect.poll(async () => await tabTitles(first)).toEqual(['Files', SAMPLE_NAME])
       const order = await tabTitles(first)
       // The insertion index is measured against chip midpoints, not strip width.
@@ -931,7 +934,9 @@ describe('web e2e: shipped right Sidebar', () => {
       const column = await resetSidebar(page)
       const panes = column.locator('[data-dockkit-pane]')
       expect(await column.locator('[data-dockkit-tab-close]').count()).toBe(1)
-      await page.getByRole('button', { name: `Open ${SAMPLE_NAME}` }).click()
+      const fileRow = column.locator('[data-files-entry="file"]').filter({ hasText: SAMPLE_NAME })
+      await fileRow.waitFor({ timeout: 15_000 })
+      await fileRow.locator('button').click()
       await expect.poll(async () => await tabTitles(panes.first())).toEqual(['Files', SAMPLE_NAME])
       await panes.first().locator('[data-dockkit-split-button]').click()
       await expect.poll(async () => await panes.count()).toBe(2)
@@ -964,11 +969,14 @@ describe('web e2e: shipped right Sidebar', () => {
       expect(await page.getByRole('menu').count()).toBe(0)
 
       // Any other tab standing alone closes together with the column. Open the
-      // sample file, close the guide (an ordinary close with two tabs), then
-      // close the file: the column collapses in the same gesture, and the
-      // settle rule reseeds the current default, so reopening shows Files.
-      await page.getByRole('button', { name: `Open ${SAMPLE_NAME}` }).click()
-      await expect.poll(async () => await tabTitles(column)).toEqual(['Start', SAMPLE_NAME])
+      // sample file from the explicit Files tree, close the guide (an ordinary
+      // close with two tabs), then close the file: the column collapses in the
+      // same gesture, and the settle rule reseeds the current default.
+      await column.locator('[data-sidebar-right-guide-entry="files"]').click()
+      await expect.poll(async () => await tabTitles(column)).toEqual(['Files'])
+      await fileRow.waitFor({ timeout: 15_000 })
+      await fileRow.locator('button').click()
+      await expect.poll(async () => await tabTitles(column)).toEqual(['Files', SAMPLE_NAME])
       await column.locator('[data-dockkit-tab]').first().hover()
       await column.locator('[data-dockkit-tab-close]').first().click()
       await expect.poll(async () => await tabTitles(column)).toEqual([SAMPLE_NAME])
