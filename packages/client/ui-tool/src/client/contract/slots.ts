@@ -3,7 +3,7 @@ import type {
   HostObservable, InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime,
 } from '@deepseek-ai/dsh-client-ui-slots'
 import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
-import type { OpenFileOptions, ToolCallBlock } from '@deepseek-ai/dsh-client-ui-chat/client'
+import type { ToolCallBlock } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { MessageImageLoader, MessageImageSource } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 
@@ -63,11 +63,8 @@ export interface ToolCallOwnerProps {
   cwd?: string | undefined
   /** Host account home; POSIX home-rooted summaries display as `~`. */
   home?: string | undefined
-  /**
-   * Open a Tool argument path. A view that knows which line the call was about
-   * passes it, and the opened surface lands there.
-   */
-  openFile: (path: string, options?: OpenFileOptions) => void
+  /** Open a Tool argument path through the Host's default desktop application. */
+  openFile: (path: string) => void
   /**
    * Session-authorized image loader for the `tool.call.images` slot, supplied
    * by the chat node that owns this call. A composed chat node always

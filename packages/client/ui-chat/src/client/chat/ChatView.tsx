@@ -10,7 +10,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionSeq } from '@deepseek-ai/dsh-session/types'
 import { Button, IconChevronDownOutline14, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ChatViewSlotProps, OpenFileOptions } from '../contract/slots.ts'
+import type { ChatViewSlotProps } from '../contract/slots.ts'
 import type { ChatSnapshot } from '../contract/snapshot.ts'
 import { PendingSteeringBubble, PendingSubmissionBubble } from './MessageItem.tsx'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
@@ -254,10 +254,10 @@ export function ChatView({
   // gesture; otherwise a cancelled in-flight refusal reopens the dialog.
   const fileOpenRequest = useRef(0)
 
-  const requestOpenFile = useCallback((path: string, options?: OpenFileOptions) => {
+  const requestOpenFile = useCallback((path: string) => {
     const id = ++fileOpenRequest.current
     setFileOpenBusy(true)
-    void (options === undefined ? openFile(path) : openFile(path, options)).then(
+    void openFile(path).then(
       () => {
         if (id !== fileOpenRequest.current) return
         setFileOpenError(null)

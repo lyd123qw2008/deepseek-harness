@@ -30,12 +30,6 @@ export type UseChatNode = KeyedSnapshotSelectorHook<ChatConversationViewNode | u
 /** Per-key selector hook over one Chat Node's Turn-process presentation. */
 export type UseChatNodeProcess = KeyedSnapshotSelectorHook<ChatTurnProcessPresentation | undefined>
 
-/** Where in a file an open should land. */
-export interface OpenFileOptions {
-  /** 1-based line to reveal; absent = the file's beginning. */
-  readonly line?: number
-}
-
 /** Owner currency of the completed-Turn extension chain. */
 export interface TurnTailOwnerProps {
   turn: TurnLocation
@@ -81,7 +75,7 @@ export interface ChatNodeOwnerProps {
   cwd?: string | undefined
   /** Open the current source file of a skill referenced by a sent message. */
   openSkill: (name: string) => void
-  openFile: (path: string, options?: OpenFileOptions) => void
+  openFile: (path: string) => void
   inspectCall: (callId: ToolCallId) => void
   forkAt: (seq: number) => void
   /**
@@ -142,7 +136,7 @@ export interface ChatViewInjected {
   }
   /** Open the current source file of a skill referenced by a sent message. */
   openSkill: (name: string) => void
-  openFile: (path: string, options?: OpenFileOptions) => Promise<void>
+  openFile: (path: string) => Promise<void>
   loadOlder: () => void
   /** Jump loader: page history back through seq; resolves when the window covers it. */
   loadThrough: (seq: SessionSeq) => Promise<void>

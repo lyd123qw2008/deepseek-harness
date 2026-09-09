@@ -38,7 +38,7 @@ tab 使用 `dsh-resource://file/session/<sessionId>/<path>`，其中路径可以
 
 store 是 Slot 标准件：每会话一个独占实例，按 tab id 分桶，持有 `{ version, pages, eof, loading, failure, scrollTop, wrap, revision }`。按 tab 而非按文件分桶是有意的——同一文件的两个 tab 各自滚动。face（`loadPage`、`reloadPages`）是唯一的异步半边：它标记读取进行中，等待 Remote 结果，再经 store 的 action 写入一页或一次失败；若 owner 的 `signal` 已触发则什么也不写。`signal` 同时终结这个桶：face 在 tab 首次读取时挂一个 abort 监听器，由它忘掉桶——不是体，体随 tab 切换反复挂载卸载；从未读过的 tab 没有桶也没有监听器，而 tab 记录可能在其体被另一 tab 挡住而卸载时结束。因此滚动位置、换行与已答过的导航都活得比体久：tab 回来时停在读者离开的地方，而不是重读或再跳一次。刷新页面后什么都不保留。
 
-导航是一个 `line`。`read` 工具行把它 1 起的 `offset` 以 `openResource(address, { params: { line } })` 传来，产物 chip 什么都不传；体把 `navigation.params` 收窄为 `SidebarRightResourceParamsMap['file']`（`{ line?: number }`，由 `file` 类型的拥有者声明），不做运行时校验，因为调用方与体相遇在同进程的类型化边界上。已加载的页够不到该行时，体读下一页，再读，直到覆盖它或文件结束——页按顺序加载，没有 seek——然后把该行滚到体顶部并高亮，每个 `navigation.revision` 一次。store 记下已答过的 revision，于是同一 revision 下重新挂载的体恢复滚动位置而不再跳；对同一文件再次 `openResource`（聚焦而非复制）以新 revision 到来并再跳一次。超出文件末尾的行在 `eof` 处静默停下；补页途中失败的页终止补页并显示失败行。
+导航可以为 Sidebar 自有的资源调用方携带可选的 `line`。Files 文件树不传行号；其他显式资源查看器可以通过 `openResource(address, { params: { line } })` 传入从 1 起的行号；Chat 与 Tool 文件链接改走 Host 打开器，不会进入这条路径。正文把 `navigation.params` 收窄为 `SidebarRightResourceParamsMap['file']`（`{ line?: number }`，由 `file` 类型的拥有者声明），不做运行时校验，因为调用方与正文相遇在同进程的类型化边界上。已加载的页够不到该行时，正文读下一页，再读，直到覆盖它或文件结束——页按顺序加载，没有 seek——然后把该行滚到正文顶部并高亮，每个 `navigation.revision` 一次。store 记下已答过的 revision，于是同一 revision 下重新挂载的正文恢复滚动位置而不再跳；对同一文件再次 `openResource`（聚焦而非复制）以新 revision 到来并再跳一次。超出文件末尾的行在 `eof` 处静默停下；补页途中失败的页终止补页并显示失败行。
 
 文件变了只提示，不应用。正文把已加载版本及读取开始时捕获的观察版本与后续 `WorkspaceFileStat.version` 比较；不同则显示变更提示。重新载入只通过 Preview face 重读当前 tab，不修改共享资源元数据或其他 tab。资源失败占用同一个提示位置，已加载内容仍保留在下方。
 
@@ -68,7 +68,7 @@ face 是树唯一的异步半边。`start(tabId, root, signal)` 以根展开态�
 
 **给活跃 tab 的控件开一个按 pane 的工具坑位（`sidebar.right.pane.tab.tools`）。** 为文本预览的换行与重新读取、文件树的重新读取交付过一轮评审，随后按用户意见删除：它把类型私有的按钮放到面板 tab 条上、分栏与折叠控件旁边，读起来像面板自身的 chrome。类型的控件属于它自己的体；预览的在其路径行右端，树的在其根行右端。
 
-**保留 `Show in folder`。** 目录在 Sidebar 里没有去处，而产品决定是不给桌面打开器留次级入口。已删除，能力损失如实陈述：`openFile('.')` 命名的是目录，文本预览以 `not-regular-file` 拒绝它，于是该行什么都不提供，而不是给一个注定失败的按钮。
+**让 Sidebar 保持专注。** 目录在 Sidebar 里没有去处，因此该界面不提供文件夹控件。Chat 与 Tool 文件链接分别使用 Host 的系统默认桌面应用；`openFile('.')` 不是 Sidebar 请求，文本预览仍以 `not-regular-file` 拒绝目录地址。
 
 **把内容放进资源流。** 内容可以任意大，所以 `file` 资源只携带元数据（`version`、`bytes`、`changed`），预览经 `workspaceFiles.read` 按页读内容；`changed` 是通知，不是载荷。
 
