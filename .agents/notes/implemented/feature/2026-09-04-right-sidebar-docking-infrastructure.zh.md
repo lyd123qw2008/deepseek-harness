@@ -49,7 +49,7 @@ Agent 产出的文件是最尖锐的案例。产出文件 chip 或 `read` 行的
 
 ### 入口与删除
 
-`ui-chat` 的 `openFile(path, { line? })`——工具行路径链接、产出文件 chip 与收尾消息提及都经由它——现在经导航面把文件开进 Sidebar（见[tab 类型与导航](../architecture/2026-09-05-sidebar-tab-types-and-navigation.zh.md)）。`Show in folder` 动作及其 `canOpenWorkspacePath` 探针从 `ui-deliverables` 移除：Sidebar 没有目录形态，产品也不保留次级入口。`DetailsPanel`、`ToolDetails`、tool-node reader、chat store 的 selection、`ToolDetailsProps` 与 `CENTER_MIN` 一并删除。`session/openWorkspacePath` 留在 Host 上，已无 web 调用方。
+`ui-chat` 的 `openFile(path)`——工具行路径链接、产出文件 chip 与收尾消息提及都经由它——会相对于 Session 工作区解析路径，并调用 Host 的 `session/openWorkspacePath`，由 Host 完成校验与桌面交接。Sidebar 仍是显式界面：它的 Files 文件树经导航面打开 `dsh-resource://file` 预览（见[tab 类型与导航](../architecture/2026-09-05-sidebar-tab-types-and-navigation.zh.md)）。`Show in folder` 动作及其 `canOpenWorkspacePath` 探针从 `ui-deliverables` 移除：该行只列文件，Host 打开器则是独立的默认文件动作。`DetailsPanel`、`ToolDetails`、tool-node reader、chat store 的 selection、`ToolDetailsProps` 与 `CENTER_MIN` 一并删除。
 
 ## Alternatives considered
 
