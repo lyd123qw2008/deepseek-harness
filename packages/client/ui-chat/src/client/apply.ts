@@ -1,14 +1,11 @@
-/** Register the Chat Conversation target, renderers, stats, and details surface. */
+/** Register the Chat Conversation target, renderers, statistics, and controls. */
 import type { Context } from '@deepseek-ai/cordis'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionBinding } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
-// The `file` entry of `SidebarRightResourceParamsMap`, which types `{ params: { line } }` below.
-import type {} from '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client'
-import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
+import { resolveWorkspacePath } from '@deepseek-ai/dsh-util-workspace-path'
 // Type-only service and declaration merges used by the apply world.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -46,7 +43,7 @@ const CHAT_NODE_INJECT: ChatNodeTurnDataInjected = {
 /** Services required by the Chat target and its presentation registrations. */
 export const inject = [
   'slots', 'sessions', 'uiSession', 'uiConversation', 'locale',
-  'settingsScope', 'remote', 'remote.session', 'sidebarRight',
+  'settingsScope', 'remote', 'remote.session',
 ]
 
 /**
@@ -117,24 +114,14 @@ export function apply(ctx: Context): void {
             chatNodeProcess: key => chat.getSnapshot().nodes.processSource(key),
           },
           fileMentions: (owner: TurnTailOwnerProps) => ctx.get('chatFileMentions')?.forClosing(owner, sessionId),
-          // Files open in the right Sidebar, not in a desktop application: the
-          // content stays in the product, beside the conversation that produced
-          // it. A relative path, or an absolute one inside the session's
-          // workspace, is addressed under this session's scope,
-          // `dsh-resource://file/session/<id>/<path>`; an absolute path
-          // elsewhere keeps its absolute spelling in the same Session's address.
-          // Which tab type claims the
-          // address is the Sidebar's decision, not this call site's.
-          // A line travels as a navigation parameter, not as part of the
-          // address: the file is one piece of content whether it is opened at
-          // its top or at line 400, so the same tab is revealed and told where
-          // to land.
-          openFile: async (path, options) => {
+          // Resolve the authored path against the Session workspace before
+          // handing it to the Host's default desktop application.
+          openFile: async (path) => {
             const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd
-            const url = fileAddressFor(sessionId, cwd, path)
-            if (options?.line === undefined) ctx.sidebarRight.openResource(url)
-            else ctx.sidebarRight.openResource(url, { params: { line: options.line } })
-            await Promise.resolve()
+            const result = await ctx.remote.session.openWorkspacePath({
+              path: resolveWorkspacePath(cwd, path),
+            })
+            if (!result.ok) throw new Error(`path open failed: ${result.error.message}`)
           },
           loadOlder: () => { void session.loadOlder() },
           loadThrough: seq => session.loadThrough(seq),
