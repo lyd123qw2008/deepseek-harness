@@ -260,9 +260,9 @@ describe('web e2e: shipped right Sidebar', () => {
         source: { kind: 'user' },
       }), { surfaceOp: 'append' })
       agent.session.append('step/start', { turn: 1, step: 1 })
-      // A successful mutation is what makes the turn tail offer a produced-file
-      // chip — the product's own way into the Sidebar. The file is written for
-      // real because the preview reads it through the workspace endpoint.
+      // A successful mutation creates a produced-file chip for Host opening.
+      // The file is written for real because the explicit Files preview reads it
+      // through the workspace endpoint.
       //
       // It goes in the SESSION's cwd, not the scaffold's: the endpoint resolves
       // relative paths against `sandboxPolicy.resolve({session}).workspaceRoot`,
@@ -397,8 +397,12 @@ describe('web e2e: shipped right Sidebar', () => {
       // control opens the guide again in that pane.
       const addTab = column.locator('[data-dockkit-add-tab]')
       expect(await addTab.count()).toBe(0)
-      await page.getByRole('button', { name: `Open ${SAMPLE_NAME}` }).click()
-      await expect.poll(async () => await tabTitles(column)).toEqual(['Start', SAMPLE_NAME])
+      await column.locator('[data-sidebar-right-guide-entry="files"]').click()
+      await expect.poll(async () => await tabTitles(column)).toEqual(['Files'])
+      const fileRow = column.locator('[data-files-entry="file"]').filter({ hasText: SAMPLE_NAME })
+      await fileRow.waitFor({ timeout: 15_000 })
+      await fileRow.locator('button').click()
+      await expect.poll(async () => await tabTitles(column)).toEqual(['Files', SAMPLE_NAME])
       await column.locator('[data-dockkit-tab-close]').first().click()
       await expect.poll(async () => await tabTitles(column)).toEqual([SAMPLE_NAME])
       await expect.poll(async () => await addTab.count()).toBe(1)
@@ -617,7 +621,7 @@ describe('web e2e: shipped right Sidebar', () => {
 
     it('opens content once, splits, and floats it outside the column', async () => {
       onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-right-content'))
-      const column = page.locator('[data-rightbar-col]')
+      const column = await resetSidebar(page)
       const panes = column.locator('[data-dockkit-pane]')
       const floats = page.locator('[data-sidebar-right-float-host] [data-dockkit-float]')
 
@@ -643,17 +647,24 @@ describe('web e2e: shipped right Sidebar', () => {
         if (request.url().includes('workspaceFiles')) wire.sent += 1
       })
 
-      // The product's own entry point: the turn tail's produced-file chip. It
-      // reaches the Sidebar through openFile → ctx.sidebarRight.openResource, and the
-      // text type claims the address.
-      const chip = page.getByRole('button', { name: `Open ${SAMPLE_NAME}` })
-      await chip.click()
-      await expect.poll(async () => await tabTitles(column)).toEqual(['Start', SAMPLE_NAME])
+      // The Sidebar's own Files guide opens the workspace tree. Chat's produced
+      // file chip uses the Host opener and is intentionally not this preview path.
+      await column.locator('[data-sidebar-right-guide-entry="files"]').click()
+      await expect.poll(async () => await tabTitles(column)).toEqual(['Files'])
+      const fileRow = column.locator('[data-files-entry="file"]').filter({ hasText: SAMPLE_NAME })
+      await fileRow.waitFor({ timeout: 15_000 })
+      await fileRow.locator('button').click()
+      await expect.poll(async () => await tabTitles(column)).toEqual(['Files', SAMPLE_NAME])
 
       // Opening the same content again focuses rather than duplicating.
-      await panes.first().locator('[data-dockkit-tab]').first().click()
-      await chip.click()
-      await expect.poll(async () => await tabTitles(column)).toEqual(['Start', SAMPLE_NAME])
+      await column.locator('[data-dockkit-tab]').filter({ hasText: 'Files' }).click()
+      await fileRow.locator('button').click()
+      await expect.poll(async () => await tabTitles(column)).toEqual(['Files', SAMPLE_NAME])
+      await column.locator('[data-dockkit-tab]').filter({ hasText: 'Files' }).locator('[data-dockkit-tab-close]').click()
+      await expect.poll(async () => await tabTitles(column)).toEqual([SAMPLE_NAME])
+      await column.locator('[data-dockkit-add-tab]').click()
+      await expect.poll(async () => await tabTitles(column)).toEqual([SAMPLE_NAME, 'Start'])
+      await column.locator('[data-dockkit-tab]').filter({ hasText: SAMPLE_NAME }).click()
 
       // The body arrives through the text type's keyed registration, and its
       // content came over the wire from the real file.
@@ -662,16 +673,13 @@ describe('web e2e: shipped right Sidebar', () => {
         .waitFor({ timeout: 15_000 })
         .catch(() => { throw new Error(`preview never settled; wire=${JSON.stringify(wire)}`) })
       expect(await column.locator('pre').first().innerText()).toContain('produced by the seeded turn')
-      // The whole batch-E chain in one frame: a produced-file chip in the
-      // conversation, the tab it opened, and the file's real content read over
-      // the workspace endpoint.
+      // The whole batch-E chain in one frame: the Files tree, the text-preview
+      // tab it opened, and the file's real content read over the workspace endpoint.
       await shot(page, '06-produced-chip-to-preview')
 
-      // The directory scenario's V1 behaviour, asserted in the shipped product:
-      // there is no folder affordance at all. `openFile('.')` would name a
-      // directory, which a text preview correctly refuses, and the native opener
-      // it used to reach is gone — so the row offers nothing rather than a
-      // button that always fails.
+      // The produced-files row has no folder affordance. The explicit Files tree
+      // is the in-product directory entry point, while Chat file chips remain
+      // dedicated to the Host's default application.
       expect(await page.getByRole('button', { name: /folder/i }).count()).toBe(0)
 
       // Split, then dock-drag: the kit's gestures drive the store's actions.
@@ -728,7 +736,12 @@ describe('web e2e: shipped right Sidebar', () => {
         const column = fx.locator('[data-rightbar-col]')
         await ensureExpanded(fx, column)
         await width(column)
-        await fx.getByRole('button', { name: `Open ${SAMPLE_NAME}` }).click()
+        await column.locator('[data-sidebar-right-guide-entry="files"]').click()
+        await expect.poll(async () => await tabTitles(column)).toEqual(['Files'])
+        const fileRow = column.locator('[data-files-entry="file"]').filter({ hasText: SAMPLE_NAME })
+        await fileRow.waitFor({ timeout: 15_000 })
+        await fileRow.locator('button').click()
+        await expect.poll(async () => await tabTitles(column)).toEqual(['Files', SAMPLE_NAME])
         await column.locator('[data-textpreview-state="text"]').waitFor({ timeout: 15_000 })
         const wrap = column.locator('[data-textpreview-tool="wrap"]')
         expect(await wrap.getAttribute('aria-pressed')).toBe('true')
@@ -779,8 +792,16 @@ describe('web e2e: shipped right Sidebar', () => {
       //    leave it standing, since a pane emptied by a move is dropped.
       const first = panes.first()
       const strip = first.locator('[data-dockkit-strip]')
-      await page.getByRole('button', { name: `Open ${SAMPLE_NAME}` }).click()
-      await expect.poll(async () => await tabTitles(first)).toEqual(['Start', SAMPLE_NAME])
+      await first.locator('[data-sidebar-right-guide-entry="files"]').click()
+      await expect.poll(async () => await tabTitles(first)).toEqual(['Files'])
+      const fileRow = first.locator('[data-files-entry="file"]').filter({ hasText: SAMPLE_NAME })
+      await fileRow.waitFor({ timeout: 15_000 })
+      await fileRow.locator('button').click()
+      await expect.poll(async () => await tabTitles(first)).toEqual(['Files', SAMPLE_NAME])
+      await first.locator('[data-dockkit-tab]').filter({ hasText: 'Files' }).locator('[data-dockkit-tab-close]').click()
+      await expect.poll(async () => await tabTitles(first)).toEqual([SAMPLE_NAME])
+      await first.locator('[data-dockkit-add-tab]').click()
+      await expect.poll(async () => await tabTitles(first)).toEqual([SAMPLE_NAME, 'Start'])
       const order = await tabTitles(first)
       // The insertion index is measured against chip midpoints, not strip width.
       await dragTo(page, first.locator('[data-dockkit-tab]').last(),

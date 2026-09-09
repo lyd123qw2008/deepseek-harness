@@ -1,8 +1,8 @@
 // Web e2e scenario: the single-line produced-files summary a finished turn
 // ends with. Cold-seeds ten writes (zero model calls), then verifies the real
 // assembled lane adapts from a coarse width budget and offers no folder
-// handoff: chips open in the right Sidebar's text preview, which has no
-// directory form, so the row shows nothing rather than a dead button.
+// handoff: chips open through the Host's default desktop application. The row
+// has no directory form, so an omitted-file remainder is a label only.
 import { fileURLToPath } from 'node:url'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
@@ -152,8 +152,8 @@ describe('web e2e: a finished turn ends with the files it produced', () => {
     expect(await chips.nth(1).innerText()).toBe('index.html')
     expect(await chips.nth(4).innerText()).toBe('app.ts')
     await expect.poll(() => row.getByText('+ 5 files', { exact: true }).isVisible()).toBe(true)
-    // Chips open in the right Sidebar's text preview, and a directory is not
-    // something that preview can show, so the row offers no folder action.
+    // Chips use the Host's default desktop application, and the row offers no
+    // folder action for an omitted-file remainder.
     expect(await page.getByRole('button', { name: /folder/i }).count()).toBe(0)
     expect(await page.getByText('Produced', { exact: true }).count()).toBe(1)
 

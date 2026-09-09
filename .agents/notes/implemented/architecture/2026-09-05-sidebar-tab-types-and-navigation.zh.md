@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-[停靠面](../feature/2026-09-04-right-sidebar-docking-infrastructure.zh.md)给了右侧 Sidebar 分栏、tab 与浮动面板，但一格 tab 只有在别的插件能往里放内容时才有用。这需要三份停靠面自身不定义的契约：插件如何声明一种 tab 及其能展示的地址；任何调用方——会话区里的产出文件 chip、文件树里的一行、插件自己的按钮——如何请 Sidebar 展示某样东西；以及 tab 的正文在运行时能依赖什么。每一份都是仓外插件将来要对着写的公开面，所以必须在那些插件出现之前定下来：之后改一个字段名、一个枚举值或地址语法，就会同时弄坏它们全部。
+[停靠面](../feature/2026-09-04-right-sidebar-docking-infrastructure.zh.md)给了右侧 Sidebar 分栏、tab 与浮动面板，但一格 tab 只有在别的插件能往里放内容时才有用。这需要三份停靠面自身不定义的契约：插件如何声明一种 tab 及其能展示的地址；Sidebar 自有的调用方——文件树里的一行、插件自己的按钮——如何请 Sidebar 展示某样东西；以及 tab 的正文在运行时能依赖什么。每一份都是仓外插件将来要对着写的公开面，所以必须在那些插件出现之前定下来：之后改一个字段名、一个枚举值或地址语法，就会同时弄坏它们全部。
 
 两条约束决定了答案。动态客户端插件之间不允许引用运行时值——函数、常量、类——只能引类型，因此这些契约里不得要求从 Sidebar 包引入帮助函数或导出常量。而 Web 客户端已经有一套组件模型，即 Slot 系统；再为 tab 造一套，就是第二个要学要维护的并行框架。
 
@@ -80,7 +80,7 @@ interface SidebarRightTabParamsMap {}        // key: kind — a page type declar
 
 ### 入口
 
-会话区的 `openFile(path, { line? })`——工具行路径链接、产出文件 chip、收尾消息提及——把路径编码为该 Session 的文件资源地址并调用 `openResource`，调用方知道行号时带 `params.line`；`read` 工具行传入其 `offset` 参数起始的行。tab 条的「+」为所在格调用 `openTab('guide', { paneId, revealIfOpened: false })`；引导入口框调用 `tab.actions.openTab(entry.kind, { replaceTab: true })`；文件树的一行调用 `tab.actions.openResource(address)`，落在树自己的格里。
+Sidebar 的文件树行调用 `tab.actions.openResource(address)`，并落在文件树所在的格；其他 Sidebar 自有的资源查看器在需要文件预览时也使用同一导航面。Chat 与 Tool 路径链接使用 `openFile(path)` 解析 Session 工作区路径并调用 Host 打开器，因此不会创建 Sidebar tab。tab 条的「+」为所在格调用 `openTab('guide', { paneId, revealIfOpened: false })`；引导入口框调用 `tab.actions.openTab(entry.kind, { replaceTab: true })`。
 
 ## Alternatives considered
 

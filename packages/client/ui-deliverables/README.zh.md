@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-与 `ui-conversation` 一起挂载本插件；已完成轮次随即以产出文件行收尾，位于收尾消息正文与其动作页脚之间。每个标签项经属主的 `openFile` 打开文件——chat 视图把它路由到右侧 Sidebar 作为一个文本预览 tab——相对路径按会话 cwd 解析。该行不提供文件夹动作：Sidebar 没有目录形态，因此省略文件的余数只是一个标签才会打开会话工作区。
+与 `ui-conversation` 一起挂载本插件；已完成轮次随即以产出文件行收尾，位于收尾消息正文与其动作页脚之间。每个标签项经属主的 `openFile` 打开文件——chat 视图会相对于 Session 工作区解析路径，并交给 Host 的系统默认桌面应用。该行不提供文件夹动作，因此省略文件的余数只是一个标签。
 
 ### 该行
 
@@ -55,7 +55,7 @@ Node 半部注册静态 `ui:deliverable-file-references` 系统提示词段，�
 当产出物面不够用时阅读以下页面。它们从该行进入 turn-tail 洞与词表背后的决策。
 
 - [ui-conversation](../ui-conversation/README.zh.md)——声明 `conversation.chat.turnTail` 洞并渲染收尾正文。
-- [工作区文件链接](../../../.agents/notes/implemented/feature/2026-07-31-web-workspace-file-links.zh.md)——产出文件行背后的决策；其 Host 打开路径已被[右侧 Sidebar](../../../.agents/notes/implemented/feature/2026-09-04-right-sidebar-docking-infrastructure.zh.md)取代。
+- [工作区文件链接](../../../.agents/notes/implemented/feature/2026-07-31-web-workspace-file-links.zh.md)——产出文件行及其 Host 打开路径背后的决策；[恢复说明](../../../.agents/notes/implemented/bug-fix/2026-09-09-restore-host-file-opening.zh.md)记录当前默认行为。
 - [行内文件提及](../../../.agents/notes/archived/feature/2026-08-07-web-inline-file-mentions.md)——收尾正文可点击提及背后的决策。
 - [客户端包映射](../README.zh.md)——相邻的浏览器 UI 包。
 
@@ -87,7 +87,7 @@ Node 半部注册静态 `ui:deliverable-file-references` 系统提示词段，�
 
 - **提及匹配只认精确路径或唯一 basename**——后缀式提及保持惰性；等真实的收尾消息形态产生需求后再放宽匹配规则。
 - **终端命令间接创建的文件仍不在匹配词表内**——除非某个成功修改位置也记录了该路径，否则在行内代码中点名这类文件不会使其可点击。
-- **原生文件夹交接以 Host 桌面为目标**——经非 loopback authority 访问的浏览器会省略该动作，报告没有原生打开器的部署也一样；若 SSH 转发让远端 Host 看似 loopback 本地，部署必须为 Session Controller 设置 `nativeOpen: false`。
+- **目录没有产出文件目的地**——标签只列文件，因此省略文件的余数是标签，而不是文件夹动作。
 
 <a id="dev-note"></a>
 ### 开发备注

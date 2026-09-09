@@ -49,7 +49,7 @@ Copy comes from the `sidebarTextpreview` locale namespace.
 <a id="navigation"></a>
 ## Navigation
 
-`ctx.sidebarRight.openResource(address, { params: { line } })` — the `read` tool row passes its `offset` this way — arrives as `navigation.params`, which the body narrows to the `file` resource type's declared parameters (`SidebarRightResourceParamsMap['file']`, `{ line?: number }`, 1-based) without runtime validation: `params` is a typed same-process value. If the loaded pages do not reach that line, the body reads the next page, again, until they do or the file ends; then it scrolls the line to the top and marks it, once per `navigation.revision`. A body remounting for the same revision restores the reader's scroll offset instead. Opening the same file again without `revealIfOpened: false` focuses the existing tab and delivers the new parameters as a new revision.
+`ctx.sidebarRight.openResource(address, { params: { line } })` arrives as `navigation.params`, which the body narrows to the `file` resource type's declared parameters (`SidebarRightResourceParamsMap['file']`, `{ line?: number }`, 1-based) without runtime validation: `params` is a typed same-process value. If the loaded pages do not reach that line, the body reads the next page, again, until they do or the file ends; then it scrolls the line to the top and marks it, once per `navigation.revision`. A body remounting for the same revision restores the reader's scroll offset instead. Opening the same file again without `revealIfOpened: false` focuses the existing tab and delivers the new parameters as a new revision.
 
 <a id="model-experience"></a>
 ## Model Experience

@@ -115,11 +115,7 @@ async function bench(snapshot: ChatSnapshot) {
     summary: { title: 'S', displayTitle: 'S', cwd: '/w' },
     snapshot: { running: snapshot.legacy.runningCalls.length > 0 },
   })
-  const layout = { openDetails: vi.fn(), closeDetails: vi.fn() }
   const openWorkspacePath = vi.fn(async () => ({ ok: true, value: { opened: true } }))
-  ctx.provide('layout', layout as never)
-  const sidebarRight = { openResource: vi.fn<(address: string) => void>() }
-  ctx.provide('sidebarRight', sidebarRight as never)
   ctx.provide('uiWorkspace', {} as never)
   new TestRemote(ctx, { session: { openWorkspacePath } })
   const locale = new LocaleRuntime(ctx)
@@ -130,7 +126,7 @@ async function bench(snapshot: ChatSnapshot) {
   await runtime.root.declare(ROOT_CHILDREN, AppRoot)
   await runtime.mount({ inject: [...injectChat], apply: applyChat })
   await runtime.mount({ inject: [...injectTool], apply: applyTool })
-  return { runtime, layout, openWorkspacePath, sidebarRight }
+  return { runtime, openWorkspacePath }
 }
 
 function mountApp(runtime: SlotTestRuntime) {
@@ -216,7 +212,7 @@ describe('run_code sub-calls through the real chat machinery', () => {
     expect(nested).not.toBeNull()
   })
 
-  it('a file sub-row click opens the file in the Sidebar; bash sub-rows open nothing', async () => {
+  it('a file sub-row click opens the file through the Host; bash sub-rows open nothing', async () => {
     const parent = 'call-64'
     const subCalls = [
       subCall(11, parent, 1, 'read', { path: 'notes/demo.txt' }, 'ok'),
@@ -226,11 +222,10 @@ describe('run_code sub-calls through the real chat machinery', () => {
     const view = mountApp(b.runtime)
     view.getByText('notes/demo.txt').click()
     await vi.waitFor(() => {
-      expect(b.sidebarRight.openResource).toHaveBeenCalledWith('dsh-resource://file/session/s1/notes/demo.txt')
+      expect(b.openWorkspacePath).toHaveBeenCalledWith({ path: '/w/notes/demo.txt' })
     })
-    expect(b.openWorkspacePath).not.toHaveBeenCalled()
     view.getByText('List notes').click()
-    expect(b.sidebarRight.openResource).toHaveBeenCalledTimes(1)
+    expect(b.openWorkspacePath).toHaveBeenCalledTimes(1)
   })
 
   it('a RUNNING run_code call nests its so-far dispatches under the spinner row', async () => {

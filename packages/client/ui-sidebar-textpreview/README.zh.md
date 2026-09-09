@@ -49,7 +49,7 @@ tab 的地址是 `dsh-resource://file/session/<sessionId>/<相对该会话工作
 <a id="navigation"></a>
 ## 导航
 
-`ctx.sidebarRight.openResource(address, { params: { line } })`——`read` 工具行以此传它的 `offset`——以 `navigation.params` 到达，体把它收窄为 `file` 资源类型声明的参数（`SidebarRightResourceParamsMap['file']`，`{ line?: number }`，1 起），不做运行时校验：`params` 是同进程的类型化值。已加载的页够不到该行时，体读下一页，再读，直到覆盖它或文件结束；然后把该行滚到顶部并标记，每个 `navigation.revision` 一次。同一 revision 下重新挂载的体恢复读者的滚动位置而不再跳。不带 `revealIfOpened: false` 再次打开同一文件时聚焦已有 tab，并把新参数作为新 revision 送达。
+`ctx.sidebarRight.openResource(address, { params: { line } })` 以 `navigation.params` 到达，体把它收窄为 `file` 资源类型声明的参数（`SidebarRightResourceParamsMap['file']`，`{ line?: number }`，1 起），不做运行时校验：`params` 是同进程的类型化值。已加载的页够不到该行时，体读下一页，再读，直到覆盖它或文件结束；然后把该行滚到顶部并标记，每个 `navigation.revision` 一次。同一 revision 下重新挂载的体恢复读者的滚动位置而不再跳。不带 `revealIfOpened: false` 再次打开同一文件时聚焦已有 tab，并把新参数作为新 revision 送达。
 
 <a id="model-experience"></a>
 ## 模型体验
