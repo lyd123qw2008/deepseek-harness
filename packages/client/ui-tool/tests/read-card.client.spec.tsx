@@ -10,7 +10,7 @@ import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts
 import type { StartedToolCall, ToolResultNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import { CHAT_READ_MAX_LINES, readCallLine, readCardModel } from '../src/client/tool/models/read-card-model.ts'
+import { CHAT_READ_MAX_LINES, readCardModel } from '../src/client/tool/models/read-card-model.ts'
 import { GenericToolCard, type GenericToolCardProps } from '../src/client/tool/toolviews/GenericToolCard.tsx'
 import { zh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.ts'
 import { ReadRow, readToolview } from '../src/client/tool/toolviews/read-row.tsx'
@@ -141,28 +141,6 @@ describe('readCardModel', () => {
   })
 })
 
-describe('readCallLine', () => {
-  it('reads the 1-based offset a well-formed read call started from, running or settled', () => {
-    expect(readCallLine(running())).toBe(41)
-    expect(readCallLine(settled())).toBe(41)
-  })
-
-  it.each([
-    ['no offset', '{"file_path":"src/a.ts"}'],
-    ['a string offset', '{"file_path":"src/a.ts","offset":"41"}'],
-    ['zero', '{"file_path":"src/a.ts","offset":0}'],
-    ['a negative offset', '{"file_path":"src/a.ts","offset":-3}'],
-    ['a fraction', '{"file_path":"src/a.ts","offset":2.5}'],
-    ['a read without a path', '{"offset":3}'],
-  ])('names no line for %s', (_label, argsRaw) => {
-    expect(readCallLine(running({ argsRaw }))).toBeUndefined()
-  })
-
-  it('names no line for a call that is not read', () => {
-    expect(readCallLine(running({ name: 'echo', argsRaw: '{"offset":3}' }))).toBeUndefined()
-  })
-})
-
 describe('GenericToolCard read body', () => {
   const ownerProps = (block: StartedToolCall | ToolResultNode): GenericToolCardProps => ({
     loadImage: vi.fn(() => Promise.reject(new Error('not used'))),
@@ -240,14 +218,11 @@ describe('ReadRow keyed toolview', () => {
     expect(view.getAllByText('src/a.ts').length).toBe(1)
   })
 
-  it('the path summary opens the file at the line the call started from', () => {
+  it('the path summary opens the file through the Host callback', () => {
     const openFile = vi.fn()
     const view = render(<ReadRow {...{ ...rowProps(settled()), openFile }} />)
     fireEvent.click(view.getByRole('button', { name: 'src/a.ts' }))
-    // The row derives the file path and the `offset` line from args; the chat
-    // view resolves the path against the cwd before this callback opens it, so
-    // the arg path is what arrives.
-    expect(openFile).toHaveBeenCalledWith('src/a.ts', { line: 41 })
+    expect(openFile).toHaveBeenCalledWith('src/a.ts')
   })
 
   it('a running read renders the summary row alone, and its state', () => {
