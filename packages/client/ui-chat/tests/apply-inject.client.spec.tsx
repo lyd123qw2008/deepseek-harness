@@ -5,7 +5,7 @@ import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { ISession, SessionReference } from '@deepseek-ai/dsh-api-session-controller/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import {
-  SlotTestRuntime, stubSettingsScope, usePinnedBrowserLanguages,
+  RemoteError, SlotTestRuntime, stubSettingsScope, usePinnedBrowserLanguages,
 } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionBehaviorOverrides } from '@deepseek-ai/dsh-client-test-runtime'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
@@ -133,26 +133,23 @@ describe('Chat inject API', () => {
     await b.runtime.dispose()
   })
 
-  it('addresses file paths under the Session\'s scope and opens them in the right Sidebar', async () => {
+  it('resolves file paths against the Session cwd and preserves Host opener failures', async () => {
     const b = await bench()
     const { injected } = b.chatViewApi(b.rootReference)
     await injected.openFile('src/a.ts')
-    // Files stay in the product: a relative path is handed to the Sidebar as an
-    // address under this session's scope, not to a desktop opener.
-    expect(b.sidebarRight.openResource).toHaveBeenCalledWith('dsh-resource://file/session/root-1/src/a.ts')
-    expect(b.openWorkspacePath).not.toHaveBeenCalled()
+    expect(b.openWorkspacePath).toHaveBeenCalledWith({ path: '/proj/src/a.ts' })
 
-    // An absolute path inside the session's workspace is the same session-relative address.
     await injected.openFile('/proj/src/a.ts')
-    expect(b.sidebarRight.openResource).toHaveBeenLastCalledWith('dsh-resource://file/session/root-1/src/a.ts')
+    expect(b.openWorkspacePath).toHaveBeenLastCalledWith({ path: '/proj/src/a.ts' })
 
-    // A name a URL would otherwise mangle survives the round trip.
     await injected.openFile('src/a b#c.ts')
-    expect(b.sidebarRight.openResource).toHaveBeenLastCalledWith('dsh-resource://file/session/root-1/src/a%20b%23c.ts')
+    expect(b.openWorkspacePath).toHaveBeenLastCalledWith({ path: '/proj/src/a b#c.ts' })
 
-    // A line travels as the `file` type's navigation parameter, not in the address.
-    await injected.openFile('src/a.ts', { line: 7 })
-    expect(b.sidebarRight.openResource).toHaveBeenLastCalledWith('dsh-resource://file/session/root-1/src/a.ts', { params: { line: 7 } })
+    b.openWorkspacePath.mockResolvedValueOnce({
+      ok: false,
+      error: new RemoteError('gateway/internal', 'xdg-open is not available', {}),
+    })
+    await expect(injected.openFile('src/b.ts')).rejects.toThrow('path open failed: xdg-open is not available')
     await b.runtime.dispose()
   })
 
@@ -212,10 +209,9 @@ describe('Chat inject API', () => {
     // The Host resolves the relative path against the root it holds for the
     // Session; the Client need not know it.
     await injected.openFile('src/a.ts')
-    expect(b.sidebarRight.openResource).toHaveBeenCalledWith('dsh-resource://file/session/root-2/src/a.ts')
-    // An absolute path outside every known root still names its Session.
+    expect(b.openWorkspacePath).toHaveBeenCalledWith({ path: 'src/a.ts' })
     await injected.openFile('/abs/a.ts')
-    expect(b.sidebarRight.openResource).toHaveBeenLastCalledWith('dsh-resource://file/session/root-2//abs/a.ts')
+    expect(b.openWorkspacePath).toHaveBeenLastCalledWith({ path: '/abs/a.ts' })
     await b.runtime.dispose()
   })
 
