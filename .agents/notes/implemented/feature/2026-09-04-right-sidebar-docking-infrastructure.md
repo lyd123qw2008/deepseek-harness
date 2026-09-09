@@ -49,7 +49,7 @@ The surface renders tabs whose bodies it does not know: each tab carries a `kind
 
 ### Entry points and removals
 
-`ui-chat`'s `openFile(path, { line? })` — reached by tool-row path links, produced-file chips, and closing-message mentions — now opens the file into the Sidebar through the navigation face (see [tab types and navigation](../architecture/2026-09-05-sidebar-tab-types-and-navigation.md)). The `Show in folder` action and its `canOpenWorkspacePath` probe are removed from `ui-deliverables`: the Sidebar has no directory form, and the product keeps no secondary entry. `DetailsPanel`, `ToolDetails`, the tool-node reader, the chat store's selection, `ToolDetailsProps`, and `CENTER_MIN` are removed. `session/openWorkspacePath` remains on the Host with no web caller.
+`ui-chat`'s `openFile(path)` — reached by tool-row path links, produced-file chips, and closing-message mentions — resolves the path against the Session workspace and calls the Host's `session/openWorkspacePath`, which performs validation and desktop handoff. The Sidebar remains an explicit surface: its Files tree opens `dsh-resource://file` previews through the navigation face (see [tab types and navigation](../architecture/2026-09-05-sidebar-tab-types-and-navigation.md)). The `Show in folder` action and its `canOpenWorkspacePath` probe are removed from `ui-deliverables`; the row lists files only, while the Host opener is the separate default file action. `DetailsPanel`, `ToolDetails`, the tool-node reader, the chat store's selection, `ToolDetailsProps`, and `CENTER_MIN` are removed.
 
 ## Alternatives considered
 
