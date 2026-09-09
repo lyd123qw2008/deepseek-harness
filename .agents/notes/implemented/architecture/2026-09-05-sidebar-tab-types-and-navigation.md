@@ -6,7 +6,7 @@ English | [中文](2026-09-05-sidebar-tab-types-and-navigation.zh.md)
 
 ## Problem
 
-The [docking surface](../feature/2026-09-04-right-sidebar-docking-infrastructure.md) gives the right Sidebar panes, tabs, and floating panels, but a pane full of tabs is only useful if other plugins can put content into them. That needs three contracts the surface itself does not define: how a plugin declares a kind of tab and the addresses it can show, how any caller — a produced-file chip in the conversation, a row in a file tree, a plugin's own button — asks the Sidebar to show something, and what a tab's body may rely on at runtime. Each contract is a public face that plugins shipped from outside this repository will write against, so each has to be settled before those plugins exist: a renamed field, a changed enum value, or a different address grammar afterwards breaks every one of them.
+The [docking surface](../feature/2026-09-04-right-sidebar-docking-infrastructure.md) gives the right Sidebar panes, tabs, and floating panels, but a pane full of tabs is only useful if other plugins can put content into them. That needs three contracts the surface itself does not define: how a plugin declares a kind of tab and the addresses it can show, how any Sidebar-owned caller — a row in a file tree or a plugin's own button — asks the Sidebar to show something, and what a tab's body may rely on at runtime. Each contract is a public face that plugins shipped from outside this repository will write against, so each has to be settled before those plugins exist: a renamed field, a changed enum value, or a different address grammar afterwards breaks every one of them.
 
 Two constraints shaped the answers. Dynamic client plugins may not import runtime values from one another — a function, a constant, a class — only types, so nothing in these contracts may require a helper function or an exported constant from the Sidebar package. And the Web client already has one component model, the Slot system; a second one for tabs would be a parallel framework to learn and maintain.
 
@@ -80,7 +80,7 @@ Addresses come in two families that never mix. Resource addresses are the resour
 
 ### Entry points
 
-The conversation's `openFile(path, { line? })` — tool-row path links, produced-file chips, closing-message mentions — encodes the path as a file resource address for the Session, and calls `openResource` with `params.line` when the caller knows one; the `read` tool row passes the line its `offset` argument started from. The strip's `+` calls `openTab('guide', { paneId, revealIfOpened: false })` for the pane it sits in; a guide entry box calls `tab.actions.openTab(entry.kind, { replaceTab: true })`; a file-tree row calls `tab.actions.openResource(address)`, which lands in the tree's own pane.
+The Sidebar's file-tree row calls `tab.actions.openResource(address)`, which lands in the tree's own pane; other Sidebar-owned resource viewers use the same navigation face when they need a file preview. Chat and Tool path links use `openFile(path)` to resolve the Session workspace path and call the Host opener, so they do not create Sidebar tabs. The strip's `+` calls `openTab('guide', { paneId, revealIfOpened: false })` for the pane it sits in; a guide entry box calls `tab.actions.openTab(entry.kind, { replaceTab: true })`.
 
 ## Alternatives considered
 
