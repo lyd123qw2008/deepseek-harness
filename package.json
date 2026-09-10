@@ -118,6 +118,7 @@
     "verify-type-equiv": "tsx scripts/verify-type-equiv.ts",
     "verify-skill-invocation-metadata": "tsx scripts/verify-skill-invocation-metadata.ts",
     "verify-upgrade-environment": "tsx scripts/verify-upgrade-environment.ts",
+    "upgrade-web-launchers": "tsx scripts/upgrade-web-launchers.ts",
     "verify-translation-prompt": "tsx scripts/verify-translation-prompt.ts",
     "verify-translation-pairing": "tsx scripts/verify-translation-pairing.ts",
     "test:docs": "tsx scripts/run-gates.ts doc-quick",
