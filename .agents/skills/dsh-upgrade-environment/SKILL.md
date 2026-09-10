@@ -72,6 +72,22 @@ Keep these source paths available when they exist:
 
 The validator checks source-file coverage and optional target-baseline coverage. It does not replace Session decoders, attachment integrity checks, SQLite queries, Engram diagnostics, or a real startup smoke test.
 
+## Web launcher ownership
+
+The rationale for generated launchers is recorded in [the upgrade launcher Agent Note](../../notes/implemented/process/2026-09-10-upgrade-web-launcher-generation.md). Do not copy or hand-edit versioned Web launcher files. Generate the complete Windows launcher set from the target code home, data home, release, and port:
+
+```sh
+corepack pnpm run upgrade-web-launchers --write --data-home <target-home> --code-home <target-worktree> --release <target-release-label> --port <target-port>
+```
+
+The command writes and verifies `start-web-<port>.cmd`, `run-web-<port>.ps1`, `stop-web-<port>.cmd`, `restart-web-<port>.ps1`, and `restart-web-<port>.cmd`. Pass the display label without the `dsh-v` tag prefix, such as `0.1.5-alpha.2`. The command never removes files; review and remove only stale versioned Web launchers after the target inventory is known. Run the read-only check before each start or restart and after launcher cleanup:
+
+```sh
+corepack pnpm run upgrade-web-launchers --check --data-home <target-home> --code-home <target-worktree> --release <target-release-label> --port <target-port>
+```
+
+A launcher check fails when a required file is missing, differs from the target description, or names another port. This keeps launcher paths and the target release in one generated set instead of relying on copied filenames.
+
 ## Migration procedure
 
 1. Record the source and target release, worktree, data home, Profile path, port, Node and package-manager versions, and the exact target commit. Create a full source snapshot and a full target backup outside both Git worktrees. Include SQLite files and rollback metadata.
@@ -86,7 +102,7 @@ The validator checks source-file coverage and optional target-baseline coverage.
 4. Keep released Session generations immutable. Run the product's adjacent Session migration and fail closed on unsupported events. Validate released v0/v1/v2 artifacts, event counts, Zstandard framing, attachment references, and attachment hashes independently of the file validator.
 5. Restore Engram from a consistent SQLite snapshot, then run its doctor and project/observation queries. Preserve project names and observations. A healthy SQLite file is not proof that the user's Engram records survived.
 6. Reinstall Profile dependencies in the target Profile. Apply only release-specific configuration adaptations after the copy-time audit. Keep `.credentials.yaml`, `.anonymous-user-id`, API keys, bearer tokens, `.env` files, npm tokens, and other machine identity isolated unless the user explicitly authorizes a redacted transfer.
-7. Start only the target compiled application on the target port. Validate the landing page, authenticated API, Session listing/page/search, long-session pagination, attachments, tool views, child Sessions, settings, and the required user workflow. Record target-generated Sessions and logs after the copy-time checksum point; they are not copy-time losses.
+7. Run the launcher check, then start only the target compiled application on the target port. Validate the landing page, authenticated API, Session listing/page/search, long-session pagination, attachments, tool views, child Sessions, settings, and the required user workflow. Record target-generated Sessions and logs after the copy-time checksum point; they are not copy-time losses.
 8. Run the validator again after migration and smoke tests:
 
    ```sh
