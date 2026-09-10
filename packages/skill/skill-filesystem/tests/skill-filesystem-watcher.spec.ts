@@ -242,6 +242,39 @@ describe('skill-filesystem watcher failures', () => {
     await fiber.dispose()
   })
 
+  if (process.platform === 'win32') {
+    it('pauses and restores a native watcher after a raw rename burst', async () => {
+      const home = await tempDir('skill-watch-native-burst')
+      const root = join(home, '.dsh/skills')
+      await writeSkill(root, 'watched-skill')
+      const ctx = new Context()
+      await ctx.plugin(SkillRegistry)
+      const fiber = await ctx.plugin(SkillFileSystem, {
+        dshHome: join(home, '.dsh'),
+        agentsHome: join(home, '.agents'),
+        watch: true,
+        watchNativeBurstLimit: 2,
+        watchNativeBurstWindowMs: 1_000,
+        watchNativeRecoveryMs: 10,
+      })
+      try {
+        await ctx.skills.list()
+        const first = watcherHarness.watchers[0]
+        if (first === undefined) throw new Error('expected a root watcher')
+        const watchedPath = join(first.path, '.system')
+        first.emitter.emit('raw', 'rename', watchedPath, { watchedPath })
+        first.emitter.emit('raw', 'rename', watchedPath, { watchedPath })
+        first.emitter.emit('raw', 'rename', watchedPath, { watchedPath })
+
+        await vi.waitFor(() => { expect(first.closeCalls).toBeGreaterThan(0) })
+        await vi.waitFor(() => { expect(watcherHarness.watchers).toHaveLength(2) })
+        expect(watcherHarness.watchers[1]?.path).toBe(first.path)
+      } finally {
+        await fiber.dispose()
+      }
+    })
+  }
+
   it('filters events, coalesces invalidation, recovers runtime errors, and contains late callbacks', async () => {
     const home = await tempDir('skill-watch-runtime-error')
     const root = join(home, '.dsh/skills')
