@@ -41,6 +41,13 @@ const USER_AGENTS_RANK = 500
 const DEFAULT_WATCH_STABILITY_THRESHOLD_MS = 200
 const DEFAULT_WATCH_POLL_INTERVAL_MS = 100
 const DEFAULT_WATCH_MAX_PROJECTS = 128
+// Windows native directory notifications can occasionally repeat one `rename`
+// event fast enough for Chokidar to continuously rescan the same directory.
+// Keep the normal native watcher, but temporarily close and reopen it when that
+// pathological per-directory rate is exceeded.
+const DEFAULT_WATCH_NATIVE_BURST_LIMIT = 256
+const DEFAULT_WATCH_NATIVE_BURST_WINDOW_MS = 1_000
+const DEFAULT_WATCH_NATIVE_RECOVERY_MS = 2_000
 
 export const name = 'skill-filesystem'
 export const inject = ['skills']
@@ -69,6 +76,12 @@ export interface Config {
   watchMaxProjects?: number
   /** Whether watched symbolic links follow their target files. */
   watchFollowSymlinks?: boolean
+  /** Maximum native `rename` events from one watched directory per burst window; zero disables Windows burst recovery. */
+  watchNativeBurstLimit?: number
+  /** Milliseconds over which native `rename` events are counted for burst recovery. */
+  watchNativeBurstWindowMs?: number
+  /** Milliseconds to wait before reopening a watcher paused by a native event burst. */
+  watchNativeRecoveryMs?: number
   /** Bundled skill root; defaults to `$DSH_BUNDLED_SKILL_DIR` when default roots are included, otherwise mounts none. */
   bundledSkillDir?: string
 }
@@ -85,6 +98,9 @@ export const Config: Schema<Config> = z.object({
   watchPollIntervalMs: z.number().default(DEFAULT_WATCH_POLL_INTERVAL_MS),
   watchMaxProjects: z.number().default(DEFAULT_WATCH_MAX_PROJECTS),
   watchFollowSymlinks: z.boolean().default(true),
+  watchNativeBurstLimit: z.number().default(DEFAULT_WATCH_NATIVE_BURST_LIMIT),
+  watchNativeBurstWindowMs: z.number().default(DEFAULT_WATCH_NATIVE_BURST_WINDOW_MS),
+  watchNativeRecoveryMs: z.number().default(DEFAULT_WATCH_NATIVE_RECOVERY_MS),
   bundledSkillDir: z.string(),
 })
 
@@ -128,6 +144,9 @@ interface ResolvedWatchConfig {
   pollIntervalMs: number
   maxProjects: number
   followSymlinks: boolean
+  nativeBurstLimit: number
+  nativeBurstWindowMs: number
+  nativeRecoveryMs: number
 }
 
 /** Register the local filesystem skill provider on `ctx.skills`. */
@@ -276,7 +295,14 @@ interface RootWatchState {
   owners: Set<string>
   watcher: WatchHandle | undefined
   opening: Promise<void> | undefined
+  recovery: Promise<void> | undefined
+  recoveryToken: symbol | undefined
   unhealthy: boolean
+}
+
+interface NativeBurstWindow {
+  startedAt: number
+  count: number
 }
 
 interface WatchHandle {
@@ -348,6 +374,7 @@ class SkillWatchManager {
     this.projects.clear()
     await Promise.all(states.map(async (state) => {
       await settleWatcherOpening(state.opening)
+      await settleWatcherOpening(state.recovery)
       const watcher = state.watcher
       state.watcher = undefined
       if (watcher !== undefined) await this.closeWatcher(watcher)
@@ -357,7 +384,15 @@ class SkillWatchManager {
   private async retainRoot(root: SkillRoot, owner: string): Promise<void> {
     let state = this.roots.get(root.path)
     if (state === undefined) {
-      state = { root, owners: new Set(), watcher: undefined, opening: undefined, unhealthy: true }
+      state = {
+        root,
+        owners: new Set(),
+        watcher: undefined,
+        opening: undefined,
+        recovery: undefined,
+        recoveryToken: undefined,
+        unhealthy: true,
+      }
       this.roots.set(root.path, state)
     }
     state.owners.add(owner)
@@ -372,6 +407,7 @@ class SkillWatchManager {
     if (state.owners.size > 0) return
     this.roots.delete(path)
     await settleWatcherOpening(state.opening)
+    await settleWatcherOpening(state.recovery)
     const watcher = state.watcher
     state.watcher = undefined
     if (watcher !== undefined) await this.closeWatcher(watcher)
@@ -380,6 +416,7 @@ class SkillWatchManager {
   private ensureWatcher(state: RootWatchState): Promise<void> {
     /* v8 ignore next -- A scheduled rewatch can reach this guard only when teardown wins its await. */
     if (this.closing || !this.config.enabled) return Promise.resolve()
+    if (state.recovery !== undefined) return state.recovery
     if (state.opening !== undefined) return state.opening
     const opening = this.ensureCurrentWatcher(state)
     state.opening = opening
@@ -418,7 +455,7 @@ class SkillWatchManager {
       if (watcher === undefined) return
       /* v8 ignore start -- Post-open teardown is timing-dependent; the disposal race has an explicit integration test. */
       // oxlint-disable-next-line typescript/no-unnecessary-condition -- teardown can race awaited watcher startup
-      if (this.closing || state.owners.size === 0) {
+      if (this.closing || state.owners.size === 0 || state.recovery !== undefined) {
         await this.closeWatcher(watcher)
         return
       }
@@ -504,11 +541,19 @@ class SkillWatchManager {
       usePolling: this.config.usePolling,
       interval: this.config.pollIntervalMs,
     })
+    let ready = false
+    const nativeBursts = new Map<string, NativeBurstWindow>()
     const handle: WatchHandle = {
       mode,
-      close: () => watcher.close(),
+      close: () => {
+        watcher.off('raw', onRaw)
+        return watcher.close()
+      },
     }
-    let ready = false
+    const onRaw = (event: string, path: string, details: unknown): void => {
+      if (!ready) return
+      this.handleNativeRawEvent(state, handle, nativeBursts, event, path, details)
+    }
     const readiness = Promise.withResolvers<undefined>()
     const signal = this.lifecycle.signal
     if (signal.aborted) {
@@ -525,6 +570,7 @@ class SkillWatchManager {
       this.handleWatcherError(state, error)
     }
     watcher.on('error', onError)
+    watcher.on('raw', onRaw)
     watcher.once('ready', () => {
       ready = true
       readiness.resolve(undefined)
@@ -541,6 +587,75 @@ class SkillWatchManager {
       signal.removeEventListener('abort', onAbort)
     }
     return handle
+  }
+
+  /**
+   * Contain a Windows native watcher burst before Chokidar can keep rescanning
+   * one directory. This deliberately observes only raw `rename` events: normal
+   * skill writes still travel through Chokidar unchanged, while a pathological
+   * stream pauses this root briefly and then restores its native watcher.
+   */
+  private handleNativeRawEvent(
+    state: RootWatchState,
+    watcher: WatchHandle,
+    bursts: Map<string, NativeBurstWindow>,
+    event: string,
+    path: string,
+    details: unknown,
+  ): void {
+    if (
+      this.closing
+      || process.platform !== 'win32'
+      || this.config.usePolling
+      || this.config.nativeBurstLimit === 0
+      || state.recovery !== undefined
+      || event !== 'rename'
+    ) return
+    const watchedPath = rawWatchedPath(path, details)
+    const now = Date.now()
+    let burst = bursts.get(watchedPath)
+    if (burst === undefined || now - burst.startedAt >= this.config.nativeBurstWindowMs) {
+      burst = { startedAt: now, count: 0 }
+      bursts.set(watchedPath, burst)
+    }
+    burst.count += 1
+    if (burst.count <= this.config.nativeBurstLimit) return
+    this.ctx.logger.warn(
+      `skill-filesystem: ${String(burst.count)} native rename events for ${watchedPath} within ${String(this.config.nativeBurstWindowMs)}ms; pausing watcher for ${String(this.config.nativeRecoveryMs)}ms`,
+    )
+    bursts.clear()
+    this.scheduleNativeBurstRecovery(state, watcher)
+  }
+
+  /** Pause a storming native watcher, then reopen it after an abortable quiet period. */
+  private scheduleNativeBurstRecovery(state: RootWatchState, watcher: WatchHandle): void {
+    if (this.closing || state.owners.size === 0 || state.recovery !== undefined) return
+    state.unhealthy = true
+    if (state.watcher === watcher) state.watcher = undefined
+    const token = Symbol('skill-filesystem native burst recovery')
+    state.recoveryToken = token
+    const recovery = (async () => {
+      await this.closeWatcher(watcher)
+      if (!(await waitForWatcherRecovery(this.lifecycle.signal, this.config.nativeRecoveryMs))) return
+      if (this.closing || state.owners.size === 0 || state.recoveryToken !== token) return
+      state.recovery = undefined
+      state.recoveryToken = undefined
+      await this.ensureWatcher(state)
+      this.queueInvalidation()
+    })()
+    state.recovery = recovery
+    void recovery.then(
+      () => {
+        if (state.recoveryToken !== token) return
+        state.recovery = undefined
+        state.recoveryToken = undefined
+      },
+      () => {
+        if (state.recoveryToken !== token) return
+        state.recovery = undefined
+        state.recoveryToken = undefined
+      },
+    )
   }
 
   private handleWatchEvent(
@@ -609,13 +724,44 @@ async function settleWatcherOpening(opening: Promise<void> | undefined): Promise
   }
 }
 
+/** Prefer Chokidar's exact native watched directory, falling back to its event path. */
+function rawWatchedPath(path: string, details: unknown): string {
+  if (typeof details !== 'object' || details === null || !('watchedPath' in details)) return path
+  const watchedPath = (details as { watchedPath?: unknown }).watchedPath
+  return typeof watchedPath === 'string' ? watchedPath : path
+}
+
+/** Wait for one watcher quiet period while allowing immediate provider teardown. */
+function waitForWatcherRecovery(signal: AbortSignal, delayMs: number): Promise<boolean> {
+  if (signal.aborted) return Promise.resolve(false)
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (recovered: boolean): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      signal.removeEventListener('abort', onAbort)
+      resolve(recovered)
+    }
+    const onAbort = (): void => { finish(false) }
+    const timer = setTimeout(() => { finish(true) }, delayMs)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
 function resolveWatchConfig(config: Config): ResolvedWatchConfig {
   const stabilityThresholdMs = config.watchStabilityThresholdMs ?? DEFAULT_WATCH_STABILITY_THRESHOLD_MS
   const pollIntervalMs = config.watchPollIntervalMs ?? DEFAULT_WATCH_POLL_INTERVAL_MS
   const maxProjects = config.watchMaxProjects ?? DEFAULT_WATCH_MAX_PROJECTS
+  const nativeBurstLimit = config.watchNativeBurstLimit ?? DEFAULT_WATCH_NATIVE_BURST_LIMIT
+  const nativeBurstWindowMs = config.watchNativeBurstWindowMs ?? DEFAULT_WATCH_NATIVE_BURST_WINDOW_MS
+  const nativeRecoveryMs = config.watchNativeRecoveryMs ?? DEFAULT_WATCH_NATIVE_RECOVERY_MS
   assertPositiveInteger('watchStabilityThresholdMs', stabilityThresholdMs)
   assertPositiveInteger('watchPollIntervalMs', pollIntervalMs)
   assertPositiveInteger('watchMaxProjects', maxProjects)
+  assertNonNegativeInteger('watchNativeBurstLimit', nativeBurstLimit)
+  assertPositiveInteger('watchNativeBurstWindowMs', nativeBurstWindowMs)
+  assertPositiveInteger('watchNativeRecoveryMs', nativeRecoveryMs)
   return {
     enabled: config.watch ?? true,
     usePolling: config.watchUsePolling ?? false,
@@ -623,6 +769,9 @@ function resolveWatchConfig(config: Config): ResolvedWatchConfig {
     pollIntervalMs,
     maxProjects,
     followSymlinks: config.watchFollowSymlinks ?? true,
+    nativeBurstLimit,
+    nativeBurstWindowMs,
+    nativeRecoveryMs,
   }
 }
 
@@ -703,6 +852,12 @@ function mutationToolName(actor: object | undefined): 'edit' | 'write' | undefin
 function assertPositiveInteger(field: string, value: number): void {
   if (!Number.isInteger(value) || value < 1) {
     throw new TypeError(`skill-filesystem: ${field} must be a positive integer`)
+  }
+}
+
+function assertNonNegativeInteger(field: string, value: number): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new TypeError(`skill-filesystem: ${field} must be a non-negative integer`)
   }
 }
 
