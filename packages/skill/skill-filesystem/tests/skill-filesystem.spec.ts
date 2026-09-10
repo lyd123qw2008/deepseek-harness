@@ -853,6 +853,9 @@ describe('FileSystemSkillProvider', () => {
     await expect(ctx.plugin(SkillFileSystem, { watchMaxProjects: 0 })).rejects.toThrow('watchMaxProjects')
     await expect(ctx.plugin(SkillFileSystem, { watchPollIntervalMs: 1.5 })).rejects.toThrow('watchPollIntervalMs')
     await expect(ctx.plugin(SkillFileSystem, { watchStabilityThresholdMs: 0 })).rejects.toThrow('watchStabilityThresholdMs')
+    await expect(ctx.plugin(SkillFileSystem, { watchNativeBurstLimit: -1 })).rejects.toThrow('watchNativeBurstLimit')
+    await expect(ctx.plugin(SkillFileSystem, { watchNativeBurstWindowMs: 0 })).rejects.toThrow('watchNativeBurstWindowMs')
+    await expect(ctx.plugin(SkillFileSystem, { watchNativeRecoveryMs: 1.5 })).rejects.toThrow('watchNativeRecoveryMs')
   })
 
   it('uses default home root resolution without exposing builtin skills', async () => {
