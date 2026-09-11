@@ -16,7 +16,7 @@ The Skill separates code upgrade from data migration. It starts a target worktre
 
 The verifier requires explicit source and target homes. Copy-time mode checks selected byte-preserved files and source coverage; post-migration mode permits documented Session, configuration, and index rewrites while requiring every source file and optional target baseline file to remain represented. It never copies, deletes, prints secret values, or treats historical `excluded` arrays as policy.
 
-The Skill keeps source and target worktrees, data homes, Profiles, credentials, and ports isolated. It requires full backups, consistent SQLite snapshots, immutable released Session generations, independent attachment and Engram checks, target-only retention, cold startup, restart validation, and rollback from the target backup.
+The Skill keeps source and target worktrees, data homes, Profiles, credentials, and ports isolated. It requires pre-upgrade source and target-before backups, consistent SQLite snapshots, immutable released Session generations, independent attachment and Engram checks, target-only retention, cold startup, restart validation, and rollback from the target-before backup. It does not require a second full data copy after startup; post-start rollback copies and rehearsals are opt-in.
 
 ## Alternatives considered
 
@@ -28,4 +28,4 @@ The Skill keeps source and target worktrees, data homes, Profiles, credentials, 
 
 ## Consequences
 
-Future upgrades share one manifest and one read-only structural check, while product-specific Session decoding, attachment integrity, SQLite queries, Engram diagnostics, Profile loading, and UI smoke tests remain explicit evidence. The process requires a full target backup and deliberate manifest updates when a new durable or secret-bearing path is introduced.
+Future upgrades share one manifest and one read-only structural check, while product-specific Session decoding, attachment integrity, SQLite queries, Engram diagnostics, Profile loading, and UI smoke tests remain explicit evidence. The process requires a pre-upgrade target-before backup and deliberate manifest updates when a new durable or secret-bearing path is introduced.
