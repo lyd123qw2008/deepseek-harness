@@ -16,7 +16,7 @@ Status: implemented
 
 验证器要求明确的源和目标 home。复制时模式检查选定的字节保留文件与源覆盖范围；迁移后模式允许已记录的 Session、配置和索引重写，同时要求每个源文件及可选目标基线文件仍有对应项。它不会复制、删除或打印 secret 值，也不会把历史 `excluded` 数组当作策略。
 
-该 Skill 让源与目标 worktree、数据 home、Profile、凭据和端口保持隔离。它要求完整备份、一致的 SQLite 快照、不可变的已发布 Session generation、独立的附件和 Engram 检查、目标独有状态保留、冷启动、重启验证，以及从目标备份回滚。
+该 Skill 让源与目标 worktree、数据 home、Profile、凭据和端口保持隔离。它要求升级前的源快照和目标升级前备份、一致的 SQLite 快照、不可变的已发布 Session generation、独立的附件和 Engram 检查、目标独有状态保留、冷启动、重启验证，以及从目标升级前备份回滚。启动后不要求再次复制完整数据；启动后的回滚副本和演练需要明确请求。
 
 ## 考虑过的替代方案
 
@@ -28,4 +28,4 @@ Status: implemented
 
 ## 后果
 
-未来升级共享一个 manifest 和一个只读结构检查，而产品特有的 Session 解码、附件完整性、SQLite 查询、Engram 诊断、Profile 加载和 UI smoke test 仍然是明确的证据。该流程要求完整的目标备份，并要求新增持久化路径或含 secret 路径时有意更新 manifest。
+未来升级共享一个 manifest 和一个只读结构检查，而产品特有的 Session 解码、附件完整性、SQLite 查询、Engram 诊断、Profile 加载和 UI smoke test 仍然是明确的证据。该流程要求升级前的目标备份，并要求新增持久化路径或含 secret 路径时有意更新 manifest。
