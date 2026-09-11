@@ -90,7 +90,7 @@ A launcher check fails when a required file is missing, differs from the target 
 
 ## Migration procedure
 
-1. Record the source and target release, worktree, data home, Profile path, port, Node and package-manager versions, and the exact target commit. Create a full source snapshot and a full target backup outside both Git worktrees. Include SQLite files and rollback metadata.
+1. Record the source and target release, worktree, data home, Profile path, port, Node and package-manager versions, and the exact target commit. Create the pre-upgrade source snapshot and target-before backup outside both Git worktrees. Include SQLite files and rollback metadata. These are the only mandatory full data copies; do not create another full target copy after startup. Post-start rollback copies and rollback rehearsals require an explicit request.
 2. Run the validator in copy-time mode before application startup:
 
    ```sh
@@ -117,4 +117,4 @@ Stop only the target process, preserve the failed target and validator report fo
 
 ## Completion criteria
 
-An upgrade is complete only when the target release is explicit, source and target are isolated, the full backup exists, the copy-time and post-migration validator runs pass, source data is unchanged, durable Session and attachment checks pass, SQLite and Engram records are queried successfully, Profile dependencies load, the target starts cold, and the required user workflow survives a restart.
+An upgrade is complete only when the target release is explicit, source and target are isolated, the pre-upgrade source snapshot and target-before backup exist, the copy-time and post-migration validator runs pass, source data is unchanged, durable Session and attachment checks pass, SQLite and Engram records are queried successfully, Profile dependencies load, the target starts cold, and the required user workflow survives a restart.
