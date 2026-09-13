@@ -3,6 +3,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { scopeChainOf, scopeOf } from '@deepseek-ai/dsh-scope'
 import { TeamTaskId } from '@deepseek-ai/dsh-experimental-agent-team'
 import type { TeamMemberView } from '@deepseek-ai/dsh-experimental-agent-team'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -398,15 +399,27 @@ To message another teammate, use send_message({ target: "<teammate name>", messa
   }
 }
 
-/** Install Team tools in every live or subsequently published Team member scope. */
+/**
+ * Install Team tools in every live or subsequently published Team member scope
+ * inside this plugin's composition. A Team plugin is normally mounted by a
+ * Team-aware agent preset, so the preset standing scope is the capability
+ * boundary; the explicit undefined case preserves direct host composition in
+ * package tests and small embedders that intentionally mount the plugin at the
+ * root.
+ */
 export function apply(ctx: Context, config: Config = {}): void {
   const resolved: Required<Config> = {
     freshProvider: config.freshProvider ?? 'spawn',
     forkProvider: config.forkProvider ?? 'fork',
   }
+  const compositionScope = scopeOf(ctx)
+  const belongsToComposition = (agent: Agent): boolean => compositionScope === undefined
+    || scopeChainOf(scopeOf(agent.ctx)).includes(compositionScope)
   const installed = new Map<Agent, () => void>()
   const maybeInstall = (agent: Agent): void => {
-    if (installed.has(agent) || ctx.agentTeams.tryMembership(agent) === undefined) return
+    if (!belongsToComposition(agent)
+      || installed.has(agent)
+      || ctx.agentTeams.tryMembership(agent) === undefined) return
     installed.set(agent, install(agent, ctx, resolved))
   }
   for (const agent of ctx.agents.list()) maybeInstall(agent)

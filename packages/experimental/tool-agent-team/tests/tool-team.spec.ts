@@ -7,7 +7,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { ToolCallId, createUserMessage } from '@deepseek-ai/dsh-llm'
-import { scopeOf } from '@deepseek-ai/dsh-scope'
+import { bindScopeParent, createScope, scopeOf } from '@deepseek-ai/dsh-scope'
 import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SessionQueryEngine from '@deepseek-ai/dsh-session-query'
@@ -208,6 +208,49 @@ describe('dsh-tool-team', () => {
     const stored = await execute(ctx, lead, 'list_agents', {})
     expect(JSON.parse(text(stored))).toContainEqual(expect.objectContaining({ target: member.target, status: 'inactive' }))
     expect(ctx.agentTeams.listMembers(lead)[1]).toMatchObject({ id: childId, name: member.target, status: 'inactive' })
+  it('limits Team registrations to the preset composition scope', async () => {
+    const ctx = new Context()
+    await mountAgentLoopTestDependencies(ctx)
+    const storageRoot = mkdtempSync(join(tmpdir(), 'dsh-tool-team-scope-'))
+    roots.push(storageRoot)
+    await ctx.plugin(JsonlSessionPersistence, { root: storageRoot })
+    await ctx.plugin(TestSessionQuery)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(SubagentService)
+    await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
+    await ctx.plugin(SubagentFork, { providerName: 'fork' })
+    await ctx.plugin(TeamService)
+
+    const presetKey = { id: 'team-local' }
+    const presetScope = createScope(ctx, presetKey)
+    await presetScope.ctx.plugin(toolTeam)
+
+    const ordinary = await ctx.agents.create({
+      sessionId: SessionId('ordinary-root'),
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })
+    const team = await ctx.agents.create({
+      sessionId: SessionId('team-root'),
+      agentOptions: { provider: 'mock', model: 'mock' },
+      setup: (agentCtx) => {
+        const agentKey = scopeOf(agentCtx)
+        if (agentKey === undefined) throw new Error('expected an Agent scope')
+        bindScopeParent(agentKey, presetKey)
+      },
+    })
+
+    const ordinaryScope = scopeOf(ordinary.agent.ctx)
+    const teamScope = scopeOf(team.agent.ctx)
+    if (ordinaryScope === undefined || teamScope === undefined) throw new Error('expected Agent scopes')
+    const ordinaryAssembly = await ctx.systemPrompt.assemble({ scope: ordinaryScope })
+    const teamAssembly = await ctx.systemPrompt.assemble({ scope: teamScope })
+    expect(ordinaryAssembly.tools.map(tool => tool.name)).not.toEqual(expect.arrayContaining(TOOL_NAMES))
+    expect(teamAssembly.tools.map(tool => tool.name).filter(name => TOOL_NAMES.includes(name)).sort())
+      .toEqual(TOOL_NAMES)
+    expect(renderPrompt(ordinaryAssembly)).not.toContain('Agent Teams is available')
+    expect(renderPrompt(teamAssembly)).toContain('Agent Teams is available')
+
+    await Promise.all([ordinary.dispose(), team.dispose(), presetScope.dispose()])
   })
 
   it('installs the complete scoped schema and shared-checkout policy for roots and teammates', async () => {
