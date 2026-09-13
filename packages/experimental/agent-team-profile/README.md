@@ -1,5 +1,5 @@
 ---
-description: "Published experimental Agent Teams profile layer over dsh-base with Team-scoped coordination tools and one-shot delegation."
+description: "Published experimental Agent Teams Host profile layer over dsh-base; Team-aware presets opt into the model-facing coordination tools."
 kind: "package-bundle"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-experimental-agent-team-profile` is a published experimental profile layer that enables [Agent Teams](../agent-team/README.md) over `@deepseek-ai/dsh-base`. Its patch inserts the Team domain and Team-scoped tools, disables the overlapping global continuable-child controls, and keeps the ordinary fresh and fork delegation tools as one-shot operations. Add it explicitly to an initialized profile; no shipped profile enables it by default.
+`dsh-experimental-agent-team-profile` is a published experimental profile layer that provides the [Agent Teams](../agent-team/README.md) Host service over `@deepseek-ai/dsh-base`. Its patch inserts the durable Team domain, disables the overlapping global continuable-child controls, and keeps the ordinary fresh and fork delegation tools as one-shot operations. The model-facing Team policy and tools are mounted by an explicit Team-aware preset, so ordinary presets do not receive Team capabilities. Add it explicitly to an initialized profile; no shipped profile enables it by default.
 
 ## Table of Contents
 
@@ -38,7 +38,7 @@ The profile must already contain `@deepseek-ai/dsh-base`, whose Subagent service
 
 ### What you get
 
-The layer adds the Agent Teams domain and its scoped creation, roster, messaging, interruption, waiting, and task-board tools. It disables the global continuable-child control rows whose tool names overlap with Team controls, while leaving `subagent` and `subagent_fork` available as one-shot delegation tools.
+The layer adds the durable Agent Teams domain, disables the global continuable-child control rows whose tool names overlap with Team controls, and leaves `subagent` and `subagent_fork` available as one-shot delegation tools. A Team-aware preset that needs the model-facing Team policy and nine Team tools must explicitly mount `@deepseek-ai/dsh-experimental-tool-agent-team`; ordinary presets remain free of Team model inputs.
 
 -----
 
@@ -48,7 +48,7 @@ The layer adds the Agent Teams domain and its scoped creation, roster, messaging
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The package's runtime content is [`cordis.patch.yml`](cordis.patch.yml). Applied after `dsh-base`, the patch disables `tool-subagent-control` and `tool-subagent-list-agents`; sets the fresh and fork Subagent rows to `one-shot`; and inserts the Team service and tool rows with explicit providers and limits.
+The package's runtime content is [`cordis.patch.yml`](cordis.patch.yml). Applied after `dsh-base`, the patch disables `tool-subagent-control` and `tool-subagent-list-agents`; sets the fresh and fork Subagent rows to `one-shot`; and inserts the Team service with explicit limits. The model-facing tool row is mounted by a Team-aware preset rather than globally by the Host profile.
 
 | File | Role |
 |---|---|
@@ -77,11 +77,11 @@ The package's runtime content is [`cordis.patch.yml`](cordis.patch.yml). Applied
 
 #### What the model sees
 
-The Team policy and schemas belong to [`@deepseek-ai/dsh-experimental-tool-agent-team`](../tool-agent-team/README.md). This bundle changes composition only: Team-scoped `list_agents`, `send_message`, and `interrupt_agent` replace the disabled global continuable-child controls. `subagent` and `subagent_fork` remain available as one-shot delegation tools, whose children do not receive the continuable-child `report` tool.
+Only a Team-aware preset that explicitly mounts [`@deepseek-ai/dsh-experimental-tool-agent-team`](../tool-agent-team/README.md) receives the Team policy and Team-scoped `list_agents`, `send_message`, `interrupt_agent`, and related tools. They replace the disabled global continuable-child controls inside that preset's Agent scope. Ordinary presets receive no Team model inputs. `subagent` and `subagent_fork` remain available as one-shot delegation tools, whose children do not receive the continuable-child `report` tool.
 
 #### Token effect
 
-The bundle adds the Team policy and tool schemas described by `dsh-tool-team`; it adds no prompt text of its own.
+The Host profile adds no Team policy or tool schemas to ordinary sessions; Team-aware presets pay the fixed prompt and schema cost described by `dsh-tool-team`.
 
 #### KV Cache effect
 

@@ -1,6 +1,8 @@
 # Experimental Agent Teams profile layer. Apply after dsh-base so these replacements
-# remove the global continuable-child controls before the scoped Team tools
-# register the overlapping list_agents, send_message, and interrupt_agent names.
+# remove the global continuable-child controls before a Team-aware preset mounts
+# the overlapping list_agents, send_message, and interrupt_agent names. The Team
+# service remains host-owned; model-facing Team tools belong to the explicit Team
+# presets that opt into this capability.
 
 - id: tool-subagent-control
   disabled: true
@@ -29,9 +31,3 @@
         maxPendingMessagesPerMember: 64
         maxMessageBytes: 65536
         disposalTimeoutMs: 5000
-
-    - id: tool-agent-team
-      name: '@deepseek-ai/dsh-experimental-tool-agent-team'
-      config:
-        freshProvider: spawn
-        forkProvider: fork

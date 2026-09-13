@@ -25,7 +25,7 @@ This package adds an Agent Teams action to the Web conversation header, where a 
 <a id="use-this-package"></a>
 ## Use this package
 
-Install the package through [`@deepseek-ai/dsh-experimental-agent-team-web-profile`](../agent-team-web-profile/README.md) after the stable Web bundle and the Host-side Agent Teams profile. The Web Client loader mounts the `/client` export; the root Host export is inert, and the package has no user configuration fields.
+Install the package through [`@deepseek-ai/dsh-experimental-agent-team-web-profile`](../agent-team-web-profile/README.md) after the stable Web bundle and the Host-side Agent Teams profile. The Web Client loader mounts the `/client` export; the root Host export is inert. Set `enabledPresets` when the header action should be limited to an explicit preset allowlist. When browser config is omitted, only preset ids beginning with `team-` render the action; an explicit empty list preserves the legacy behavior of showing it for every session.
 
 ### Inspect and navigate the roster
 

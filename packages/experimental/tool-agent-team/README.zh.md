@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-当模型应该通过工具运行一支团队时，在 `@deepseek-ai/dsh-experimental-agent-team` 之上挂载本包。挂载后，每个团队成员——Lead 与每个 teammate——都会获得相同的九个工具，外加一段说明自身角色与名字的策略段落。
+当模型应该通过工具运行一支团队时，在包含 `@deepseek-ai/dsh-experimental-agent-team` Host 服务的 Team-aware preset 中挂载本包。挂载后，只有加入该 preset 的 Team 成员——Lead 与每个 teammate——会获得相同的九个工具，外加一段说明自身角色与名字的策略段落；其他 preset 的普通 root 不会被注入这些模型侧内容。
 
 ### 何时选择
 
@@ -81,7 +81,7 @@ kind: "package-reference"
 
 适配器建立在三项承诺之上：
 
-- **按作用域，而非全局。** 每个注册都位于成员 Agent 自己的 `ctx` 上；非 Team subagent 或宿主不会安装任何内容。
+- **按 preset 作用域，而非全局。** 插件挂载在哪个 Team-aware preset，就只观察该 preset 的 Agent scope；每个注册都位于成员 Agent 自己的 `ctx` 上。其他 preset、非 Team subagent 与宿主不会安装任何内容。
 - **声明式结果，紧凑 JSON。** 每个工具都声明完整结果 schema，并把该值渲染为紧凑 JSON，因此编译器会对照模型被承诺的值检查 `execute`，任何结果都不会在缩进上消耗 token。
 - **领域拥有权限。** 工具委托给 `ctx.agentTeams`，后者强制执行 Lead 权限与 revision 校验；适配器不添加更弱的路径。
 
@@ -100,7 +100,7 @@ member scope 上的一个 `team:policy` 段落教每个成员自己的角色与�
 
 ### 按作用域注册与拆除
 
-`maybeInstall` 对每个 live Agent 运行，并订阅 `agent/created`；它跳过没有 Team 成员关系的 Agent。Agent dispose 会运行已安装的 disposer，插件 HMR 会在重新安装前处置每个已安装的 scope。每个 disposer 按逆序展开注册，因此失败的安装不会留下残缺 scope。
+`maybeInstall` 只对当前插件 composition scope 的 live Agent 运行，并订阅 `agent/created`；它跳过其他 preset、没有 Team 成员关系的 Agent。Agent dispose 会运行已安装的 disposer，插件 HMR 会在重新安装前处置每个已安装的 scope。每个 disposer 按逆序展开注册，因此失败的安装不会留下残缺 scope。
 
 </details>
 

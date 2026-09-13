@@ -1,5 +1,5 @@
 ---
-description: "叠加在 dsh-base 上公开发布的实验性 Agent Teams profile 层，提供 Team-scoped 协作工具并保留一次性 delegation。"
+description: "叠加在 dsh-base 上公开发布的实验性 Agent Teams Host profile 层，由 Team-aware preset 选择模型侧协作工具并保留一次性 delegation。"
 kind: "package-bundle"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-bundle"
 
 ## 概述
 
-`dsh-experimental-agent-team-profile` 是在 `@deepseek-ai/dsh-base` 之上启用 [Agent Teams](../agent-team/README.zh.md) 的公开实验性 profile 层。它的 patch 会插入 Team domain 与 Team-scoped 工具、禁用名称重叠的全局 continuable-child control，并保留普通的一次性 fresh 与 fork delegation 工具。必须将本包显式添加到已初始化的 profile；随附 profile 默认都不会启用它。
+`dsh-experimental-agent-team-profile` 是在 `@deepseek-ai/dsh-base` 之上提供 [Agent Teams](../agent-team/README.zh.md) Host 服务的公开实验性 profile 层。它的 patch 会插入持久 Team domain、禁用名称重叠的全局 continuable-child control，并保留普通的一次性 fresh 与 fork delegation 工具。模型侧 Team policy 与工具由显式选择 Agent Teams 的 Team-aware preset 挂载，因此普通 preset 不会被注入 Team 能力。必须将本包显式添加到已初始化的 profile；随附 profile 默认都不会启用它。
 
 ## 目录
 
@@ -38,7 +38,7 @@ profile 必须已经包含 `@deepseek-ai/dsh-base`，本层会使用其中的 Su
 
 ### 获得的功能
 
-本层会添加 Agent Teams domain，以及 Team-scoped 创建、roster、消息、interrupt、等待与任务板工具。它会禁用工具名与 Team control 重叠的全局 continuable-child control 行，同时保留 `subagent` 与 `subagent_fork` 作为一次性 delegation 工具。
+本层会添加持久 Agent Teams domain，禁用工具名与 Team control 重叠的全局 continuable-child control 行，并保留 `subagent` 与 `subagent_fork` 作为一次性 delegation 工具。Team policy 与九个 Team 工具不在 Host 层全局挂载；需要它们的 profile 应在对应的 Team-aware preset 中显式加入 `@deepseek-ai/dsh-experimental-tool-agent-team`，这样普通 preset 不会看到 Team 能力。
 
 -----
 
@@ -48,7 +48,7 @@ profile 必须已经包含 `@deepseek-ai/dsh-base`，本层会使用其中的 Su
 <details>
 <summary>实现细节——点击展开</summary>
 
-本包的运行时内容是 [`cordis.patch.yml`](cordis.patch.yml)。在 `dsh-base` 之后应用时，patch 会禁用 `tool-subagent-control` 与 `tool-subagent-list-agents`，把 fresh 与 fork Subagent 行设置为 `one-shot`，并以显式 provider 和限制插入 Team service 与工具行。
+本包的运行时内容是 [`cordis.patch.yml`](cordis.patch.yml)。在 `dsh-base` 之后应用时，patch 会禁用 `tool-subagent-control` 与 `tool-subagent-list-agents`，把 fresh 与 fork Subagent 行设置为 `one-shot`，并以显式 provider 和限制插入 Team service。模型侧工具行由 Team-aware preset 自己挂载，避免 Host 层把 Team policy 注入每个普通会话。
 
 | 文件 | 职责 |
 |---|---|
@@ -77,11 +77,11 @@ profile 必须已经包含 `@deepseek-ai/dsh-base`，本层会使用其中的 Su
 
 #### 模型会看到什么
 
-Team 策略与 schema 由 [`@deepseek-ai/dsh-experimental-tool-agent-team`](../tool-agent-team/README.zh.md) 所有。本 bundle 只改变 composition：Team-scoped `list_agents`、`send_message` 与 `interrupt_agent` 会替代已禁用的全局 continuable-child control。`subagent` 与 `subagent_fork` 仍作为一次性 delegation 工具可用，其子 agent 不会获得 continuable-child `report` 工具。
+当一个 Team-aware preset 显式挂载 [`@deepseek-ai/dsh-experimental-tool-agent-team`](../tool-agent-team/README.zh.md) 时，模型才会看到 Team policy 与 Team-scoped `list_agents`、`send_message`、`interrupt_agent` 等工具；它们会在该 preset 的 Agent scope 内替代已禁用的全局 continuable-child control。普通 preset 不会获得这些模型侧输入。`subagent` 与 `subagent_fork` 仍作为一次性 delegation 工具可用，其子 agent 不会获得 continuable-child `report` 工具。
 
 #### Token 影响
 
-本 bundle 会加入 `dsh-tool-team` 描述的 Team 策略与工具 schema；它自身不增加提示词文本。
+Host profile 本身不向普通会话加入 Team policy 或工具 schema；Team-aware preset 的模型请求才承担 `dsh-tool-team` 描述的固定提示词与 schema 成本。
 
 #### KV Cache 影响
 

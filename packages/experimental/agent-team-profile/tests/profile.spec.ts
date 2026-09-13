@@ -44,9 +44,6 @@ describe('Agent Teams profile bundle', () => {
       name: '@deepseek-ai/dsh-experimental-agent-team',
       config: { maxMembers: 8 },
     })
-    expect(inserted.find(entry => entry.id === 'tool-agent-team')).toMatchObject({
-      name: '@deepseek-ai/dsh-experimental-tool-agent-team',
-      config: { freshProvider: 'spawn', forkProvider: 'fork' },
-    })
+    expect(inserted.find(entry => entry.id === 'tool-agent-team')).toBeUndefined()
   })
 })

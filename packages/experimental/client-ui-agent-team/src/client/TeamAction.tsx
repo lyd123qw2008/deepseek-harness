@@ -26,6 +26,12 @@ export type TeamTaskActionResult = RemoteResult<TeamTaskMutationResult>
 
 /** Business actions injected by the browser plugin. */
 export interface TeamActionInjected {
+  /**
+   * Presets allowed to display this Team action. An omitted value defaults to
+   * preset ids beginning with `team-`; an explicit empty list allows every
+   * preset for legacy embedders.
+   */
+  enabledPresets?: readonly string[]
   load: (sessionId: SessionId) => Promise<TeamActionResult<TeamView>>
   createTask: (sessionId: SessionId, input: {
     subject: string
@@ -97,8 +103,14 @@ function memberStatusKey(status: TeamRosterMember['status']): TeamKey {
 
 /** Render the live Team roster and compare-and-set task board. */
 export function TeamAction({
-  sessionId, load, createTask, updateTask, openTeammate, t,
+  sessionId, enabledPresets, load, createTask, updateTask, openTeammate, useSessions, t,
 }: TeamActionProps) {
+  const teamEnabled = useSessions((state) => {
+    const preset = state.byId[sessionId]?.projectionValues?.agentPreset
+    if (enabledPresets === undefined) return typeof preset === 'string' && preset.startsWith('team-')
+    return enabledPresets.length === 0
+      || (typeof preset === 'string' && enabledPresets.includes(preset))
+  })
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [view, setView] = useState<TeamView | null>(null)
@@ -242,6 +254,11 @@ export function TeamAction({
 
   const teammates = view?.members.filter(member => member.role === 'teammate') ?? []
   const assignable = view?.members.filter(member => member.status !== 'failed' && member.status !== 'provisioning') ?? []
+
+  // The Web bundle can expose the Team UI globally, while a deployment chooses
+  // the Team-capable presets explicitly. Keep the slot mounted for HMR and
+  // stable registration, but render no Team affordance for ordinary presets.
+  if (!teamEnabled) return null
 
   return (
     <div className={css.root} data-team-action>

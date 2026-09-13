@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-experimental-agent-team-web-profile` is the published experimental Web layer for [Agent Teams](../agent-team/README.md). Add it after `@deepseek-ai/dsh-web-app` and [`@deepseek-ai/dsh-experimental-agent-team-profile`](../agent-team-profile/README.md) to show the Team roster, task board, and teammate navigation in the browser. Removing either experimental layer leaves the stable base and Web composition unchanged. No shipped Web profile enables it by default.
+`dsh-experimental-agent-team-web-profile` is the published experimental Web layer for [Agent Teams](../agent-team/README.md). Add it after `@deepseek-ai/dsh-web-app` and [`@deepseek-ai/dsh-experimental-agent-team-profile`](../agent-team-profile/README.md) to show the Team roster, task board, and teammate navigation in the browser. Removing either experimental layer leaves the stable base and Web composition unchanged. Configure `enabledPresets` when the action should appear only for an explicit preset allowlist; when browser config is omitted, only preset ids beginning with `team-` display the action, while an explicit empty list preserves the compatible global display behavior.
 
 ## Table of Contents
 
@@ -34,7 +34,7 @@ dsh plugin --profile web add @deepseek-ai/dsh-experimental-agent-team-profile
 dsh plugin --profile web add @deepseek-ai/dsh-experimental-agent-team-web-profile
 ```
 
-The first command supplies the Team domain, generated Remote methods, and model tools. The second command activates this package's declared patch and its browser presentation. Removing the package with `dsh plugin --profile web remove @deepseek-ai/dsh-experimental-agent-team-web-profile` removes the Web layer from the profile's ordered bundle list.
+The first command supplies the Host Team domain and generated Remote methods. A Team-aware preset must explicitly mount the model-facing `@deepseek-ai/dsh-experimental-tool-agent-team` package. The second command activates this package's declared patch and its browser presentation. Removing the package with `dsh plugin --profile web remove @deepseek-ai/dsh-experimental-agent-team-web-profile` removes the Web layer from the profile's ordered bundle list.
 
 ### What you get
 
