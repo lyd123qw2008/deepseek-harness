@@ -29,7 +29,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Required browser services for RPC, navigation, slots, and localized copy. */
 export const inject = ['sessions', 'uiWorkspace', 'remote', 'slots', 'locale']
 
-function registerUi(ctx: ClientContext): void {
+function registerUi(ctx: ClientContext, enabledPresets?: readonly string[]): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'client-ui-agent-team: dictionaries')
   const sessions = ctx.sessions
   const leadSessionId = (sessionId: SessionId): SessionId => {
@@ -38,6 +38,7 @@ function registerUi(ctx: ClientContext): void {
   }
 
   const actions: TeamActionInjected = {
+    ...(enabledPresets === undefined ? {} : { enabledPresets }),
     async load(sessionId): Promise<TeamActionResult<TeamView>> {
       return await ctx.remote.agentTeams.view(leadSessionId(sessionId))
     },
@@ -85,9 +86,13 @@ function registerUi(ctx: ClientContext): void {
 export async function mountAgentTeamUi(
   ctx: ClientContext,
   contribution: TypertRemoteContribution,
+  enabledPresets?: readonly string[],
 ): Promise<() => Promise<void>> {
   const disposeRemote = await ctx.remote.$mount(contribution)
-  const ui = ctx.inject(['sessions', 'uiWorkspace', 'remote.agentTeams', 'slots', 'locale'], registerUi)
+  const ui = ctx.inject(
+    ['sessions', 'uiWorkspace', 'remote.agentTeams', 'slots', 'locale'],
+    scope => registerUi(scope, enabledPresets),
+  )
   try {
     await ui
   } catch (error) {
