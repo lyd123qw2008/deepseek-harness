@@ -25,6 +25,7 @@ async function bench(options: {
   registrationFailure?: boolean
   remoteFailure?: 'view' | 'update'
   refreshGate?: Promise<void>
+  enabledPresets?: readonly string[]
 } = {}) {
   const ctx = new Context()
   const calls: { method: string; args: unknown[] }[] = []
@@ -117,9 +118,12 @@ async function bench(options: {
   }
   const fiber = options.registrationFailure === true
     ? ctx.plugin({ apply() {} })
-    : ctx.plugin({ inject: [...inject], apply: clientCtx => mountAgentTeamUi(clientCtx, REMOTE) })
+    : ctx.plugin({
+      inject: [...inject],
+      apply: clientCtx => mountAgentTeamUi(clientCtx, REMOTE, options.enabledPresets),
+    })
   const activation: Promise<unknown> = options.registrationFailure === true
-    ? mountAgentTeamUi(ctx, REMOTE).catch((error: unknown) => error)
+    ? mountAgentTeamUi(ctx, REMOTE, options.enabledPresets).catch((error: unknown) => error)
     : fiber.await()
   if (options.registrationFailure !== true) {
     await activation
@@ -179,6 +183,12 @@ describe('ui-team browser plugin', () => {
     await b.fiber.dispose()
     expect(b.entry()).toBeUndefined()
     expect(b.remote.disposeMount).toHaveBeenCalledOnce()
+  })
+
+  it('passes the configured Team preset allowlist to the header action', async () => {
+    const b = await bench({ enabledPresets: ['team-local', 'team-pragmatic-local'] })
+    const actions = (b.entry()!.inject as unknown as () => TeamActionInjected)()
+    expect(actions.enabledPresets).toEqual(['team-local', 'team-pragmatic-local'])
   })
 
   it('unmounts the Remote contribution when later Client registration fails', async () => {
