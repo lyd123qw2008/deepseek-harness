@@ -12,7 +12,7 @@ Status: implemented
 
 仓库现在提供 [`dsh-upgrade-environment`](../../../skills/dsh-upgrade-environment/SKILL.md)、[`scripts/upgrade-environment.manifest.json`](../../../../scripts/upgrade-environment.manifest.json) 和 `verify-upgrade-environment`。manifest 区分需要保留的源路径、必须由所属程序合并或重建的 SQLite 状态，以及因 secret 隔离或重新生成而排除的路径。
 
-该 Skill 将代码升级与数据迁移分开。它从精确的 release tag 创建目标 worktree，使用 `git cherry` 区分等价补丁，按源历史顺序带 provenance 应用经过审查的个人提交，并在接触用户数据前验证目标代码。
+该 Skill 将代码升级与数据迁移分开。它从精确的 release tag 创建目标 worktree，使用 `git cherry` 区分等价补丁，按源历史顺序使用 `git cherry-pick -x` 应用经过审查的个人提交，并在接触用户数据前验证目标代码。
 
 验证器要求明确的源和目标 home。复制时模式检查选定的字节保留文件与源覆盖范围；迁移后模式允许已记录的 Session、配置和索引重写，同时要求每个源文件及可选目标基线文件仍有对应项。它不会复制、删除或打印 secret 值，也不会把历史 `excluded` 数组当作策略。
 
