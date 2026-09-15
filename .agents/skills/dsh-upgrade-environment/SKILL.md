@@ -80,7 +80,7 @@ The rationale for generated launchers is recorded in [the upgrade launcher Agent
 corepack pnpm run upgrade-web-launchers --write --data-home <target-home> --code-home <target-worktree> --release <target-release-label> --port <target-port>
 ```
 
-The command writes and verifies `start-web-<port>.cmd`, `run-web-<port>.ps1`, `stop-web-<port>.cmd`, `restart-web-<port>.ps1`, and `restart-web-<port>.cmd`. Pass the display label without the `dsh-v` tag prefix, such as `0.1.5-alpha.2`. The command never removes files; review and remove only stale versioned Web launchers after the target inventory is known. Run the read-only check before each start or restart and after launcher cleanup:
+The command writes and verifies `start-web-<port>.cmd`, `run-web-<port>.ps1`, `stop-web-<port>.cmd`, `restart-web-<port>.ps1`, and `restart-web-<port>.cmd`. Pass the display label without the `dsh-v` tag prefix, such as `0.1.5-alpha.2`. If the target data home contains `openssl-legacy.cnf`, generation also emits the temporary DeepSeek legacy-TLS environment setup in `start-web-<port>.cmd`; preserve that file as the target-local compatibility marker. The command never removes files; review and remove only stale versioned Web launchers after the target inventory is known. Run the read-only check before each start or restart and after launcher cleanup:
 
 ```sh
 corepack pnpm run upgrade-web-launchers --check --data-home <target-home> --code-home <target-worktree> --release <target-release-label> --port <target-port>
