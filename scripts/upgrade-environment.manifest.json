@@ -38,6 +38,13 @@
       "copyTime": "exact"
     },
     {
+      "path": "openssl-legacy.cnf",
+      "kind": "legacy-tls-config",
+      "strategy": "union",
+      "sourceMustExist": false,
+      "copyTime": "exact"
+    },
+    {
       "path": "storages/workspace.json",
       "kind": "workspace",
       "strategy": "union",
