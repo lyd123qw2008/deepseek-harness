@@ -9,7 +9,7 @@ Upgrade the program, not the user's data. Require an explicit source home, targe
 
 ## Read first
 
-Read the repository `AGENTS.md`, [defensive patterns](../../../docs/defensive-patterns.md), and [`scripts/upgrade-environment.manifest.json`](../../../scripts/upgrade-environment.manifest.json). The manifest is the canonical inventory and policy. Historical `migration-*.json` files record past work only; their `excluded` lists are not future migration rules.
+Read the repository `AGENTS.md`, [defensive patterns](../../../docs/defensive-patterns.md), and [`scripts/upgrade-environment.manifest.json`](../../../scripts/upgrade-environment.manifest.json). The manifest is the canonical inventory and policy. Root-level `migration-*.json` files, including `migration-verification-*.json`, and `sync-*.json` files record past work only. Do not copy them to a target; write records for the current upgrade separately. Their `excluded` lists are not future migration rules.
 
 ## Upgrade the program and pick personal commits
 
@@ -98,7 +98,7 @@ A launcher check fails when a required file is missing, differs from the target 
    ```
 
    The validator is read-only. It reports missing source files, missing target copies, unexpected exact copies of isolated secrets, and copy-time checksum differences without printing secret values.
-3. Copy source-only files and merge common state. Preserve target-only files and newer target state. Do not replace a target SQLite database, WAL, or SHM file as a blind recursive copy. Use the owning application's consistent backup or merge procedure. SQLite sidecars may be checkpointed, rebuilt, or regenerated only after the source records remain covered.
+3. Copy only source state represented by the manifest and merge common state. Do not copy root-level `migration-*.json` or `sync-*.json` records; write current-upgrade records separately. Preserve target-only files and newer target state. Do not replace a target SQLite database, WAL, or SHM file as a blind recursive copy. Use the owning application's consistent backup or merge procedure. SQLite sidecars may be checkpointed, rebuilt, or regenerated only after the source records remain covered.
 4. Keep released Session generations immutable. Run the product's adjacent Session migration and fail closed on unsupported events. Validate released v0/v1/v2 artifacts, event counts, Zstandard framing, attachment references, and attachment hashes independently of the file validator.
 5. Restore Engram from a consistent SQLite snapshot, then run its doctor and project/observation queries. Preserve project names and observations. A healthy SQLite file is not proof that the user's Engram records survived.
 6. Reinstall Profile dependencies in the target Profile. Apply only release-specific configuration adaptations after the copy-time audit. Keep `.credentials.yaml`, `.anonymous-user-id`, API keys, bearer tokens, `.env` files, npm tokens, and other machine identity isolated unless the user explicitly authorizes a redacted transfer.
