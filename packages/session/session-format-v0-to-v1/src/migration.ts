@@ -484,7 +484,7 @@ function normalizeLegacyMessage(
       delete eventData['content']
       const source = releasedV0Record(
         eventData[LEGACY_ASSISTANT_SOURCE_KEY],
-        `assistant/message ${event.seq} provenance`,
+        `assistant/message ${event.seq} source`,
       )
       Reflect.deleteProperty(eventData, LEGACY_ASSISTANT_SOURCE_KEY)
       return {
