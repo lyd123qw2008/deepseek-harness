@@ -24,6 +24,7 @@ interface NormalizedWebLauncherOptions {
   readonly codeHome: string
   readonly release: string
   readonly port: number
+  readonly legacyTls: boolean
 }
 
 interface WebLauncherNames {
@@ -52,7 +53,13 @@ function normalizedOptions(options: WebLauncherOptions): NormalizedWebLauncherOp
   const dataHome = pathValue(options.dataHome, 'dataHome')
   const codeHome = pathValue(options.codeHome, 'codeHome')
   if (dataHome === codeHome) throw new Error('dataHome and codeHome must be different directories')
-  return { dataHome, codeHome, release: options.release, port: options.port }
+  return {
+    dataHome,
+    codeHome,
+    release: options.release,
+    port: options.port,
+    legacyTls: existsSync(join(dataHome, 'openssl-legacy.cnf')),
+  }
 }
 
 function launcherNames(port: number): WebLauncherNames {
@@ -79,9 +86,17 @@ function lines(values: readonly string[], newline: '\n' | '\r\n'): string {
 
 function renderStart(options: NormalizedWebLauncherOptions, names: WebLauncherNames): string {
   const codeHome = cmdLiteral(options.codeHome)
+  const legacyTlsLines = options.legacyTls
+    ? [
+      'rem TEMPORARY: allow the legacy TLS renegotiation required by the DeepSeek gateway.',
+      'set "OPENSSL_CONF=%DSH_HOME%\\openssl-legacy.cnf"',
+      'set "NODE_OPTIONS=%NODE_OPTIONS% --openssl-shared-config --openssl-config=%DSH_HOME%\\openssl-legacy.cnf"',
+    ]
+    : []
   return lines([
     '@echo off',
     `set "DSH_HOME=${options.dataHome}"`,
+    ...legacyTlsLines,
     `cd /d ${codeHome}`,
     'if not exist "%DSH_HOME%\\logs" mkdir "%DSH_HOME%\\logs"',
     `echo Starting DSH ${options.release} Web on port ${String(options.port)}...`,

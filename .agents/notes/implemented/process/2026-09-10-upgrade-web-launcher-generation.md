@@ -10,7 +10,7 @@ Versioned Windows Web launcher files contain the target code home, data home, re
 
 ## Decision
 
-The repository provides [`upgrade-web-launchers`](../../../../scripts/upgrade-web-launchers.ts), which renders and verifies the complete five-file launcher set for an explicit target. `--write` creates the target-port files and `--check` rejects missing files, content drift, and launchers belonging to another port. The command never removes files, so stale launchers remain visible for deliberate cleanup instead of being silently discarded.
+The repository provides [`upgrade-web-launchers`](../../../../scripts/upgrade-web-launchers.ts), which renders and verifies the complete five-file launcher set for an explicit target. `--write` creates the target-port files and `--check` rejects missing files, content drift, and launchers belonging to another port. When the target data home contains `openssl-legacy.cnf`, both operations include the temporary DeepSeek legacy-TLS environment setup in `start-web-<port>.cmd`. The command never removes files, so stale launchers remain visible for deliberate cleanup instead of being silently discarded.
 
 The upgrade Skill runs generation after the target data home and code worktree are fixed, then requires the read-only check before startup and after cleanup. Launcher content is derived from one target description rather than copied from a prior data home.
 
