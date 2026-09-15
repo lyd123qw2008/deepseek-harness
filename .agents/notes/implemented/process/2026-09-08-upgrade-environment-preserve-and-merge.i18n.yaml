@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-09-08-upgrade-environment-preserve-and-merge.md
-2026-09-08-upgrade-environment-preserve-and-merge.md: fb25b60f545c201f01882b8b9eb473d13a068873
-2026-09-08-upgrade-environment-preserve-and-merge.zh.md: 1f2d700b10d8fee23326813dd873e71aa9427305
+2026-09-08-upgrade-environment-preserve-and-merge.md: 575ff69bcbd4259d95d9b116e8ba8ab0d02dd2b2
+2026-09-08-upgrade-environment-preserve-and-merge.zh.md: f0f18af79d0403665bcb3d5440c5601093ac2727
