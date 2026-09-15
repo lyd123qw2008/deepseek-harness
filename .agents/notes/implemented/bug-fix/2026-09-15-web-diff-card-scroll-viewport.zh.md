@@ -20,7 +20,7 @@ Web diff 卡片最初按整段新旧两侧渲染，配合首尾高度上限和�
 
 折叠工具行打印的增删行统计与展开卡片绘制的行，都来自对同一 hunk 的同一遍行比较，因此紧凑行与完整卡片对同一处改动永远不会报出不同的数字。统计基于行：一个 hunk 在两侧都携带的共享行会按其出现的每一侧各计一次，这与卡片绘制的行自洽，但不是 git 的 hunk 头约定。这遵循[客户端推导工具呈现决策](../architecture/2026-08-23-client-derived-tool-presentation.zh.md)，仍属于 Client 呈现：宿主 `FileDiff` 契约、持久化结果元数据和公开组件 props 均未改变，因此回放保持安全，也没有任何线上格式变动。
 
-本分支有意拥有 diff 卡片的源码。升级时把 `packages/client/ui-primitives/src/DiffBlock.tsx`、`packages/client/ui-primitives/src/DiffBlock.module.css`、`packages/client/ui-tool/src/client/tool/models/diff-card-model.ts` 与 `packages/client/ui-primitives/tests/diff-block.client.spec.tsx` 保留在本地一侧，并丢弃官方上下文 diff 测试块，而不是据其重新推导该表面。官方设计是本次变更所拒绝的方案，不是一项尚未应用的改进。
+本分支有意拥有 diff 卡片的源码及其测试。升级时把 `packages/client/ui-primitives/src/DiffBlock.tsx`、`packages/client/ui-primitives/src/DiffBlock.module.css`、`packages/client/ui-tool/src/client/tool/models/diff-card-model.ts`、`packages/client/ui-primitives/tests/diff-block.client.spec.tsx`、`packages/client/ui-tool/tests/tool-row.client.spec.tsx` 以及 `apps/web/tests/diff-context.e2e.ts` 及其 `snapshots/web/diff-context`、`snapshots/web/diff-bounded` golden 保留在本地一侧，并丢弃官方上下文 diff 测试块，而不是据其重新推导该表面。官方测试块落到三个不同文件，因此只清理其中一部分会留下失败的门禁。官方设计是本次变更所拒绝的方案，不是一项尚未应用的改进。
 
 ## Alternatives considered
 
@@ -47,11 +47,11 @@ Web diff 卡片最初按整段新旧两侧渲染，配合首尾高度上限和�
 
 ## Testing
 
-`packages/client/ui-primitives/tests/diff-block.client.spec.tsx` 钉住结构各分支（创建、编辑、同文件 `⋯` 间隔与新路径头、空 diffs 的 null 渲染、行终止符规则、完整删除），并用一个 `DiffBlock viewport and context preview` 块钉住本决策：受上限约束正文的 `max-height`、每段未改动内容一行上下文、视口过短时每个改动行仍可达、分离的第二个 hunk 有自己的上下文行、多行替换保持在一起，以及 `Infinity` 时不设上限的正文。`packages/client/ui-tool/tests/diff-card.client.spec.tsx` 钉住两个渲染位置的推导。单文件覆盖率保持该包要求的水平。
+`packages/client/ui-primitives/tests/diff-block.client.spec.tsx` 钉住结构各分支（创建、编辑、同文件 `⋯` 间隔与新路径头、空 diffs 的 null 渲染、行终止符规则、完整删除），并用一个 `DiffBlock viewport and context preview` 块钉住本决策：受上限约束正文的 `max-height`、每段未改动内容一行上下文、视口过短时每个改动行仍可达、分离的第二个 hunk 有自己的上下文行、多行替换保持在一起，以及 `Infinity` 时不设上限的正文。`packages/client/ui-tool/tests/diff-card.client.spec.tsx` 钉住两个渲染位置的推导，`packages/client/ui-tool/tests/tool-row.client.spec.tsx` 钉住折叠行与展开卡片对同一处改动给出一致结果：单行替换两侧的未改动片段只贡献紧邻的行，外侧行永远不进入卡片，折叠总计因此始终为 `+1 -1`。`apps/web/tests/diff-context.e2e.ts` 通过已构建客户端回放两个已录制 Session，并把折叠与展开的数字与所显示的 diff 对照断言，`snapshots/web/diff-context` 与 `snapshots/web/diff-bounded` 保存规范化后的无障碍 golden。单文件覆盖率保持该包要求的水平。
 
 ## Consequences
 
-卡片不需要展开状态，因此 diff 除了复制之外没有交互表面。到达远处的改动需要滚动而非点击，这是为"永不隐藏改动"有意付出的代价。gutter 与行内高亮只对携带 `oldStart`/`newStart` 的 hunk 存在，因此调用期 diff 渲染为朴素样式；这种不对称可见但有界。由于统计基于行，一个在两侧都携带共享行的 hunk 会在两侧各报一次该行，这在 `replace_all` 边界之外与 git 的 hunk 头数字不同；要改变这一点需要宿主携带增删统计，而保持紧凑行与卡片一致并不需要它。今后每一次重写上下文 diff 测试块的发布都会重新引入本笔记所解决的这种分裂，因此上面的文件归属是升级中的长期规则，而非一次性清理。
+卡片不需要展开状态，因此 diff 除了复制之外没有交互表面。到达远处的改动需要滚动而非点击，这是为"永不隐藏改动"有意付出的代价。由于上限是滚动区域而非折叠，hunk 的每一行都留在 DOM 中，因此长 diff 的无障碍树携带完整改动，而折叠设计只携带其首尾切片加一个隐藏计数按钮；辅助技术在较大的 diff 上因此会遇到长得多的子树，而守住正文的是断言行可达性的单元测试，不是 golden。gutter 与行内高亮只对携带 `oldStart`/`newStart` 的 hunk 存在，因此调用期 diff 渲染为朴素样式；这种不对称可见但有界。由于统计基于行，一个在两侧都携带共享行的 hunk 会在两侧各报一次该行，这在 `replace_all` 边界之外与 git 的 hunk 头数字不同；要改变这一点需要宿主携带增删统计，而保持紧凑行与卡片一致并不需要它。今后每一次重写上下文 diff 测试块的发布都会重新引入本笔记所解决的这种分裂，因此上面的文件归属是升级中的长期规则，而非一次性清理。
 
 ## Related
 

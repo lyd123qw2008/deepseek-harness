@@ -4,5 +4,9 @@
   - button "config.txt"
   - text: +1 -1
 - button "Copy"
-- text: config.txt - mode=DEBUG + mode=RELEASE level=info └ +1 -1 · 1 file
+- text: config.txt mode=
+- mark: DEBUG
+- text: mode=
+- mark: RELEASE
+- text: level=info └ +1 -1 · 1 file
 - button "Inspect"
