@@ -16,7 +16,7 @@ The Skill separates code upgrade from data migration. It starts a target worktre
 
 The verifier requires explicit source and target homes. Copy-time mode checks selected byte-preserved files and source coverage; post-migration mode permits documented Session, configuration, and index rewrites while requiring every source file and optional target baseline file to remain represented. Root-level `migration-*.json` and `sync-*.json` reports remain with their source home; a target records its own upgrade. It never copies, deletes, prints secret values, or treats historical `excluded` arrays as policy.
 
-The Skill keeps source and target worktrees, data homes, Profiles, credentials, and ports isolated. It requires pre-upgrade source and target-before backups, consistent SQLite snapshots, immutable released Session generations, independent attachment and Engram checks, target-only retention, cold startup, restart validation, and rollback from the target-before backup. It does not require a second full data copy after startup; post-start rollback copies and rehearsals are opt-in.
+The Skill keeps source and target worktrees, data homes, Profiles, credentials, and ports isolated. The unchanged source data home is the default rollback source; independent source snapshots, target-before backups, and rollback rehearsals require an explicit request. It requires consistent SQLite snapshots for copied databases, immutable released Session generations, independent attachment and Engram checks, cold startup, and restart validation. A requested target-before backup enables target-only retention checks. It does not require a second full data copy after startup.
 
 ## Alternatives considered
 
