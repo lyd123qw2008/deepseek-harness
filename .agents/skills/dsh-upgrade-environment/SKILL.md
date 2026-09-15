@@ -91,11 +91,11 @@ A launcher check fails when a required file is missing, differs from the target 
 
 ## Migration procedure
 
-1. Record the source and target release, worktree, data home, Profile path, port, Node and package-manager versions, and the exact target commit. Create the pre-upgrade source snapshot and target-before backup outside both Git worktrees. Include SQLite files and rollback metadata. These are the only mandatory full data copies; do not create another full target copy after startup. Post-start rollback copies and rollback rehearsals require an explicit request.
+1. Record the source and target release, worktree, data home, Profile path, port, Node and package-manager versions, and the exact target commit. Keep the source data home unchanged as the rollback source. Do not create a source snapshot, target-before backup, or post-start rollback copy by default. Create an independent snapshot or rollback rehearsal only when the user explicitly requests one.
 2. Run the validator in copy-time mode before application startup:
 
    ```sh
-   corepack pnpm run verify-upgrade-environment --source <source-home> --target <target-home> --target-before <target-backup> --phase copy-time
+   corepack pnpm run verify-upgrade-environment --source <source-home> --target <target-home> --phase copy-time
    ```
 
    The validator is read-only. It reports missing source files, missing target copies, unexpected exact copies of isolated secrets, and copy-time checksum differences without printing secret values.
@@ -107,15 +107,15 @@ A launcher check fails when a required file is missing, differs from the target 
 8. Run the validator again after migration and smoke tests:
 
    ```sh
-   corepack pnpm run verify-upgrade-environment --source <source-home> --target <target-home> --target-before <target-backup> --phase post-migration
+   corepack pnpm run verify-upgrade-environment --source <source-home> --target <target-home> --phase post-migration
    ```
 
-   Recheck that every source file remains represented and every pre-upgrade target file remains present. Keep the source home unchanged. Store the report with the migration record, but do not store credentials or full model payloads.
+   Recheck that every source file remains represented. Keep the source home unchanged. Store the report with the migration record, but do not store credentials or full model payloads. Pass `--target-before <target-backup>` only when the user requested a target-baseline backup; it then also verifies target-only retention.
 
 ## Rollback
 
-Stop only the target process, preserve the failed target and validator report for diagnosis, and restore the target data home from its pre-upgrade backup. Do not restore by modifying the source home. Re-point the Profile and port to the last known-good program only after checking that its data home and credentials remain isolated.
+Stop only the target process and preserve its validator report for diagnosis. Re-point the Profile and port to the unchanged source program and data home. Restore a target data home from an independent snapshot only when the user explicitly requested that snapshot; never restore by modifying the source home.
 
 ## Completion criteria
 
-An upgrade is complete only when the target release is explicit, source and target are isolated, the pre-upgrade source snapshot and target-before backup exist, the copy-time and post-migration validator runs pass, source data is unchanged, durable Session and attachment checks pass, SQLite and Engram records are queried successfully, Profile dependencies load, the target starts cold, and the required user workflow survives a restart.
+An upgrade is complete only when the target release is explicit, source and target are isolated, copy-time and post-migration validator runs pass, source data is unchanged, durable Session and attachment checks pass, SQLite and Engram records are queried successfully, Profile dependencies load, the target starts cold, and the required user workflow survives a restart. Independent snapshots and rollback rehearsals are optional.
