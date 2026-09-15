@@ -311,8 +311,12 @@ describe('ToolRow', () => {
     expect(view.container.querySelector('[data-diff]')).toBeNull()
     fireEvent.click(view.getByRole('button'))
     expect(view.getByText(/└ \+1 -1/)).toBeTruthy()
-    expect(view.getAllByText('start')).toHaveLength(1)
-    expect(view.getAllByText('end')).toHaveLength(1)
+    // Each unchanged segment contributes only the line nearest the change, so the
+    // outer `start`/`end` rows never reach the card and the totals stay +1 -1.
+    expect(view.getByText('third')).toBeTruthy()
+    expect(view.getByText('fourth')).toBeTruthy()
+    expect(view.queryByText('start')).toBeNull()
+    expect(view.queryByText('end')).toBeNull()
     expect(view.getByText('old', { exact: true })).toBeTruthy()
     expect(view.getByText('new', { exact: true })).toBeTruthy()
     expect(view.queryByRole('button', { name: /展开其余/ })).toBeNull()
