@@ -89,7 +89,9 @@ export async function mountAgentTeamUi(
   enabledPresets?: readonly string[],
 ): Promise<() => Promise<void>> {
   const disposeRemote = await ctx.remote.$mount(contribution)
-  const ui = ctx.inject(['sessions', 'remote.agentTeams', 'slots', 'locale'], scope => registerUi(scope, enabledPresets))
+  const ui = ctx.inject(['sessions', 'remote.agentTeams', 'slots', 'locale'], (scope) => {
+    registerUi(scope, enabledPresets)
+  })
   try {
     await ui
   } catch (error) {
