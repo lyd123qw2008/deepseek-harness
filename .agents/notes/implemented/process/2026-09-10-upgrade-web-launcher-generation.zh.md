@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-仓库提供 [`upgrade-web-launchers`](../../../../scripts/upgrade-web-launchers.ts)，根据明确的目标参数生成并验证完整的五文件启动器集合。`--write` 创建目标端口的文件，`--check` 拒绝缺失文件、内容漂移以及属于其他端口的启动器。当目标数据目录包含 `openssl-legacy.cnf` 时，两项操作都会在 `start-web-<port>.cmd` 中包含临时 DeepSeek legacy-TLS 环境设置。该命令不会删除文件，因此过时的启动器会保留下来供操作者明确清理，而不会被静默丢弃。
+仓库提供 [`upgrade-web-launchers`](../../../../scripts/upgrade-web-launchers.ts)，根据明确的目标参数生成并验证完整的五文件启动器集合。`--write` 创建目标端口的文件，`--check` 拒绝缺失文件、内容漂移以及属于其他端口的启动器。升级 manifest 将已有的 `openssl-legacy.cnf` 保留为可选目标配置；当目标数据目录包含该文件时，两项操作都会在 `start-web-<port>.cmd` 中包含临时 DeepSeek legacy-TLS 环境设置。该命令不会删除文件，因此过时的启动器会保留下来供操作者明确清理，而不会被静默丢弃。
 
 升级 Skill 在确定目标数据目录和代码 worktree 后运行生成命令，并要求在启动前以及清理后运行只读检查。启动器内容来自一份目标描述，而不是复制上一次升级的数据目录。
 
