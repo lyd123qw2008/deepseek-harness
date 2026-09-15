@@ -12,7 +12,7 @@ Release-specific copy records do not define a reusable upgrade policy. Treating 
 
 The repository now owns [`dsh-upgrade-environment`](../../../skills/dsh-upgrade-environment/SKILL.md), [`scripts/upgrade-environment.manifest.json`](../../../../scripts/upgrade-environment.manifest.json), and `verify-upgrade-environment`. The manifest distinguishes preserved source paths, SQLite state that requires an owning merge or rebuild procedure, and paths excluded for secret isolation or regeneration.
 
-The Skill separates code upgrade from data migration. It starts a target worktree at the exact release tag, uses `git cherry` to distinguish patch-equivalent commits, applies reviewed personal commits oldest first with provenance, and validates the target code before touching user data.
+The Skill separates code upgrade from data migration. It starts a target worktree at the exact release tag, uses `git cherry` to distinguish patch-equivalent commits, applies reviewed personal commits oldest first with `git cherry-pick -x`, and validates the target code before touching user data.
 
 The verifier requires explicit source and target homes. Copy-time mode checks selected byte-preserved files and source coverage; post-migration mode permits documented Session, configuration, and index rewrites while requiring every source file and optional target baseline file to remain represented. It never copies, deletes, prints secret values, or treats historical `excluded` arrays as policy.
 
