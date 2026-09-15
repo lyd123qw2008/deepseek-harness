@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-09-10-upgrade-web-launcher-generation.md
-2026-09-10-upgrade-web-launcher-generation.md: 8fbc446c583f8d502ed4f7d36fce8ef27c7ece62
-2026-09-10-upgrade-web-launcher-generation.zh.md: 313812fbf102b826578b8bdb5783099aa8a01461
+2026-09-10-upgrade-web-launcher-generation.md: 19af2c46b6abd8fc3f1eff29c9f1a29f35cfc544
+2026-09-10-upgrade-web-launcher-generation.zh.md: 785a60e4aca6caef15fa4183fd34906ea7fd266b

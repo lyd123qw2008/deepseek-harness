@@ -38,6 +38,19 @@ describe('upgrade Web launchers', () => {
     expect(existsSync(join(options.dataHome, 'start-web-3089.cmd'))).toBe(true)
   })
 
+  it('renders legacy TLS setup when the target data home carries its config', () => {
+    const options = fixture()
+    writeFileSync(join(options.dataHome, 'openssl-legacy.cnf'), 'legacy')
+
+    writeWebLaunchers(options)
+
+    const start = readFileSync(join(options.dataHome, 'start-web-3089.cmd'), 'utf8')
+    expect(start).toContain('rem TEMPORARY: allow the legacy TLS renegotiation required by the DeepSeek gateway.')
+    expect(start).toContain('set "OPENSSL_CONF=%DSH_HOME%\\openssl-legacy.cnf"')
+    expect(start).toContain('set "NODE_OPTIONS=%NODE_OPTIONS% --openssl-shared-config --openssl-config=%DSH_HOME%\\openssl-legacy.cnf"')
+    expect(checkWebLaunchers(options)).toEqual([])
+  })
+
   it('reports a missing launcher and copied launchers for another port', () => {
     const options = fixture()
     writeWebLaunchers(options)
