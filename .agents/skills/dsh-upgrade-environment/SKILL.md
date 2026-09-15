@@ -62,6 +62,7 @@ Keep these source paths available when they exist:
 - `.agent-presets`
 - `profiles` configuration, excluding Profile `node_modules`
 - `settings.yaml`
+- `openssl-legacy.cnf`
 - `storages/workspace.json`
 - `tools`
 - `storages/engram/engram.db` and its SQLite sidecars
