@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-15-web-diff-card-scroll-viewport.md
-2026-09-15-web-diff-card-scroll-viewport.md: ff620f7b6e8c44e31ff0fb088594b36b22d1988c
-2026-09-15-web-diff-card-scroll-viewport.zh.md: 24bdc4347bfcf8bde094baf0f42eca0bf005c2cc
+2026-09-15-web-diff-card-scroll-viewport.md: 199467b61f83d0775ae7f72d67088998b764af75
+2026-09-15-web-diff-card-scroll-viewport.zh.md: de73b70c6d19571e97e028fd00fbc3bc8804a4ab
