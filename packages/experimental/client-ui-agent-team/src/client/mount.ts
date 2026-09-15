@@ -70,6 +70,7 @@ function registerUi(ctx: ClientContext, enabledPresets?: readonly string[]): voi
  * Mount one generated Team Remote contribution, then register its browser UI.
  * @param ctx - Client Context carrying navigation, locale, slot, and Remote services.
  * @param contribution - generated Team descriptors selected by the browser entry.
+ * @param enabledPresets - preset names allowed to expose Team actions.
  * @returns disposer for both the UI registrations and Remote namespace.
  */
 export async function mountAgentTeamUi(
