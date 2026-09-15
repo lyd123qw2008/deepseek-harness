@@ -841,7 +841,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/experimental/tool-agent-team/src/index.ts:17`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/experimental/tool-agent-team/src/index.ts:18`](../packages/experimental/tool-agent-team/src/index.ts)
 
 <a id="deepseek-aidsh-file-reference-local"></a>
 
@@ -1677,9 +1677,8 @@ export interface StdioConfig {
   /** Working directory for the child process. */
   cwd: string
   /**
-   * Connection scope. `global` preserves the historical one-child behavior;
-   * `session-project` creates one child per DSH Session cwd and routes calls
-   * through the child without changing the public tool names.
+   * Connection scope. `global` preserves one child; `session-project` creates
+   * one child per DSH Session cwd while keeping the public tool names stable.
    */
   scope?: 'global' | 'session-project'
   /** Timeout per tool call or resource request in milliseconds. */
@@ -2474,12 +2473,18 @@ export interface Config {
   watchMaxProjects?: number
   /** Whether watched symbolic links follow their target files. */
   watchFollowSymlinks?: boolean
+  /** Maximum native `rename` events from one watched directory per burst window; zero disables Windows burst recovery. */
+  watchNativeBurstLimit?: number
+  /** Milliseconds over which native `rename` events are counted for burst recovery. */
+  watchNativeBurstWindowMs?: number
+  /** Milliseconds to wait before reopening a watcher paused by a native event burst. */
+  watchNativeRecoveryMs?: number
   /** Bundled skill root; defaults to `$DSH_BUNDLED_SKILL_DIR` when default roots are included, otherwise mounts none. */
   bundledSkillDir?: string
 }
 ```
 
-Source: [`packages/skill/skill-filesystem/src/index.ts:49`](../packages/skill/skill-filesystem/src/index.ts)
+Source: [`packages/skill/skill-filesystem/src/index.ts:56`](../packages/skill/skill-filesystem/src/index.ts)
 
 <a id="deepseek-aidsh-skill-office"></a>
 
