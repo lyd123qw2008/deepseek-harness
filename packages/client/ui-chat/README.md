@@ -8,9 +8,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use this package to render a browser chat from recorded Session conversations, including historical images, localized actions, and restored scroll position. Compact display folds completed-turn process rows while keeping the final answer and independently useful context visible; packed historical Assistant runs remain collapsed. Local transcript and steering submissions appear immediately, remain in their original surface, and disappear atomically when authoritative Session records arrive, while queued submissions stay outside Chat. File-path actions resolve against the Session workspace and invoke the Host's default desktop application. The package does not assemble or modify model requests.
-
-File-mention providers receive the viewed Session ID with the closing-turn owner, so links into inherited history can address the fork itself.
+Use this package to render recorded Session conversations in a browser, including historical images, localized actions, and restored scroll position. Compact display folds completed-turn process rows while keeping final answers and context visible; packed historical Assistant runs remain collapsed. Local transcript and steering submissions appear immediately in their original surface and disappear when authoritative Session records arrive; queued submissions stay outside Chat. File paths resolve against the Session workspace and open with the Host's default application. File mentions receive the viewed Session ID and closing-turn owner, so inherited-history links can address the fork. The package does not modify model requests.
 
 ## Table of Contents
 
