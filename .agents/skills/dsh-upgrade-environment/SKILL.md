@@ -11,6 +11,8 @@ Upgrade the program, not the user's data. Require an explicit source home, targe
 
 Read the repository `AGENTS.md`, [defensive patterns](../../../docs/defensive-patterns.md), and [`scripts/upgrade-environment.manifest.json`](../../../scripts/upgrade-environment.manifest.json). The manifest is the canonical inventory and policy. Root-level `migration-*.json` files, including `migration-verification-*.json`, and `sync-*.json` files record past work only. Do not copy them to a target; write records for the current upgrade separately. Their `excluded` lists are not future migration rules.
 
+Also read [the local-exclusive feature inventory](../../notes/implemented/process/2026-09-16-local-exclusive-upgrade-treatment.md). Its features replace shipped behaviour in core packages, so a release upgrade keeps them on the local side: `git cherry` reviews no commit for them, and a released test file is not evidence that their behaviour is wrong. Each entry names the files it owns and the signal that means it needs re-judging rather than a default keep; record the outcome you chose per feature in the per-run migration record.
+
 ## Upgrade the program and pick personal commits
 
 Keep code upgrade and data migration as separate checkpoints. The target code starts from the exact release tag; personal commits are reviewed and applied on top before any data copy.
