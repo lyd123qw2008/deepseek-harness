@@ -18,6 +18,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
 import { changesReviewAddress } from '../changes.ts'
 import { ChangesDiffStore } from './changes-diff.ts'
 import { ChangesSummaryStore } from './changes-summary.ts'
@@ -71,6 +72,9 @@ export function apply(ctx: ClientContext): void {
         loadChangesDiff: (sessionId, seq, index) => diffs.load(sessionId, seq, index),
         reloadPresentedHost: () => opener.loadHost(),
         loadChangesSummary: (sessionId, seq) => summaries.load(sessionId, seq),
+        openPreview: (sessionId, cwd, path) => {
+          ctx.sidebarRight.openResource(fileAddressFor(sessionId, cwd, path))
+        },
         openPresented: (sessionId, seq, index, action, application) => opener.open(sessionId, seq, index, action, application),
         openChanged: (sessionId, seq, index, action, application) => opener.openChanged(sessionId, seq, index, action, application),
         openChangesReview: (coordinates, index) => {
