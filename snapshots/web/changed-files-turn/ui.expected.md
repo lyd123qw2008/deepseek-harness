@@ -63,7 +63,7 @@
   - listitem:
     - strong:
       - code:
-        - button "在侧边栏打开 intro.md": intro.md
+        - button "用默认应用打开 intro.md": intro.md
     - text: — 标题
     - code: "# 示例项目"
     - text: 已改为
@@ -72,21 +72,21 @@
   - listitem:
     - strong:
       - code:
-        - button "在侧边栏打开 src/util.ts": src/util.ts
+        - button "用默认应用打开 src/util.ts": src/util.ts
     - text: — 新建，导出
     - code: "add(a: number, b: number): number"
     - text: 。
   - listitem:
     - strong:
       - code:
-        - button "在侧边栏打开 app.local": app.local
+        - button "用默认应用打开 app.local": app.local
     - text: — 新建，内容为一行
     - code: mode=demo
     - text: 。
   - listitem:
     - strong:
       - code:
-        - button "在侧边栏打开 notes.txt": notes.txt
+        - button "用默认应用打开 notes.txt": notes.txt
     - text: — 用
     - code: bash
     - text: 追加成功，现有内容为
@@ -97,10 +97,10 @@
 - paragraph:
   - text: 说明：
   - code:
-    - button "在侧边栏打开 intro.md": intro.md
+    - button "用默认应用打开 intro.md": intro.md
   - text: 的改动我按文件策略要求先读了一次原文件（只读该文件，未浏览目录），
   - code:
-    - button "在侧边栏打开 notes.txt": notes.txt
+    - button "用默认应用打开 notes.txt": notes.txt
   - text: 的追加则完全走 bash。
 - button "在侧边栏查看本轮改动": 已编辑 4 个文件 +6 -1
 - list:
@@ -116,22 +116,22 @@
 - text: 此主机没有可用的桌面，无法使用外部程序打开文件或文件夹；文件仍可在侧边栏预览
 - button "在侧边栏预览 intro.md"
 - text: intro.md 标题已改为「项目说明」
-- button "在侧边栏打开 intro.md": 打开
+- button "预览 intro.md": 预览
 - button "intro.md 的更多文件操作" [disabled]:
   - img
 - button "在侧边栏预览 src/util.ts"
 - text: util.ts 新增 add 两数相加函数
-- button "在侧边栏打开 src/util.ts": 打开
+- button "预览 src/util.ts": 预览
 - button "src/util.ts 的更多文件操作" [disabled]:
   - img
 - button "在侧边栏预览 app.local"
 - text: app.local 新增配置文件，内容 mode=demo
-- button "在侧边栏打开 app.local": 打开
+- button "预览 app.local": 预览
 - button "app.local 的更多文件操作" [disabled]:
   - img
 - button "在侧边栏预览 notes.txt"
 - text: notes.txt 末尾追加了 done 一行
-- button "在侧边栏打开 notes.txt": 打开
+- button "预览 notes.txt": 预览
 - button "notes.txt 的更多文件操作" [disabled]:
   - img
 - button "复制":

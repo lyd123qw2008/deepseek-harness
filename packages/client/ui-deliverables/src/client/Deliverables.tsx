@@ -4,6 +4,7 @@ import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { Button, IconChevronDownOutline14, IconChevronUpOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { GlobalStandardProps, InjectFace, PropsLocale, PropsRuntime, SessionStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { PresentedOpenController } from './present-open.ts'
 import type { ChangesSummaryStore } from './changes-summary.ts'
 import { ChangedFiles } from './ChangedFiles.tsx'
@@ -18,7 +19,7 @@ interface DeliverablesMatch { changes: ChangesTurnData | null; presented: readon
 
 const COLLAPSED_PRESENTED_COUNT = 4
 
-/** Summary reads, native-open callbacks, and shared gesture status supplied by the plugin. */
+/** Summary reads, Sidebar preview, native-open callbacks, and shared gesture status supplied by the plugin. */
 export interface DeliverablesInjected {
   hooks: {
     presentedOpen: ObservableSnapshot<ReturnType<PresentedOpenController['state']['getSnapshot']>>
@@ -27,6 +28,8 @@ export interface DeliverablesInjected {
   }
   reloadPresentedHost: PresentedOpenController['loadHost']
   loadChangesSummary: ChangesSummaryStore['load']
+  /** Preview one delivered file in the viewed Session's Sidebar. */
+  openPreview: (sessionId: SessionId, cwd: string | undefined, path: string) => void
   openPresented: PresentedOpenController['open']
   openChanged: PresentedOpenController['openChanged']
   /** Open one turn's review in the right Sidebar on the file at an index. */
@@ -56,15 +59,15 @@ export function DeliverablesTail(props: PropsRuntime<'conversation.chat.turnTail
 
 /**
  * Render the changed-files card, once the Host has served the announced
- * summary and it lists a file, and default-application buttons for declared
- * files. A summary the Host no longer serves leaves no card.
- * @param props - matched announcement and files, workspace opener, and localized copy.
+ * summary and it lists a file, and Sidebar-preview cards for declared files.
+ * A summary the Host no longer serves leaves no card.
+ * @param props - matched announcement and files, Sidebar preview, native actions, and localized copy.
  * @returns the closing turn's file rows.
  */
 export function Deliverables({
-  matched, openFile, t, sessionId, useSessions, openPresented, openChangesReview, usePresentedOpen, usePresentedHost,
-  useChangesSummary, reloadPresentedHost, loadChangesSummary,
-}: Pick<TurnTailOwnerProps, 'openFile'> & {
+  matched, t, sessionId, useSessions, openPreview, openPresented, openChangesReview,
+  usePresentedOpen, usePresentedHost, useChangesSummary, reloadPresentedHost, loadChangesSummary,
+}: {
   matched: DeliverablesMatch
 } & PropsLocale<typeof NS> & Pick<SessionStandardProps, 'sessionId'> & Pick<GlobalStandardProps, 'useSessions'> & InjectFace<DeliverablesInjected>) {
   const [expanded, setExpanded] = useState(false)
@@ -102,7 +105,7 @@ export function Deliverables({
         {presented.map(file => <PresentedFileCard key={`${file.seq}:${file.index}`} file={file} cwd={cwd}
           phase={states[presentedFileUrl(sessionId, file.seq, file.index)]}
           host={host === 'error' ? null : host} t={t}
-          onPreview={() => { openFile(file.path) }}
+          onPreview={() => { openPreview(sessionId, cwd, file.path) }}
           onAction={(action) => { void openPresented(sessionId, file.seq, file.index, action) }} />)}
       </div>
       {collapsible && <button type="button" className={css.toggle}

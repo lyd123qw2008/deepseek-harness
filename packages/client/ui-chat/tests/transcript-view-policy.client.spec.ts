@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 import { stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
+import { DEFAULT_FILE_OPEN_TARGET } from '../src/chat-settings.ts'
 import type { ChatSettings } from '../src/chat-settings.ts'
 import { TranscriptViewPolicy } from '../src/client/transcript-view.ts'
 
@@ -30,18 +31,18 @@ describe('TranscriptViewPolicy', () => {
     const host = stubSettingsScope<ChatSettings>()
     const policy = new TranscriptViewPolicy(host.scope)
 
-    host.publish({ status: 'ready', value: { transcriptView: 'normal' }, revision: 1, writable: true })
+    host.publish({ status: 'ready', value: { transcriptView: 'normal', fileOpenTarget: DEFAULT_FILE_OPEN_TARGET }, revision: 1, writable: true })
     expect(policy.mode.getSnapshot()).toBe('normal')
     policy.setMode('normal')
     expect(host.set).not.toHaveBeenCalled()
 
-    host.publish({ value: { transcriptView: 'compact' }, revision: 2 })
+    host.publish({ value: { transcriptView: 'compact', fileOpenTarget: DEFAULT_FILE_OPEN_TARGET }, revision: 2 })
     expect(policy.mode.getSnapshot()).toBe('compact')
   })
 
   it('adopts an accepted section standing at construction', () => {
     const host = stubSettingsScope<ChatSettings>()
-    host.publish({ status: 'ready', value: { transcriptView: 'normal' }, revision: 1, writable: true })
+    host.publish({ status: 'ready', value: { transcriptView: 'normal', fileOpenTarget: DEFAULT_FILE_OPEN_TARGET }, revision: 1, writable: true })
     expect(new TranscriptViewPolicy(host.scope).mode.getSnapshot()).toBe('normal')
   })
 })

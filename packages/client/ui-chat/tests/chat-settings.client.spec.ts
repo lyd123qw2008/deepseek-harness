@@ -2,7 +2,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import {
-  CHAT_SETTINGS_NAMESPACE, DEFAULT_TRANSCRIPT_VIEW_MODE, apply,
+  CHAT_SETTINGS_NAMESPACE, DEFAULT_FILE_OPEN_TARGET, DEFAULT_TRANSCRIPT_VIEW_MODE, apply,
 } from '../src/index.ts'
 
 class MemorySettings extends SettingsProvider {
@@ -21,10 +21,13 @@ describe('ui-chat Host settings', () => {
     await fiber.await()
     const ns = CHAT_SETTINGS_NAMESPACE
 
-    expect(ctx.settings.get(ns)).toEqual({ transcriptView: DEFAULT_TRANSCRIPT_VIEW_MODE })
-    await ctx.settings.update(ns, { transcriptView: 'normal' })
-    expect(ctx.settings.get(ns)).toEqual({ transcriptView: 'normal' })
-    await expect(ctx.settings.update(ns, { transcriptView: 'dense' })).rejects.toThrow()
+    expect(ctx.settings.get(ns)).toEqual({
+      transcriptView: DEFAULT_TRANSCRIPT_VIEW_MODE,
+      fileOpenTarget: DEFAULT_FILE_OPEN_TARGET,
+    })
+    await ctx.settings.update(ns, { transcriptView: 'normal', fileOpenTarget: 'sidebar' })
+    expect(ctx.settings.get(ns)).toEqual({ transcriptView: 'normal', fileOpenTarget: 'sidebar' })
+    await expect(ctx.settings.update(ns, { transcriptView: 'normal', fileOpenTarget: 'dense' })).rejects.toThrow()
 
     await fiber.dispose()
     expect(ctx.settings.describe().map(row => row.ns)).not.toContain(ns)

@@ -17,7 +17,7 @@ function textBlock(text: string): AssistantBlock {
 const ORIGIN = 'http://127.0.0.1:3080'
 
 describe('localPathMediaUrl', () => {
-  it('maps an absolute POSIX path on an HTTP page to the file API', () => {
+  it('maps absolute POSIX and Windows paths on an HTTP page to the file API', () => {
     expect(localPathMediaUrl('http:', ORIGIN, '/tmp/graph.png'))
       .toBe(`${ORIGIN}/api/file?path=${encodeURIComponent('/tmp/graph.png')}`)
     expect(localPathMediaUrl('https:', 'https://127.0.0.1:3080', '/tmp/graph.png'))
@@ -33,7 +33,8 @@ describe('localPathMediaUrl', () => {
     expect(localPathMediaUrl('http:', ORIGIN, '')).toBeUndefined()
     expect(localPathMediaUrl('http:', ORIGIN, '//cdn.example.com/x.png')).toBeUndefined()
     expect(localPathMediaUrl('http:', ORIGIN, 'relative.png')).toBeUndefined()
-    expect(localPathMediaUrl('http:', ORIGIN, 'C:\\tmp\\x.png')).toBeUndefined()
+    expect(localPathMediaUrl('http:', ORIGIN, 'C:\\tmp\\x.png'))
+      .toBe(`${ORIGIN}/api/file?path=${encodeURIComponent('C:\\tmp\\x.png')}`)
   })
 
   it('encodes the full path including spaces', () => {
@@ -57,6 +58,22 @@ describe('AssistantMarkdown local-path images', () => {
     const url = new URL(image?.getAttribute('src') ?? '')
     expect(url.pathname).toBe('/api/file')
     expect(url.searchParams.get('path')).toBe('/tmp/graph.png')
+  })
+
+  it('renders a Windows absolute path in closing prose through the same-origin API', () => {
+    const { container } = render(
+      <AssistantMarkdown
+        blocks={[textBlock('See ![diagram](C:\\\\tmp\\\\graph.png) for the layout.')]}
+        streaming={false}
+        renderMessageImages={renderMessageImages}
+        t={t}
+      />,
+    )
+    const image = container.querySelector('img')
+    expect(image?.getAttribute('alt')).toBe('diagram')
+    const url = new URL(image?.getAttribute('src') ?? '')
+    expect(url.pathname).toBe('/api/file')
+    expect(url.searchParams.get('path')).toBe('C:\\tmp\\graph.png')
   })
 
   it('keeps non-absolute destinations inert', () => {

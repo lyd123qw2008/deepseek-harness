@@ -20,7 +20,8 @@ import {
   apply as applyChat, EMPTY_CHAT_SNAPSHOT, inject as injectChat,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {
-  ChatNodeTurnDataInjected, ChatSnapshot, TranscriptViewRowInjected, UseChatNodeTurnData,
+  ChatNodeTurnDataInjected, ChatSnapshot, FileOpenTargetRowInjected, TranscriptViewRowInjected,
+  UseChatNodeTurnData,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { CHAT_SETTINGS_NAMESPACE, type ChatSettings } from '../src/chat-settings.ts'
 
@@ -91,7 +92,7 @@ describe('Chat apply wiring', () => {
     expect(b.runtime.slots.entries('conversation.composer.dock').map(row => row.options.id))
       .toEqual(['stats'])
     expect(b.runtime.slots.entries('settings.general.item').map(row => row.options.id))
-      .toEqual(['transcript-view', 'composer-enter'])
+      .toEqual(['transcript-view', 'file-open-target', 'composer-enter'])
     await b.runtime.dispose()
   })
 
@@ -107,9 +108,30 @@ describe('Chat apply wiring', () => {
     expect(b.chatSettings.set).toHaveBeenCalledWith('transcriptView', 'normal')
 
     b.chatSettings.publish({
-      status: 'ready', value: { transcriptView: 'compact' }, revision: 1, writable: true,
+      status: 'ready', value: { transcriptView: 'compact', fileOpenTarget: 'host' }, revision: 1, writable: true,
     })
     expect(face.hooks.transcriptView.getSnapshot()).toBe('compact')
+    await b.runtime.dispose()
+  })
+
+  it('mirrors the Host file-opening target into its Settings row', async () => {
+    const b = await bench()
+    const row = b.runtime.slots.entries('settings.general.item')
+      .find(entry => entry.options.id === 'file-open-target')!
+    const face = (row.inject as unknown as () => FileOpenTargetRowInjected)()
+
+    expect(face.hooks.fileOpenTarget.getSnapshot()).toBe('host')
+    face.setFileOpenTarget('sidebar')
+    expect(face.hooks.fileOpenTarget.getSnapshot()).toBe('sidebar')
+    expect(b.chatSettings.set).toHaveBeenCalledWith('fileOpenTarget', 'sidebar')
+
+    b.chatSettings.publish({
+      status: 'ready',
+      value: { transcriptView: 'compact', fileOpenTarget: 'host' },
+      revision: 1,
+      writable: true,
+    })
+    expect(face.hooks.fileOpenTarget.getSnapshot()).toBe('host')
     await b.runtime.dispose()
   })
 

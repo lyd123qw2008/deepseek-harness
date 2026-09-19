@@ -16,6 +16,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
+import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
 import { changesReviewAddress } from '../changes.ts'
 import { ChangesDiffStore } from './changes-diff.ts'
 import { ChangesSummaryStore } from './changes-summary.ts'
@@ -66,6 +67,9 @@ export function apply(ctx: ClientContext): void {
         hooks: { presentedOpen: opener.state, presentedHost: opener.host, changesSummary: summaries.state },
         reloadPresentedHost: () => opener.loadHost(),
         loadChangesSummary: (sessionId, seq) => summaries.load(sessionId, seq),
+        openPreview: (sessionId, cwd, path) => {
+          ctx.sidebarRight.openResource(fileAddressFor(sessionId, cwd, path))
+        },
         openPresented: (sessionId, seq, index, action) => opener.open(sessionId, seq, index, action),
         openChanged: (sessionId, seq, index) => opener.openChanged(sessionId, seq, index),
         openChangesReview: (coordinates, index) => {
@@ -100,7 +104,7 @@ export function apply(ctx: ClientContext): void {
       const presented = presentedForClosing(owner)
       if (paths === null && presented.length === 0) return undefined
       return producedFileMentions([...new Set([...paths ?? [], ...presented.map(file => file.path)])], owner.openFile,
-        path => t('presented.previewButton', { name: path }))
+        path => t('presented.defaultAppAria', { name: path }))
     },
   }
   ctx.provide('chatFileMentions', mentions)

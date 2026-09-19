@@ -50,7 +50,11 @@
   - button "src/tokens.css"
   - text: +1 -1
 - button "Copy"
-- text: "src/tokens.css - --inline-code: #EBEEF2; + --inline-code: #F5F5F5; └ +1 -1 · 1 file"
+- text: "src/tokens.css --inline-code: #"
+- mark: EBEEF2
+- text: "; --inline-code: #"
+- mark: F5F5F5
+- text: ; └ +1 -1 · 1 file
 - button "Inspect"
 - button "Tool call str_replace_editor · create" [expanded]:
   - img
@@ -163,7 +167,7 @@
 - paragraph:
   - text: Wrote
   - code:
-    - button "Open site/report.html in sidebar": report.html
+    - button "Open site/report.html in default app": report.html
   - text: plus two
   - code: style.css
   - text: copies;

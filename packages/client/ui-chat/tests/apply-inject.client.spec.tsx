@@ -17,6 +17,8 @@ import {
 } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { SessionSeq, type SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
+import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
+import type { ChatSettings } from '../src/chat-settings.ts'
 import { createChatStore } from '../src/client/stores.ts'
 
 usePinnedBrowserLanguages('zh-CN')
@@ -48,7 +50,8 @@ function sessionFakeFor() {
 
 async function bench() {
   const runtime = await SlotTestRuntime.create()
-  runtime.ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
+  const chatSettings = stubSettingsScope<ChatSettings>()
+  runtime.ctx.provide('settingsScope', { bind: () => chatSettings.scope } as never)
   const layout = { closeRightbar: vi.fn(), openRightbar: vi.fn() }
   runtime.ctx.provide('layout', layout as never)
   const sidebarRight = {
@@ -103,7 +106,8 @@ async function bench() {
     return { instance, injected }
   }
   return {
-    runtime, layout, openWorkspacePath, sidebarRight, sidebarRightTabs, session, chatViewApi, rootReference, openSession,
+    runtime, layout, openWorkspacePath, sidebarRight, sidebarRightTabs, chatSettings,
+    session, chatViewApi, rootReference, openSession,
   }
 }
 
@@ -150,6 +154,21 @@ describe('Chat inject API', () => {
       error: new RemoteError('gateway/internal', 'xdg-open is not available', {}),
     })
     await expect(injected.openFile('src/b.ts')).rejects.toThrow('path open failed: xdg-open is not available')
+    await b.runtime.dispose()
+  })
+
+  it('routes Chat file actions to the Sidebar when the persisted target is Sidebar', async () => {
+    const b = await bench()
+    b.chatSettings.publish({
+      status: 'ready',
+      value: { transcriptView: 'compact', fileOpenTarget: 'sidebar' },
+      revision: 1,
+      writable: true,
+    })
+    const { injected } = b.chatViewApi(b.rootReference)
+    await injected.openFile('src/a.ts')
+    expect(b.sidebarRight.openResource).toHaveBeenCalledWith(fileAddressFor(ROOT, '/proj', '/proj/src/a.ts'))
+    expect(b.openWorkspacePath).not.toHaveBeenCalled()
     await b.runtime.dispose()
   })
 

@@ -123,19 +123,18 @@ fs.appendFileSync(${JSON.stringify(openLog)}, JSON.stringify({ path, action, con
       await row.waitFor()
       expect(await row.getByRole('button', { name: /More file actions/ }).count()).toBe(2)
       expect(await row.getByText('report.txt', { exact: true }).innerText()).toBe('report.txt')
-      const beforePreview = (await opened()).length
+      const beforeMention = (await opened()).length
       const column = page.locator('[data-rightbar-col]')
       for (const [name, content] of [['report.txt', 'EDITED_REPORT'], ['说明.txt', 'EDITED_NOTE']] as const) {
-        const mention = page.locator('code').getByRole('button', { name: `Open ${name} in sidebar`, exact: true })
+        const mention = page.locator('code').getByRole('button', { name: `Open ${name} in default app`, exact: true })
         await mention.click()
-        const preview = column.locator('[data-document-preview]')
-        await expect.poll(() => preview.getAttribute('data-textpreview-url'))
-          .toBe(`dsh-resource://file/session/${sessionId}/${encodeURIComponent(name)}`)
-        await preview.getByText(content, { exact: true }).waitFor()
+        await expect.poll(opened).toHaveLength(beforeMention + 1)
+        expect((await opened()).at(-1)).toEqual({ action: 'open', path: await realpath(join(cwd, name)), content: `${content}\n` })
         await mention.click()
-        expect(await column.locator('[data-dockkit-tab]').filter({ hasText: name }).count()).toBe(1)
+        await expect.poll(opened).toHaveLength(beforeMention + 2)
       }
-      expect(await opened()).toHaveLength(beforePreview)
+      expect(await opened()).toHaveLength(beforeMention + 4)
+      expect(await column.locator('[data-dockkit-tab]').filter({ hasText: /report\.txt|说明\.txt/u }).count()).toBe(0)
       expect(downloads).toEqual([])
       await page.getByRole('button', { name: 'Collapse right sidebar', exact: true }).click()
       const beforeReveal = (await opened()).length
@@ -143,7 +142,7 @@ fs.appendFileSync(${JSON.stringify(openLog)}, JSON.stringify({ path, action, con
       const revealResponse = page.waitForResponse(response => response.url().includes('action=reveal') && response.request().method() === 'POST')
       await page.getByRole('menuitem', { name: process.platform === 'darwin' ? /Show in Finder/ : /Open containing folder/ }).click()
       expect((await revealResponse).status()).toBe(204)
-      expect(await row.getByRole('button', { name: 'Open report.txt in sidebar', exact: true })
+      expect(await row.getByRole('button', { name: 'Preview report.txt', exact: true })
         .evaluate(button => button === document.activeElement)).toBe(true)
       await expect.poll(opened).toHaveLength(beforeReveal + 1)
       expect((await opened()).at(-1)).toEqual({ action: 'reveal', content: null, path: await realpath(process.platform === 'darwin' ? join(cwd, 'report.txt') : cwd) })
@@ -217,7 +216,7 @@ fs.appendFileSync(${JSON.stringify(openLog)}, JSON.stringify({ path, action, con
         )
         const description = requiredElement(report.querySelector<HTMLElement>('span[role="status"]'), 'report status')
         const open = requiredElement(
-          report.querySelector<HTMLButtonElement>('button[aria-label="Open report.txt in sidebar"]'),
+          report.querySelector<HTMLButtonElement>('button[aria-label="Preview report.txt"]'),
           'report open action',
         )
         const icon = requiredElement(report.querySelector<SVGElement>('svg'), 'report icon')

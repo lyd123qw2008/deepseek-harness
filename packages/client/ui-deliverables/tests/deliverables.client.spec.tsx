@@ -47,6 +47,7 @@ function openProps(controller = new PresentedOpenController(), summaries = new C
     loadChangesSummary: vi.fn((...args: Parameters<ChangesSummaryStore['load']>) => summaries.load(...args)),
     usePresentedHost: <T,>(select: (state: ReturnType<typeof controller.host.getSnapshot>) => T): T =>
       select(controller.host.getSnapshot()),
+    openPreview: vi.fn<DeliverablesInjected['openPreview']>(),
     openPresented: vi.fn((...args: Parameters<PresentedOpenController['open']>) => controller.open(...args)),
     openChanged: vi.fn((...args: Parameters<PresentedOpenController['openChanged']>) => controller.openChanged(...args)),
     openChangesReview: vi.fn<DeliverablesInjected['openChangesReview']>(),
@@ -490,7 +491,7 @@ describe('ChangedFiles card', () => {
     const props = openProps(controller, summaries)
     props.openChanged.mockResolvedValue(undefined)
     const openFile = vi.fn<(path: string) => void>()
-    const view = render(<Deliverables {...props} matched={matched} openFile={openFile} sessionId={SessionId('child-session')} t={makeTranslate(locale)} />)
+    const view = render(<Deliverables {...props} matched={matched} sessionId={SessionId('child-session')} t={makeTranslate(locale)} />)
     return { props, openFile, view }
   }
 
@@ -507,12 +508,12 @@ describe('ChangedFiles card', () => {
     expect(view.container.querySelector('[data-changed-files]')).toBeNull()
     expect(props.loadChangesSummary).toHaveBeenCalledWith('child-session', 5)
     await vi.waitFor(() => { expect(summaries.state.getSnapshot()[changesSummaryUrl(SessionId('child-session'), 5)]).toEqual(served) })
-    view.rerender(<Deliverables {...props} matched={{ changes, presented: [] }} openFile={() => {}} sessionId={SessionId('child-session')} t={makeTranslate(en)} />)
+    view.rerender(<Deliverables {...props} matched={{ changes, presented: [] }} sessionId={SessionId('child-session')} t={makeTranslate(en)} />)
     expect(view.getByText('Edited 11 files')).toBeTruthy()
     for (const seq of [6, 7]) {
-      view.rerender(<Deliverables {...props} matched={{ changes: { seq }, presented: [] }} openFile={() => {}} sessionId={SessionId('child-session')} t={makeTranslate(en)} />)
+      view.rerender(<Deliverables {...props} matched={{ changes: { seq }, presented: [] }} sessionId={SessionId('child-session')} t={makeTranslate(en)} />)
       await vi.waitFor(() => { expect(summaries.state.getSnapshot()[changesSummaryUrl(SessionId('child-session'), seq)]).not.toBe('loading') })
-      view.rerender(<Deliverables {...props} matched={{ changes: { seq }, presented: [] }} openFile={() => {}} sessionId={SessionId('child-session')} t={makeTranslate(en)} />)
+      view.rerender(<Deliverables {...props} matched={{ changes: { seq }, presented: [] }} sessionId={SessionId('child-session')} t={makeTranslate(en)} />)
       expect(view.container.querySelector('[data-changed-files]')).toBeNull()
     }
     expect(summaries.state.getSnapshot()[changesSummaryUrl(SessionId('child-session'), 7)]).toBe('missing')
@@ -604,10 +605,10 @@ describe('ChangedFiles card', () => {
     const controller = new PresentedOpenController()
     const { openFile, props, view } = renderCard(controller, zh)
     controller.host.set('error')
-    view.rerender(<Deliverables {...props} matched={{ changes, presented: [] }} openFile={openFile} sessionId={SessionId('child-session')} t={makeTranslate(zh)} />)
+    view.rerender(<Deliverables {...props} matched={{ changes, presented: [] }} sessionId={SessionId('child-session')} t={makeTranslate(zh)} />)
     expect(view.getByRole('button', { name: '在侧边栏查看本轮改动' })).toBeTruthy()
     controller.host.set({ name: 'server', available: false, fileManager: null })
-    view.rerender(<Deliverables {...props} matched={{ changes, presented: [] }} openFile={openFile} sessionId={SessionId('child-session')} t={makeTranslate(zh)} />)
+    view.rerender(<Deliverables {...props} matched={{ changes, presented: [] }} sessionId={SessionId('child-session')} t={makeTranslate(zh)} />)
     expect(view.getByText('已编辑 11 个文件')).toBeTruthy()
     fireEvent.click(view.getByRole('button', { name: '在侧边栏查看本轮改动' }))
     expect(props.openChangesReview).toHaveBeenLastCalledWith({ sessionId: 'child-session', seq: 5, turn: 1 }, 0)
@@ -724,7 +725,7 @@ describe('plugin registration', () => {
     )
     const service = (ctx as unknown as { get(name: string): ChatFileMentions | undefined }).get('chatFileMentions')
     const mentions = service?.forClosing(owner, SessionId('viewed-session'))
-    expect(mentions?.resolve('report.html')?.label).toBe('Open site/report.html in sidebar')
+    expect(mentions?.resolve('report.html')?.label).toBe('Open site/report.html in default app')
     mentions?.resolve('report.html')?.open()
     expect(opened).toEqual(['site/report.html'])
     const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
@@ -735,13 +736,15 @@ describe('plugin registration', () => {
       const mentions = service?.forClosing(delivered, SessionId('child-session'))
       for (const text of ['report.docx', 'out/report.docx']) {
         const mention = mentions?.resolve(text)
-        expect(mention?.label).toBe('Open out/report.docx in sidebar')
+        expect(mention?.label).toBe('Open out/report.docx in default app')
         mention?.open()
       }
     }
     expect(preview.mock.calls).toEqual(Array.from({ length: 4 }, () => ['out/report.docx']))
     expect(fetcher).not.toHaveBeenCalled()
     const face = entry!.inject!(SessionId('child-session') as never) as unknown as DeliverablesInjected
+    face.openPreview(SessionId('child-session'), '/work', 'out/report.docx')
+    expect(openResource).toHaveBeenCalledWith('dsh-resource://file/session/child-session/out/report.docx')
     fetcher.mockResolvedValueOnce(Response.json({ name: 'desktop', available: true, fileManager: 'finder' }))
     await face.reloadPresentedHost()
     expect(face.hooks.presentedHost.getSnapshot()).toMatchObject({ name: 'desktop' })
@@ -818,12 +821,12 @@ describe('presented files', () => {
       at(1, 'turn/start', { turn: 1 }),
       at(2, 'deliverables/presented', { turn: 1, callId: 'nested', files: Array.from({ length: 8 }, (_, i) => file(`report-${i}.docx`)) }),
     ])
-    const preview = vi.fn()
-    const owner = tailOwner(deliverablesOf(value), 3, preview)
+    const preview = vi.fn<DeliverablesInjected['openPreview']>()
+    const owner = tailOwner(deliverablesOf(value), 3)
     const matched = selectDeliverables(owner)!
-    const props = openProps()
+    const props = { ...openProps(), openPreview: preview }
     props.openPresented.mockResolvedValue(undefined)
-    const view = render(<Deliverables {...props} matched={matched} openFile={owner.openFile} sessionId={SessionId('child-session')} t={makeTranslate(en)} />)
+    const view = render(<Deliverables {...props} matched={matched} sessionId={SessionId('child-session')} t={makeTranslate(en)} />)
     expect(view.container.querySelectorAll('[data-presented-file]')).toHaveLength(4)
     const expand = view.getByRole('button', { name: 'Show all 8 delivered files' })
     expect(expand.getAttribute('aria-expanded')).toBe('false')
@@ -831,10 +834,10 @@ describe('presented files', () => {
     expect(view.container.querySelectorAll('[data-presented-file]')).toHaveLength(8)
     expect(view.getByRole('button', { name: 'Collapse delivered files' }).getAttribute('aria-expanded')).toBe('true')
     expect(view.queryByRole('link')).toBeNull()
-    fireEvent.click(view.getByRole('button', { name: 'Preview report-0.docx in sidebar' }))
-    fireEvent.click(view.getByRole('button', { name: 'Open report-0.docx in sidebar' }))
+    fireEvent.click(view.getByRole('button', { name: 'Preview report-0.docx' }))
+    fireEvent.click(view.getByRole('button', { name: 'Preview report-0.docx' }))
     expect(preview).toHaveBeenCalledTimes(2)
-    expect(preview).toHaveBeenLastCalledWith('report-0.docx')
+    expect(preview).toHaveBeenLastCalledWith('child-session', undefined, 'report-0.docx')
     fireEvent.click(view.getByRole('button', { name: 'More file actions for report-0.docx' }))
     fireEvent.click(view.getByRole('menuitem', { name: 'Open in default app' }))
     expect(props.openPresented).toHaveBeenCalledWith('child-session', 2, 0, 'open')
@@ -864,7 +867,7 @@ it.each([{}, { turn: '1', callId: 'bad', files: [] },
   const matched = selectDeliverables(owner)!
   const summaries = new ChangesSummaryStore()
   summaries.state.set({ [changesSummaryUrl(SessionId('session'), 5)]: { turn: 1, files: [{ path: 'a.txt', display: 'a.txt', added: 1, deleted: 0 }], total: 1, added: 1, deleted: 0 } })
-  const view = render(<Deliverables {...openProps(new PresentedOpenController(), summaries)} matched={matched} openFile={owner.openFile} sessionId={SessionId('session')} t={makeTranslate(en)} />)
+  const view = render(<Deliverables {...openProps(new PresentedOpenController(), summaries)} matched={matched} sessionId={SessionId('session')} t={makeTranslate(en)} />)
   expect(view.getByText('Edited 1 files')).toBeTruthy()
   expect(view.queryByText('Deliverables')).toBeNull()
 })
@@ -873,7 +876,7 @@ it('shows descriptions and falls back to file metadata without hiding extensionl
   const view = render(<Deliverables {...openProps()} matched={{ changes: null, presented: [
     { path: 'out/report.txt', description: 'Quarterly summary', seq: 2, index: 0 },
     { path: 'LICENSE', seq: 2, index: 1 },
-  ] }} openFile={() => {}} sessionId={SessionId('session')} t={makeTranslate(en)} />)
+  ] }} sessionId={SessionId('session')} t={makeTranslate(en)} />)
   expect(view.getByText('Quarterly summary')).toBeTruthy()
   expect(view.getByText('File')).toBeTruthy()
   expect(view.getByTitle('out/report.txt')).toBeTruthy()
@@ -884,7 +887,7 @@ it('distinguishes PDF, Word, Markdown, and code files with compact decorative ca
   const paths = ['report.pdf', 'report.docx', 'README.md', 'index.tsx']
   const view = render(<Deliverables {...openProps()} matched={{ changes: null, presented:
     paths.map((path, index) => ({ path, seq: 2, index })),
-  }} openFile={() => {}} sessionId={SessionId('session')} t={makeTranslate(en)} />)
+  }} sessionId={SessionId('session')} t={makeTranslate(en)} />)
   const icons = [...view.container.querySelectorAll('[data-presented-file]')].map((card) => {
     const icon = card.querySelector('svg')!
     expect(icon.getAttribute('aria-hidden')).toBe('true')
@@ -897,7 +900,7 @@ it('distinguishes PDF, Word, Markdown, and code files with compact decorative ca
 it('lets one delivered file span the complete row without an expansion control', () => {
   const view = render(<Deliverables {...openProps()} matched={{ changes: null, presented: [
     { path: 'report.pdf', seq: 2, index: 0 },
-  ] }} openFile={() => {}} sessionId={SessionId('session')} t={makeTranslate(en)} />)
+  ] }} sessionId={SessionId('session')} t={makeTranslate(en)} />)
   expect(view.container.querySelector('[data-presented-files-row]')?.getAttribute('data-single')).toBe('true')
   expect(view.queryByRole('button', { name: /delivered files/ })).toBeNull()
 })
@@ -909,7 +912,7 @@ it.each(['opening', 'opened', 'error'] as const)('shows the %s state and permits
   const props = openProps(controller)
   const view = render(<Deliverables {...props} matched={{ changes: null, presented: [
     { path: 'report.txt', seq: 2, index: 0 },
-  ] }} openFile={() => {}} sessionId={SessionId('session')} t={makeTranslate(en)} />)
+  ] }} sessionId={SessionId('session')} t={makeTranslate(en)} />)
   expect(view.getByText(en[`presented.${phase}`])).toBeTruthy()
   expect((view.getByRole('button', { name: 'More file actions for report.txt' }) as HTMLButtonElement).disabled).toBe(phase === 'opening')
 })
@@ -920,12 +923,12 @@ it('explains a missing desktop and retries failed Host metadata', () => {
   const props = openProps(controller)
   const matched = { changes: null, presented: [{ path: 'file.txt', seq: 2, index: 0 }] }
   controller.host.set('error')
-  const view = render(<Deliverables {...props} matched={matched} openFile={() => {}} sessionId={SessionId('session')} t={makeTranslate(en)} />)
+  const view = render(<Deliverables {...props} matched={matched} sessionId={SessionId('session')} t={makeTranslate(en)} />)
   props.reloadPresentedHost.mockResolvedValue(undefined)
   fireEvent.click(view.getByRole('button', { name: 'Retry' }))
   expect(props.reloadPresentedHost).toHaveBeenCalledOnce()
   controller.host.set({ name: 'server', available: false, fileManager: null })
-  view.rerender(<Deliverables {...props} matched={matched} openFile={() => {}} sessionId={SessionId('session')} t={makeTranslate(en)} />)
+  view.rerender(<Deliverables {...props} matched={matched} sessionId={SessionId('session')} t={makeTranslate(en)} />)
   expect(view.getByText(en['presented.unavailable'])).toBeTruthy()
 })
 
@@ -935,7 +938,7 @@ it('loads desktop information once the tail renders and not again while it is kn
   const props = openProps(controller)
   controller.host.set(null)
   props.reloadPresentedHost.mockResolvedValue(undefined)
-  const shared = { ...props, openFile: () => {}, sessionId: SessionId('session'), t: makeTranslate(en) }
+  const shared = { ...props, sessionId: SessionId('session'), t: makeTranslate(en) }
   const view = render(<Deliverables {...shared} matched={{ changes: { seq: 2 }, presented: [] }} />)
   expect(props.reloadPresentedHost).toHaveBeenCalledOnce()
   controller.host.set({ name: 'desktop', available: true, fileManager: 'finder' })
