@@ -159,7 +159,8 @@ describe('web e2e: requested SVG is explicitly delivered', () => {
     await assertFinalWorkspaceSnapshot(DIR, cwd)
     expect(await page.locator('[data-presented-file] [data-open-target]').count()).toBe(0)
     // Delivery owns the transcript; navigation and composer chrome have separate scenarios.
-    const aria = await captureExpandedTurnProcessAria(page, '[data-chat-flow]', scaffold.workspaceCwd)
+    const aria = (await captureExpandedTurnProcessAria(page, '[data-chat-flow]', cwd))
+      .replaceAll(`{{cwd}}/${FILE}`, FILE)
     await compareOrRefreshGolden(join(DIR, 'ui.expected.md'), aria, MODE)
   })
 
