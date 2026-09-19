@@ -2,10 +2,10 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { chromium, type Browser, type Page } from 'playwright'
+import { chromium, type Browser, type Locator, type Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import {
-  assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
+  assertFixtureInventory, compareOrRefreshGolden,
   launchWebScaffold, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
 import { newEnglishPage, saveFailureShot } from './support.ts'
@@ -42,40 +42,39 @@ describe('web e2e: Markdown file links', () => {
     await scaffold?.close()
   })
 
-  it('previews relative and absolute links at the requested line without duplicate tabs', async () => {
+  it('hands relative and absolute links to the Host opener instead of the Sidebar', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-markdown-file-links'))
     const source = page.getByRole('button', { name: 'src/example.txt:24–30', exact: true })
     const prose = await source.locator('..').ariaSnapshot()
     await compareOrRefreshGolden(join(SNAPSHOT_DIR, 'links.expected.md'), prose, MODE)
     const beforeUrl = page.url()
-    await source.click()
     const column = page.locator('[data-rightbar-col]')
-    await expect.poll(() => column.locator('[data-textpreview-target="24"]').textContent()).toBe('source line 24\n')
-    await expect.poll(() => column.locator('[data-textpreview-path]').textContent())
-      .toBe(join(scaffold.workspaceCwd, 'src/example.txt'))
+    const openPath = async (button: Locator, expectedPath: string): Promise<void> => {
+      const requestPromise = page.waitForRequest(request => new URL(request.url()).pathname === '/api/session/openWorkspacePath')
+      await button.click()
+      const request = await requestPromise
+      const body = JSON.parse(request.postData() ?? '{}') as { payload?: { args?: { request?: { path?: string } } } }
+      const actualPath = body.payload?.args?.request?.path
+      expect(actualPath?.replaceAll('\\', '/')).toBe(expectedPath.replaceAll('\\', '/'))
+      expect(await column.locator('[data-textpreview-state]').count()).toBe(0)
+      const cancel = page.getByRole('button', { name: 'Cancel', exact: true })
+      if (await cancel.count() > 0) await cancel.click()
+    }
+    await openPath(source, join(scaffold.workspaceCwd, 'src/example.txt'))
     const absolute = page.getByRole('button', { name: 'src/example.txt:30', exact: true })
     await absolute.focus()
-    await absolute.press('Enter')
-    await expect.poll(() => column.locator('[data-textpreview-target="30"]').textContent()).toBe('source line 30\n')
-    expect(await column.locator('[data-dockkit-tab-title]').allTextContents()).toEqual(['example.txt'])
+    await openPath(absolute, join(scaffold.workspaceCwd, 'src/example.txt'))
     expect(page.url()).toBe(beforeUrl)
     expect(page.context().pages()).toHaveLength(1)
     expect(await page.getByRole('link', { name: 'Website', exact: true }).getAttribute('target')).toBe('_blank')
     const artifacts = fileURLToPath(new URL('../../../.artifacts', import.meta.url))
     await mkdir(artifacts, { recursive: true })
     await page.screenshot({ path: join(artifacts, 'markdown-file-links.png'), animations: 'disabled' })
-    await page.getByRole('button', { name: 'other/example.txt', exact: true }).click()
-    await expect.poll(() => column.locator('[data-textpreview-path]').textContent())
-      .toBe(join(scaffold.workspaceCwd, 'other/example.txt'))
-    await expect.poll(() => column.locator('[data-textpreview-line="1"]').textContent()).toBe('other file\n')
-    expect(await column.locator('[data-dockkit-tab-title]').allTextContents()).toEqual(['example.txt', 'example.txt'])
-    const preview = await captureStableAria(page, '[data-textpreview-state="text"]', scaffold.workspaceCwd)
-    await compareOrRefreshGolden(join(SNAPSHOT_DIR, 'preview.expected.md'), preview, MODE)
-    await page.getByRole('button', { name: 'Missing file', exact: true }).click()
-    await column.locator('[data-textpreview-failed="workspace-file/not-found"]').waitFor()
-    expect(page.url()).toBe(beforeUrl)
+    await openPath(page.getByRole('button', { name: 'other/example.txt', exact: true }), join(scaffold.workspaceCwd, 'other/example.txt'))
+    await openPath(page.getByRole('button', { name: 'Missing file', exact: true }), join(scaffold.workspaceCwd, 'missing.txt'))
+    expect(await column.locator('[data-dockkit-tab-title]').count()).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-    await assertFixtureInventory(SNAPSHOT_DIR, ['session.v3.jsonl', 'links.expected.md', 'preview.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, ['session.v3.jsonl', 'links.expected.md'])
   })
 })

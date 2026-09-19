@@ -562,7 +562,13 @@ function resolveFromRequest(pattern: string, corpus: string): string {
   if (last === undefined) {
     throw new Error(`llm-replay: fromRequest pattern ${JSON.stringify(pattern)} matched nothing in the request`)
   }
-  return last[1] ?? last[0]
+  const resolved = last[1] ?? last[0]
+  // Replayed captures can be inserted into JSON-encoded tool arguments. Use
+  // slash-normalized absolute paths so Windows separators cannot invalidate the
+  // surrounding JSON string; Host filesystem APIs accept this spelling.
+  return /^[A-Za-z]:[\\/]/u.test(resolved) || resolved.startsWith('\\\\')
+    ? resolved.replaceAll('\\', '/')
+    : resolved
 }
 
 /** Replace every `{{fromRequest:<pattern>}}` occurrence in one scripted string. */

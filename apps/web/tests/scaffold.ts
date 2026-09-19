@@ -1083,29 +1083,72 @@ function replaceWebCwd(value: string, cwd: string): string {
   return normalized
 }
 
+/** Every native, slash-normalized, and JSON-escaped spelling of a Host path. */
+function pathSpellings(path: string): string[] {
+  const forward = path.replaceAll('\\', '/')
+  const native = /^[A-Za-z]:[\\/]/u.test(path) ? forward.replaceAll('/', '\\') : path
+  const doubledForward = forward.replaceAll('/', '//')
+  const doubledNative = native.replaceAll('\\', '\\\\')
+  return [...new Set([path, path.replaceAll('\\', '\\\\'), forward, native, doubledForward, doubledNative])]
+    .sort((left, right) => right.length - left.length)
+}
+
+/** Normalize separators in the path tail without changing JSON escape sequences. */
+function normalizeTokenPathSeparators(value: string, token: string): string {
+  let cursor = 0
+  let output = ''
+  while (cursor < value.length) {
+    const start = value.indexOf(token, cursor)
+    if (start < 0) return output + value.slice(cursor)
+    output += value.slice(cursor, start) + token
+    let end = start + token.length
+    if (value[end] !== '/' && value[end] !== '\\') {
+      cursor = end
+      continue
+    }
+    while (end < value.length) {
+      const character = value[end]!
+      if (character === '\\' && value[end + 1] === '"') break
+      if (character === '"' || /\s/u.test(character) || '<>()[]{},;:!?='.includes(character)) break
+      if (character === '/' || character === '\\') {
+        if (output.at(-1) !== '/') output += '/'
+      } else {
+        output += character
+      }
+      end++
+    }
+    cursor = end
+  }
+  return output
+}
+
+/** Replace every serialized spelling of one path with a stable fixture token. */
+function replacePathToken(value: string, path: string, token: string): string {
+  const replaced = pathSpellings(path).reduce((next, spelling) => next.split(spelling).join(token), value)
+  return normalizeTokenPathSeparators(replaced, token)
+}
+
 /**
  * Normalize Web-only volatile strings while preserving JSON structure and row framing.
  * @param log - raw Session JSONL.
  * @param workspaceCwd - optional scaffold parent used before a live Session selects its cwd.
+ * @param harnessHome - optional Host home path to replace in parsed string values.
  * @returns compact JSONL with run-local strings tokenized.
  */
-export function normalizeWebSessionVolatiles(log: string, workspaceCwd?: string): string {
+export function normalizeWebSessionVolatiles(log: string, workspaceCwd?: string, harnessHome?: string): string {
   const headerLine = log.split(/\r?\n/).find(line => line.trim().length > 0)
   const header = headerLine === undefined ? undefined : JSON.parse(headerLine) as { cwd?: unknown }
   const sessionCwd = typeof header?.cwd === 'string' && header.cwd.length > 0 ? header.cwd : undefined
   const cwdSpellings = [...new Set([sessionCwd ?? workspaceCwd]
     .filter((value): value is string => typeof value === 'string' && value.length > 0)
-    .flatMap((value) => {
-      const forward = value.replaceAll('\\', '/')
-      const native = /^[A-Za-z]:[\\/]/.test(value) ? forward.replaceAll('/', '\\') : value
-      return [value, value.replaceAll('\\', '\\\\'), forward, native]
-    }))].sort((left, right) => right.length - left.length)
+    .flatMap(pathSpellings))]
   return log.split(/\r?\n/).map((line) => {
     if (line.trim() === '') return line
     const record = normalizeClientTimeZones(mapJsonStringValues(JSON.parse(line), (value) => {
       let normalized = value
         .replace(/Anonymous user: [0-9a-f-]{36}(?=\.$)/gi, 'Anonymous user: {{anonymousUserId}}')
       for (const cwd of cwdSpellings) normalized = replaceWebCwd(normalized, cwd)
+      if (harnessHome !== undefined) normalized = replacePathToken(normalized, harnessHome, '{{harnessHome}}')
       return normalized
     })) as { type?: unknown; data?: { endpoint?: unknown } }
     if (record.type === 'web/deepseek-search-llm-request' && typeof record.data?.endpoint === 'string') {
@@ -1179,10 +1222,8 @@ async function assertReplaySession(
     sessionIds: typeof expectedHeader.id === 'string' ? [expectedHeader.id] : [],
     cwd: typeof expectedHeader.cwd === 'string' ? expectedHeader.cwd : '\0no-cwd\0',
   }
-  const actualSnapshot = normalizeSessionSnapshots([normalizeWebSessionVolatiles(actual)], actualContext)[0]
-    ?.split(harnessHome).join('{{harnessHome}}')
-  const expectedSnapshot = normalizeSessionSnapshots([normalizeWebSessionVolatiles(expected)], expectedContext)[0]
-    ?.split(harnessHome).join('{{harnessHome}}')
+  const actualSnapshot = replacePathToken(normalizeSessionSnapshots([normalizeWebSessionVolatiles(actual, undefined, harnessHome)], actualContext)[0] ?? '', harnessHome, '{{harnessHome}}')
+  const expectedSnapshot = replacePathToken(normalizeSessionSnapshots([normalizeWebSessionVolatiles(expected)], expectedContext)[0] ?? '', harnessHome, '{{harnessHome}}')
   expect(actualSnapshot, `${fixturePath}: persisted replay`).toBe(expectedSnapshot)
 
   if (manifest.header?.pin !== true) return
@@ -1516,9 +1557,10 @@ const ARIA_AGE =
 function normalizeAria(snapshot: string, workspaceCwd: string, age: boolean): string {
   // The session heading renders the workspace's basename, not the full
   // path, so both spellings must collapse to the token.
-  const base = workspaceCwd.split('/').pop()!
-  return (age ? snapshot.replace(ARIA_AGE, '{{age}}') : snapshot)
-    .split(workspaceCwd).join('{{cwd}}')
+  const base = workspaceCwd.replaceAll('\\', '/').split('/').pop()!
+  let normalized = age ? snapshot.replace(ARIA_AGE, '{{age}}') : snapshot
+  for (const spelling of pathSpellings(workspaceCwd)) normalized = normalized.split(spelling).join('{{cwd}}')
+  return normalized
     .split(base).join('{{workspace}}')
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '{{uuid}}')
     // The optional space in `\d+m ?\d+s` covers both minute spellings: the

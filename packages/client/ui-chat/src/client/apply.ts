@@ -9,7 +9,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-browser/client'
 import type {} from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-import { resolveWorkspacePath } from '@deepseek-ai/dsh-util-workspace-path'
+import { fileAddressFor, resolveWorkspacePath } from '@deepseek-ai/dsh-util-workspace-path'
 // Type-only service and declaration merges used by the apply world.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -36,6 +36,8 @@ import { TranscriptViewPolicy } from './transcript-view.ts'
 import { derivePresentationPolicy } from './presentation-policy.ts'
 import { CHAT_SETTINGS_NAMESPACE, DEFAULT_LINK_OPENING, type ChatSettings } from '../chat-settings.ts'
 import { LinkOpeningRow, type LinkOpeningRowInjected } from './settings/LinkOpeningRow.tsx'
+import { FileOpenTargetRow, type FileOpenTargetRowInjected } from './settings/FileOpenTargetRow.tsx'
+import { FileOpenTargetPolicy } from './file-open-target.ts'
 import { PerformanceUsageRow, type PerformanceUsageRowInjected } from './settings/PerformanceUsageRow.tsx'
 import { PerformanceUsagePolicy } from './performance-usage.ts'
 import { useTurnDataValue } from './chat/use-turn-data.ts'
@@ -115,9 +117,26 @@ export function apply(ctx: Context): void {
   const transcriptView = new TranscriptViewPolicy(chatSettings)
   const presentation = derivePresentationPolicy(transcriptView.mode)
   const performancePolicy = new PerformanceUsagePolicy(chatSettings)
-  ctx.effect(() => () => { transcriptView.dispose(); performancePolicy.dispose() })
+  const fileOpenTargetPolicy = new FileOpenTargetPolicy(chatSettings)
+  ctx.effect(() => () => {
+    transcriptView.dispose()
+    performancePolicy.dispose()
+    fileOpenTargetPolicy.dispose()
+  })
   const performanceUsage = performancePolicy.mode
+  const fileOpenTarget = fileOpenTargetPolicy.target
   registerChatNodeRenderers(ctx, performanceUsage, presentation)
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'file-open-target',
+    order: 15,
+    locale: NS,
+    inject: (): FileOpenTargetRowInjected => ({
+      hooks: { fileOpenTarget },
+      setFileOpenTarget: (target) => { fileOpenTargetPolicy.setTarget(target) },
+    }),
+  }, FileOpenTargetRow))
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
@@ -167,13 +186,18 @@ export function apply(ctx: Context): void {
             chatGroup: key => conversation.snapshot.getSnapshot().views.grouped('chat')?.groupSource(key as GroupKey),
           },
           fileMentions: (owner: TurnTailOwnerProps) => ctx.get('chatFileMentions')?.forClosing(owner, sessionId),
-          // Resolve the authored path against the Session workspace before
-          // handing it to the Host's default desktop application.
-          openFile: async (path) => {
+          // Resolve the authored path against the Session workspace, then hand it
+          // to the target selected in Settings → General.
+          openFile: async (path, options) => {
             const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd
-            const result = await ctx.remote.session.openWorkspacePath({
-              path: resolveWorkspacePath(cwd, path),
-            })
+            const resolved = resolveWorkspacePath(cwd, path)
+            if (fileOpenTarget.getSnapshot() === 'sidebar') {
+              const address = fileAddressFor(sessionId, cwd, resolved)
+              if (options?.line === undefined) ctx.sidebarRight.openResource(address)
+              else ctx.sidebarRight.openResource(address, { params: { line: options.line } })
+              return
+            }
+            const result = await ctx.remote.session.openWorkspacePath({ path: resolved })
             if (!result.ok) throw new Error(`path open failed: ${result.error.message}`)
           },
           openSkill: (name) => {

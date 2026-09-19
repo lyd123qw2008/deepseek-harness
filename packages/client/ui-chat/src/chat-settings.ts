@@ -8,6 +8,18 @@ export const CHAT_SETTINGS_NAMESPACE = 'ui-chat'
 /** Field carrying the work-details presentation mode. */
 export const TRANSCRIPT_VIEW_FIELD = 'transcriptView'
 
+/** Field carrying the Chat file-opening target. */
+export const FILE_OPEN_TARGET_FIELD = 'fileOpenTarget'
+
+/** Chat file-opening targets accepted at settings boundaries. */
+export const FILE_OPEN_TARGETS = ['host', 'sidebar'] as const
+
+/** Chat file-opening target for file links and tool-path actions. */
+export type FileOpenTarget = typeof FILE_OPEN_TARGETS[number]
+
+/** Default keeps Chat file actions in the Host's default application. */
+export const DEFAULT_FILE_OPEN_TARGET: FileOpenTarget = 'host'
+
 /** Work-details presentation modes a user can choose. */
 export const TRANSCRIPT_VIEW_MODES = ['compact', 'standard', 'detailed', 'verbose'] as const
 
@@ -54,10 +66,13 @@ export interface ChatSettings {
   performanceUsage: PerformanceUsageMode
   /** Default destination for Chat HTTP(S) links. */
   linkOpening: LinkOpening
+  /** Target used by Chat file links and tool-path actions. */
+  fileOpenTarget: FileOpenTarget
 }
 
 /** Durable Chat schema; also the wire envelope the browser scope validates against. */
 export const ChatSettingsFields = {
+  [FILE_OPEN_TARGET_FIELD]: z.union([...FILE_OPEN_TARGETS]).default(DEFAULT_FILE_OPEN_TARGET),
   linkOpening: z.union(['sidebar', 'new-tab']).default(DEFAULT_LINK_OPENING),
   performanceUsage: z.union([...PERFORMANCE_USAGE_MODES]).default(DEFAULT_PERFORMANCE_USAGE),
   // Missing and unrecognized modes both use Standard.
