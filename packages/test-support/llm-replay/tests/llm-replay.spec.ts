@@ -1357,6 +1357,21 @@ describe('installLlmReplay (through the real LlmRuntime)', () => {
       expect(delta).toMatchObject({ argumentsDelta: '{"goal_id":"goal-42ab"}' })
     })
 
+    it('slash-normalizes captured Windows paths inside JSON tool arguments', () => {
+      const entry: ReplayEntry = { kind: 'chunks', chunks: scriptedCall(
+        '{"file_path":"{{fromRequest:Your working directory is ([^\\n]+)\\.}}/diagram.svg"}',
+      ) }
+      const messages = [createUserMessage({
+        content: [{ type: 'text' as const, text: 'Your working directory is C:\\Users\\runner\\workspace.' }],
+        source: { kind: 'user' as const },
+      })]
+      const resolved = resolveScriptedEntry(entry, messages)
+      if (resolved.kind !== 'chunks') throw new Error('expected chunks entry')
+      expect(resolved.chunks[1]).toMatchObject({
+        argumentsDelta: '{"file_path":"C:/Users/runner/workspace/diagram.svg"}',
+      })
+    })
+
     it('keeps a trailing brace quantifier inside the pattern (terminator is the run tail)', async () => {
       const streamed = await streamScripted('{"goal_id":"{{fromRequest:goal-[0-9a-z]{4}}}"}')
       const delta = streamed.find(chunk => chunk.type === 'tool-call-delta')

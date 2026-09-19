@@ -43,6 +43,11 @@ interface ImageOrigin {
   requests: Array<{ path: string | undefined; referer: string | undefined }>
 }
 
+/** Compare Host paths independent of the slash spelling used in a browser URL. */
+function pathKey(path: string): string {
+  return path.replaceAll('\\', '/')
+}
+
 /** Start the deterministic remote image origin used by this browser scenario. */
 async function startImageOrigin(): Promise<ImageOrigin> {
   const requests: ImageOrigin['requests'] = []
@@ -182,7 +187,7 @@ describe('web e2e: Markdown image rendering', () => {
       const url = new URL(response.url())
       if (url.pathname !== '/api/file') return
       const path = url.searchParams.get('path')
-      if (path !== null) mediaResponses.set(path, response.status())
+      if (path !== null) mediaResponses.set(pathKey(path), response.status())
     })
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
@@ -245,24 +250,25 @@ describe('web e2e: Markdown image rendering', () => {
     expect(imageOrigin.requests).toEqual([{ path: '/image.png', referer: undefined }])
 
     const workspaceImage = page.getByRole('img', { name: WORKSPACE_ALT })
-    await expect.poll(() => mediaResponses.get(join(scaffold.workspaceCwd, 'valid.png'))).toBe(200)
-    await expect.poll(() => workspaceImage.evaluate(element => (element as HTMLImageElement).naturalWidth, undefined, {
-      timeout: 1_000,
-    }))
-      .toBe(1)
+    await workspaceImage.scrollIntoViewIfNeeded()
+    await expect.poll(() => workspaceImage.evaluate(element => (element as HTMLImageElement).naturalWidth), {
+      timeout: 10_000,
+    }).toBe(1)
+    await expect.poll(() => mediaResponses.get(pathKey(join(scaffold.workspaceCwd, 'valid.png')))).toBe(200)
     const outsideImage = page.getByRole('img', { name: 'Outside workspace image' })
     await expect.poll(() => outsideImage.evaluate(element => (element as HTMLImageElement).naturalWidth)).toBe(1)
     for (const alt of ['Oversized image', 'Missing image']) {
       await page.getByText(alt, { exact: true }).waitFor()
       expect(await page.getByRole('img', { name: alt }).count()).toBe(0)
     }
-    await page.getByText(join(scaffold.workspaceCwd, 'corrupt.png'), { exact: true }).waitFor()
+    const corruptPathText = page.getByText(new RegExp('corrupt\\.png$', 'u')).last()
+    await corruptPathText.waitFor()
     expect(mediaResponses).toEqual(new Map([
-      [join(scaffold.workspaceCwd, 'valid.png'), 200],
-      [join(scaffold.workspaceCwd, 'oversized.png'), 413],
-      [join(scaffold.persistenceRoot, 'outside.png'), 200],
-      [join(scaffold.workspaceCwd, 'missing.png'), 404],
-      [join(scaffold.workspaceCwd, 'corrupt.png'), 200],
+      [pathKey(join(scaffold.workspaceCwd, 'valid.png')), 200],
+      [pathKey(join(scaffold.workspaceCwd, 'oversized.png')), 413],
+      [pathKey(join(scaffold.persistenceRoot, 'outside.png')), 200],
+      [pathKey(join(scaffold.workspaceCwd, 'missing.png')), 404],
+      [pathKey(join(scaffold.workspaceCwd, 'corrupt.png')), 200],
     ]))
 
     const snapshot = (await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd))

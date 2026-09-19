@@ -2679,8 +2679,8 @@ importers:
         specifier: workspace:*
         version: link:../../typert/registry
       '@deepseek-ai/libreoffice-kit':
-        specifier: 0.0.1
-        version: 0.0.1
+        specifier: 0.0.2-rc6
+        version: 0.0.2-rc6
 
   packages/client/connection:
     dependencies:
@@ -6789,8 +6789,8 @@ importers:
         specifier: workspace:*
         version: link:../../typert/protocol
       '@deepseek-ai/libreoffice-kit':
-        specifier: 0.0.1
-        version: 0.0.1
+        specifier: 0.0.2-rc6
+        version: 0.0.2-rc6
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
@@ -14486,38 +14486,14 @@ packages:
     resolution: {integrity: sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA==}
     engines: {node: '>=20.19.0'}
 
-  '@deepseek-ai/libreoffice-kit-darwin-arm64@0.0.1':
-    resolution: {integrity: sha512-3vrYUIZihcb+F9qjjHdWNSxW83fLihrBV63qaw5kxW1Q7hbZPPMDsjlRJ2rX6VUi06By4nJH9YLKZ73iGN5iEQ==}
+  '@deepseek-ai/libreoffice-kit-wasm@0.0.2-rc6':
+    resolution: {integrity: sha512-LS/qokMD6WOPZu1kB5XTjs120Tp8yTKUXxpeIX9cscxwDVOa/rF3LsZIy8dkdAPbNMlY/asCUR0cnGdm7fSlbg==}
     engines: {node: '>=22.19.0'}
-    cpu: [arm64]
-    os: [darwin]
 
-  '@deepseek-ai/libreoffice-kit-darwin-x64@0.0.1':
-    resolution: {integrity: sha512-xMMXJkjggd9c1g85oLNHiJl1xgowe0EG60ib8up3Pz0qFD9HORMu0/eP1eB19E8jLRwqF9Sb0TTrcqp68aVcyw==}
+  '@deepseek-ai/libreoffice-kit@0.0.2-rc6':
+    resolution: {integrity: sha512-31tJlqrvPauaMQYZclZMkq+HICQPIn+VUDdNb9ZvlIyDAwxdFrYZG6xwLLEWYCEJaqCaESqzwFq8uoriutMuYA==}
     engines: {node: '>=22.19.0'}
-    cpu: [x64]
-    os: [darwin]
-
-  '@deepseek-ai/libreoffice-kit-wasm@0.0.1':
-    resolution: {integrity: sha512-VHGr+MvRQMCXxVvdYZ8qJnVXOMjUivntvNHCDBog+cCjgEfWjUl+/0rfvF2auPjnWUzqvjKMEdqbemhc1zuqFg==}
-    engines: {node: '>=22.19.0'}
-    os: [linux]
-
-  '@deepseek-ai/libreoffice-kit-win32-arm64@0.0.1':
-    resolution: {integrity: sha512-9G7YxXHEFaVn5iFM6IaHusWuXAd3cEprwTYSA1OsYMUREliHzdcmJEqcEyePDpX1y39KNKWQgowYeSpFbfrbgg==}
-    engines: {node: '>=22.19.0'}
-    cpu: [arm64]
-    os: [win32]
-
-  '@deepseek-ai/libreoffice-kit-win32-x64@0.0.1':
-    resolution: {integrity: sha512-+DPPT5V6rfwWfMf7scfgzxwNBQiuePdY4dmVvWb4QAINgquOXUAyWVNZaThWNCO8baRn1l4fb3L5sdbLWib3zQ==}
-    engines: {node: '>=22.19.0'}
-    cpu: [x64]
-    os: [win32]
-
-  '@deepseek-ai/libreoffice-kit@0.0.1':
-    resolution: {integrity: sha512-e4JZqohz5TEVfI3sfUK/dHRLjqlQep96CmqNM93Rm7LY9PuECiJakIX2BdHi5OkmbK9Mo47SiW44HNTTiwW1yw==}
-    engines: {node: '>=22.19.0'}
+    hasBin: true
 
   '@docsearch/css@3.8.2':
     resolution: {integrity: sha512-y05ayQFyUmCXze79+56v/4HpycYF3uFqB78pLPrSV5ZKAlDuIAAJNhaRi8tTdRNXh05yxX/TyNnzD6LwSM89vQ==}
@@ -17036,6 +17012,9 @@ packages:
 
   '@ungap/structured-clone@1.3.3':
     resolution: {integrity: sha512-60YRaenCQcVjYEKOcG824+DRGGIQ3VKErcBoAEDJZz5bKIs2ZG+X/H9Nk+Q6EVkwJk5QNApxbrc5QtBSwtrXAg==}
+
+  '@unicode/unicode-17.0.0@2.0.7':
+    resolution: {integrity: sha512-XdCUsw7exiSD8QICrzwb99xx9O/e7qMx/Oew1e8MBQGavCIIR0VO6vID7OSH/wQjUjogcfydqmsuRLkGM6LfLA==}
 
   '@upsetjs/venn.js@2.0.0':
     resolution: {integrity: sha512-WbBhLrooyePuQ1VZxrJjtLvTc4NVfpOyKx0sKqioq9bX1C1m7Jgykkn8gLrtwumBioXIqam8DLxp88Adbue6Hw==}
@@ -21991,32 +21970,15 @@ snapshots:
 
   '@csstools/css-tokenizer@4.0.0': {}
 
-  '@deepseek-ai/libreoffice-kit-darwin-arm64@0.0.1':
-    optional: true
+  '@deepseek-ai/libreoffice-kit-wasm@0.0.2-rc6': {}
 
-  '@deepseek-ai/libreoffice-kit-darwin-x64@0.0.1':
-    optional: true
-
-  '@deepseek-ai/libreoffice-kit-wasm@0.0.1':
-    optional: true
-
-  '@deepseek-ai/libreoffice-kit-win32-arm64@0.0.1':
-    optional: true
-
-  '@deepseek-ai/libreoffice-kit-win32-x64@0.0.1':
-    optional: true
-
-  '@deepseek-ai/libreoffice-kit@0.0.1':
+  '@deepseek-ai/libreoffice-kit@0.0.2-rc6':
     dependencies:
+      '@deepseek-ai/libreoffice-kit-wasm': 0.0.2-rc6
+      '@unicode/unicode-17.0.0': 2.0.7
       fflate: 0.8.2
       fontkit: 2.0.4
       saxes: 6.0.0
-    optionalDependencies:
-      '@deepseek-ai/libreoffice-kit-darwin-arm64': 0.0.1
-      '@deepseek-ai/libreoffice-kit-darwin-x64': 0.0.1
-      '@deepseek-ai/libreoffice-kit-wasm': 0.0.1
-      '@deepseek-ai/libreoffice-kit-win32-arm64': 0.0.1
-      '@deepseek-ai/libreoffice-kit-win32-x64': 0.0.1
 
   '@docsearch/css@3.8.2': {}
 
@@ -24127,6 +24089,8 @@ snapshots:
       '@ubjs/node-win32-x64-msvc': 0.31.0-3
 
   '@ungap/structured-clone@1.3.3': {}
+
+  '@unicode/unicode-17.0.0@2.0.7': {}
 
   '@upsetjs/venn.js@2.0.0':
     optionalDependencies:
