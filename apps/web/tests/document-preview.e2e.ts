@@ -800,7 +800,7 @@ else process.exit(1);
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin })
     await page.evaluate(() => navigator.clipboard.writeText(''))
     await codeBlock.getByRole('button', { name: 'Copy', exact: true }).click()
-    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(codeLines.join('\n'))
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText().then(text => text.replaceAll('\r\n', '\n')))).toBe(codeLines.join('\n'))
     sections.push([
       '## Code paging', '',
       `- Viewer: ${await viewer.innerText()}`,

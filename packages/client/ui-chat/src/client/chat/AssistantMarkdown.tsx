@@ -10,14 +10,15 @@ import { useSearchableHidden } from './searchable-hidden.ts'
 import css from './AssistantMarkdown.module.css'
 
 /**
- * Resolve an authored POSIX image path against the document's file API.
+ * Resolve an authored POSIX or Windows image path against the document's file API.
  * @param base - canonical `document.baseURI` at render time.
  * @param value - authored markdown destination.
  * @returns an absolute HTTP(S) file-API URL, or undefined for unsupported
  * protocols and non-local paths.
  */
 export function localPathMediaUrl(base: string, value: string): string | undefined {
-  if (!value.startsWith('/') || value.startsWith('//')) return undefined
+  const windowsAbsolute = /^[A-Za-z]:[\\/]/u.test(value)
+  if ((!value.startsWith('/') && !windowsAbsolute) || value.startsWith('//')) return undefined
   if (!base.startsWith('http:') && !base.startsWith('https:')) return undefined
   return new URL(`api/file?path=${encodeURIComponent(value)}`, base).href
 }

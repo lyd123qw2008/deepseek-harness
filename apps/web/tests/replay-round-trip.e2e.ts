@@ -1,6 +1,6 @@
 // Web e2e scenario: fresh round trip. A real chromium types a prompt into the
 // real composer; the wire, Remote gateway, agent loop, and the REAL bash tool (echo
-// in the temp workspace) all run; the model adapter is dsh-llm-replay (keyless)
+// in the temp workspace) all run on POSIX hosts; the model adapter is dsh-llm-replay (keyless)
 // or the live adapter (record). Drive steps run in every mode and wait only
 // on generic completion (whenTurnSettled — never model-content selectors, so
 // record cannot hang on a live model answering differently); assertion steps
@@ -42,6 +42,7 @@ const UI_EXPANDED_EXPECTED = fileURLToPath(
 )
 const WEB_CONTEXT_EXPECTED = fileURLToPath(new URL('../../../snapshots/web/fresh-round-trip/web-context.expected.md', import.meta.url))
 const MODE = webSnapshotMode()
+const POSIX_BASH_AVAILABLE = process.platform !== 'win32'
 
 // The scenario's one drive prompt. Record sends it; replay asserts the
 // committed fixture recorded exactly it, so drive script and fixture cannot
@@ -56,7 +57,7 @@ function systemPromptText(session: Session): string | undefined {
   return message?.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
 }
 
-describe('web e2e: fresh round trip through the real assembly', () => {
+describe.skipIf(!POSIX_BASH_AVAILABLE)('web e2e: fresh round trip through the real assembly', () => {
   let scaffold: WebScaffold
   let browser: Browser
   let page: Page
