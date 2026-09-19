@@ -60,7 +60,14 @@ it('loads the shipped Office rows with separately patched settings and authorize
     await writeFile(outputPath, pdf)
     return { backend: 'native', missingFonts: ['Missing Serif'] }
   })
-  kit.create.mockReset().mockResolvedValue({ backend: 'native', render, dispose: async () => {} })
+  kit.create.mockReset().mockResolvedValue({
+    backend: 'native',
+    render,
+    renderImages: vi.fn<Converter['renderImages']>(),
+    convert: vi.fn<Converter['convert']>(),
+    recalculate: vi.fn<Converter['recalculate']>(),
+    dispose: async () => {},
+  })
   ctx.baseUrl = pathToFileURL(directory).href + '/'
   await ctx.plugin(Loader)
   ctx.loader.builtins.include = Include
