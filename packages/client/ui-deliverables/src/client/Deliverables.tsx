@@ -4,6 +4,7 @@ import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { Button, IconChevronDownOutlineRegular, IconChevronUpOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { GlobalStandardProps, InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime, SessionStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { PresentedOpenController } from './present-open.ts'
 import type { ChangesDiffStore } from './changes-diff.ts'
 import type { ChangesSummaryStore } from './changes-summary.ts'
@@ -31,6 +32,8 @@ export interface DeliverablesInjected {
   reloadPresentedHost: PresentedOpenController['loadHost']
   loadChangesDiff: ChangesDiffStore['load']
   loadChangesSummary: ChangesSummaryStore['load']
+  /** Preview one delivered file in the viewed Session's Sidebar, independent of the Chat file target. */
+  openPreview: (sessionId: SessionId, cwd: string | undefined, path: string) => void
   openPresented: PresentedOpenController['open']
   openChanged: PresentedOpenController['openChanged']
   /** Open one turn's review in the right Sidebar on the file at an index. */
@@ -66,9 +69,9 @@ export function DeliverablesTail(props: PropsRuntime<'conversation.chat.turnTail
  * @returns the closing turn's file rows.
  */
 export function Deliverables({
-  matched, openFile, t, sessionId, useSessions, openPresented, openChangesReview, usePresentedOpen, usePresentedHost,
+  matched, t, sessionId, useSessions, openPreview, openPresented, openChangesReview, usePresentedOpen, usePresentedHost,
   useChangesDiff, loadChangesDiff, useChangesSummary, reloadPresentedHost, loadChangesSummary, useShowCodeDiff, renderSlot,
-}: Pick<TurnTailOwnerProps, 'openFile'> & {
+}: {
   matched: DeliverablesMatch
 } & PropsLocale<typeof NS> & Pick<SessionStandardProps, 'sessionId'> & Pick<GlobalStandardProps, 'useSessions'> & InjectFace<DeliverablesInjected> & PropsRenderSlots<'deliverables.file.actions'>) {
   const [expanded, setExpanded] = useState(false)
@@ -108,7 +111,7 @@ export function Deliverables({
         {presented.map(file => <PresentedFileCard key={`${file.seq}:${file.index}`} file={file} cwd={cwd}
           phase={states[presentedFileUrl(sessionId, file.seq, file.index)]}
           host={host === 'error' ? null : host} t={t}
-          onPreview={() => { openFile(file.path) }}
+          onPreview={() => { openPreview(sessionId, cwd, file.path) }}
           actions={renderSlot('deliverables.file.actions', {
             actionUrl: presentedFileUrl(sessionId, file.seq, file.index),
             available: host !== null && host !== 'error' && host.available,

@@ -106,8 +106,10 @@ export function fileAddressFor(sessionId: string, cwd: string | undefined, path:
  */
 export function relativizeToCwd(text: string, cwd: string | undefined): string {
   if (cwd === undefined || cwd === '') return text
-  const root = cwd.replace(/[/\\]+$/, '')
-  if (text.startsWith(`${root}/`) || text.startsWith(`${root}\\`)) return text.slice(root.length + 1)
+  const originalRoot = cwd.replace(/[/\\]+$/u, '')
+  const root = originalRoot.replaceAll('\\', '/')
+  const normalizedText = text.replaceAll('\\', '/')
+  if (normalizedText.startsWith(`${root}/`)) return text.slice(originalRoot.length + 1)
   return text
 }
 
