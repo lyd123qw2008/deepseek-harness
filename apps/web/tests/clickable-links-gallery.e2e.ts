@@ -318,7 +318,7 @@ describe('web e2e: clickable links gallery', () => {
     await seedSession(scaffold, galleryFixture(imageUrl), SEED_ID, undefined, { createdAt: GALLERY_TIME })
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
-    await page.route(/https?:\/\/docs\.example\.test\/.*/u, async route => route.fulfill({
+    await page.context().route(/https?:\/\/docs\.example\.test\/.*/u, async route => route.fulfill({
       contentType: 'text/html',
       body: `<h1>${new URL(route.request().url()).pathname}</h1>`,
     }))
@@ -448,10 +448,21 @@ describe('web e2e: clickable links gallery', () => {
     // The excluded grey affordance: tool-row file links keep their own color.
     expect(await styleOf(page.locator('button[class*="fileLink"]').first(), 'color')).not.toBe(LINK_BLUE)
 
-    // Ordinary message HTTP(S) links delegate to the right Sidebar Browser.
+    // The default Host target opens ordinary message HTTP(S) links in the
+    // system browser. Selecting Sidebar preview switches the next link to the
+    // right Sidebar Browser.
+    const hostPopup = page.waitForEvent('popup')
     await guideLink.click()
+    const popup = await hostPopup
+    expect(popup.url()).toBe(GUIDE_URL)
+    await popup.close()
+
+    await page.getByRole('button', { name: 'Settings' }).click()
+    await page.getByRole('button', { name: 'Default application' }).click()
+    await page.getByRole('menuitem', { name: 'Sidebar preview' }).click()
+    await page.getByRole('button', { name: 'Close' }).click()
+
     const browserAddress = page.locator('[data-rightbar-col]').getByRole('textbox', { name: 'Enter an HTTP(S) address' })
-    await expect.poll(() => browserAddress.inputValue()).toBe(GUIDE_URL)
     await markdown.locator(`a[href="${HTTP_URL}"]`).click()
     await expect.poll(() => browserAddress.inputValue()).toBe(HTTP_URL)
   }, 90_000)

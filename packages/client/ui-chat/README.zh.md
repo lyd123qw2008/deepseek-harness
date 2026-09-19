@@ -27,9 +27,9 @@ kind: "package-reference"
 <a id="reference-previews"></a>
 ## 引用预览
 
-Chat 在节点列表外通过一个 `MarkdownDelegateProvider` 提供文件及 HTTP(S) 导航。Assistant Markdown 文件链接在消息落定后使用配置的 Chat 打开位置：默认应用为默认值，也可在「设置 → 通用设置」选择侧边栏预览；未修改文件的引用也遵循该设置。相对路径基于当前查看的 Session 工作区解析；绝对路径仍使用同一 Session 的文件系统访问。`#L24` 或 `#L24-L30` 仍属于作者写出的链接；选择侧边栏时预览解析后的文件，选择默认应用时将解析后的路径交给 Host 打开器。文件缺失时由所选打开位置报告错误。
+Chat 在节点列表外通过一个 `MarkdownDelegateProvider` 提供文件及 HTTP(S) 导航。Assistant Markdown 文件链接和 HTTP(S) 链接使用「设置 → 通用设置」中的 Chat 打开位置：默认应用为默认值，也可选择侧边栏预览。相对路径基于当前查看的 Session 工作区解析；绝对路径仍使用同一 Session 的文件系统访问。`#L24` 或 `#L24-L30` 仍属于作者写出的链接；选择侧边栏时在右侧 Sidebar Browser 中打开网页并预览本地文件，选择默认应用时将本地文件交给 Host 打开器，并在系统浏览器中打开网页链接。Sidebar Browser 不可用时，网页链接回退到系统浏览器。文件缺失时由所选打开位置报告错误。
 
-Assistant Markdown 中的 HTTP(S) 链接在普通点击时会在该类型已注册时打开新的右侧 Sidebar Browser tab，否则改用系统浏览器；带修饰键的点击保留原生外部链接行为。已发送的文件引用及消息日志确认调用的 skill 也可在右侧栏打开预览。文件路径使用当前查看的 Session；skill 名称由该 Session 当前的输入触发源解析。两者悬停或聚焦时均使用正文文件链接的虚线下划线。会话、目录和命令标签仍只作为引用展示。
+带修饰键的 HTTP(S) 链接点击保留原生外部链接行为。已发送的文件引用及消息日志确认调用的 skill 也可在右侧栏打开预览。文件路径使用当前查看的 Session；skill 名称由该 Session 当前的输入触发源解析。两者悬停或聚焦时均使用正文文件链接的虚线下划线。会话、目录和命令标签仍只作为引用展示。
 
 <a id="system-prompt-row"></a>
 ## 系统提示词行

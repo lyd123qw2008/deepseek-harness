@@ -172,8 +172,32 @@ describe('Chat inject API', () => {
     await b.runtime.dispose()
   })
 
-  it('opens message HTTP(S) links in Sidebar Browser tabs', async () => {
+  it('opens message HTTP(S) links in the system browser for the default Host target', async () => {
     const b = await bench()
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    try {
+      const { injected } = b.chatViewApi(b.rootReference)
+      injected.openExternalLink('http://example.test/path')
+      injected.openExternalLink('https://example.test/path')
+      expect(b.sidebarRight.openTab).not.toHaveBeenCalled()
+      expect(open.mock.calls).toEqual([
+        ['http://example.test/path', '_blank', 'noopener,noreferrer'],
+        ['https://example.test/path', '_blank', 'noopener,noreferrer'],
+      ])
+    } finally {
+      open.mockRestore()
+      await b.runtime.dispose()
+    }
+  })
+
+  it('opens message HTTP(S) links in Sidebar Browser tabs for the Sidebar target', async () => {
+    const b = await bench()
+    b.chatSettings.publish({
+      status: 'ready',
+      value: { transcriptView: 'compact', fileOpenTarget: 'sidebar' },
+      revision: 1,
+      writable: true,
+    })
     const { injected } = b.chatViewApi(b.rootReference)
     injected.openExternalLink('http://example.test/path')
     injected.openExternalLink('https://example.test/path')
@@ -184,8 +208,14 @@ describe('Chat inject API', () => {
     await b.runtime.dispose()
   })
 
-  it('opens message HTTP(S) links in the system browser when no Sidebar Browser is registered', async () => {
+  it('opens message HTTP(S) links in the system browser when Sidebar Browser is unavailable', async () => {
     const b = await bench()
+    b.chatSettings.publish({
+      status: 'ready',
+      value: { transcriptView: 'compact', fileOpenTarget: 'sidebar' },
+      revision: 1,
+      writable: true,
+    })
     const open = vi.spyOn(window, 'open').mockImplementation(() => null)
     try {
       b.sidebarRightTabs.get.mockReturnValue(undefined)

@@ -47,7 +47,7 @@ describe('FileOpenTargetRow', () => {
     }
     render(<FileOpenTargetRow {...props} />)
 
-    expect(screen.getByText('File opening location')).toBeDefined()
+    expect(screen.getByText('File and link opening')).toBeDefined()
     fireEvent.click(screen.getByRole('button', { name: /Default application/ }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Sidebar preview' }))
     expect(setFileOpenTarget).toHaveBeenCalledWith('sidebar')

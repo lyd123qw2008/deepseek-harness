@@ -147,7 +147,8 @@ export function apply(ctx: Context): void {
             ctx.get('inputTriggers')?.sessionOf(scope).openReference('skill', { ref: `/${name}` })
           },
           openExternalLink: (url) => {
-            if (ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
+            if (fileOpenTarget.target.getSnapshot() === 'sidebar'
+              && ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
               ctx.sidebarRight.openTab('browser', { params: { url } })
             } else {
               window.open(url, '_blank', 'noopener,noreferrer')
