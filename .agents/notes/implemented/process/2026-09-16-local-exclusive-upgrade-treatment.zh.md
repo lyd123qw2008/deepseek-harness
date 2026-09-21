@@ -6,21 +6,22 @@ Status: implemented
 
 ## Problem
 
-本 checkout 是一个长期存续的 fork：它跟随上游发布，同时携带自己的行为改动。其中三项改动并非呈现层的微调：每一项都替换了核心包中已发布的行为，而且对已发布的测试套件都不可见，因为随发布提供的测试描述的是上游设计。代码升级会逐文件协调两边，而本地一侧的每个文件都是这样一个位置：取用发布版本会静默回退一个刻意的决定——或者，当发布版本保留了不同的契约时，会留下一个失败的门禁。
+本 checkout 是一个长期存续的 fork：它跟随上游发布，同时携带自己的行为改动。其中三项改动并非呈现层的微调：每一项都替换了核心包中已发布的行为，而且对已发布的测试套件都不可见，因为随发布提供的测试描述的是上游设计。第四项是 Client 的适用性规则而非核心行为：取用发布版本会在运行时毫无报错地回退它，只有钉住该规则的本地测试会失败。代码升级会逐文件协调两边，而本地一侧的每个文件都是这样一个位置：取用发布版本会静默回退一个刻意的决定——或者，当发布版本保留了不同的契约时，会留下一个失败的门禁。
 
 这种协调在同一次升级中已经出过两次问题。发布的上下文 diff 测试块落在三个文件里，而第一遍只清理了其中一个，留下了失败的测试（[Web diff 卡片通过滚动视口渲染](../bug-fix/2026-09-15-web-diff-card-scroll-viewport.zh.md)）。又因为 MCP 客户端上的本地 `scope` 键是"允许但未声明"的 schema 键而非被拒绝的键，取用发布的客户端会**在毫无报错的情况下**降级连接模型。逐次查看 diff 无法捕捉这两者：决定及其边界必须一次性记录在一处，这样下一次升级是从清单出发，而不是从 `git diff` 出发。
 
 ## Decision
 
-本笔记就是那份清单。它记录升级时必须保留在本地一侧的三项特性、每一项相对上游改变了什么，以及它拥有哪些文件。`dsh-upgrade-environment` 技能在把个人提交与目标 tag 比对时查阅它；每个特性的独立 Agent Note 拥有推理过程，而本笔记拥有清单和归属边界。
+本笔记就是那份清单。它记录升级时必须保留在本地一侧的四项特性、每一项相对上游改变了什么，以及它拥有哪些文件。`dsh-upgrade-environment` 技能在把个人提交与目标 tag 比对时查阅它；每个特性的独立 Agent Note 拥有推理过程，而本笔记拥有清单和归属边界。
 
-这三项特性彼此独立，升级必须各自判定；触及其中一项的发布改动对其他两项不构成任何说明。
+这四项特性彼此独立，升级必须各自判定；触及其中一项的发布改动对其他三项不构成任何说明。
 
 | 特性 | 上游状态 | 本地状态 | 拥有的文件 |
 |---|---|---|---|
 | Web diff 卡片通过滚动视口 | 用 `structuredPatch` 推导上下文 hunk，每侧三行上下文，折叠配合隐藏行控件，并有有界编辑距离搜索 | 在浏览器端推导行，每段未改动内容一行上下文，正文可滚动，带 1-based 行号 gutter 与词级高亮 | 4 个源码文件、5 个测试文件、2 个 golden |
 | Agent Team 能力按 preset 隔离 | 关闭标准委派行并在 profile 层挂载 Team 工具行，因此一个部署要么是标准委派、要么是 Team | 保留标准委派行并置为 one-shot，只在插件自身的 composition scope 内安装 Team 工具，并在 UI 层按 preset id 门控 | 4 个包、11 个文件 |
 | MCP 客户端连接作用域 | `transport`、`serverName`、`command`、`url` 与重连调优；每个实例一个子进程，`cwd` 为静态值 | 新增 `scope: 'global' \| 'session-project'`；session-project 池为每个 Session 打开一个子进程，其 `cwd` 即该 Session 的项目 | 4 个文件 |
+| Terminal 卡片容忍畸形的升权字段 | 只要存在 `sandbox_permissions` 就要求 `justification` 非空，因此 Host 以冗余为由接受的字段配对仍会隐藏 terminal 卡片 | 已结算且成功的调用只要结果文本存在就保留卡片；其余畸形字段状态仍走通用路径 | 1 个源码文件、1 个测试文件 |
 
 ### Web diff 卡片通过滚动视口
 
@@ -54,6 +55,18 @@ Status: implemented
 
 拥有的文件：`packages/mcp/mcp-client/src/index.ts`、`packages/mcp/mcp-client/src/connection.ts`、`packages/mcp/mcp-client/src/tools.ts` 与 `packages/mcp/mcp-client/tests/apply.spec.ts`。
 
+### Terminal 卡片容忍畸形的升权字段
+
+上游在 Client 侧一律校验可选的升权字段，不区分 Host 是否已经接受。当命令重复请求现行模式时，它携带 `sandbox_permissions` 与空的 `justification`；`isRedundantEscalation` 让 Host 恰好对该配对跳过 `validateEscalationArgs`，于是调用照常执行并结算，而 Client 没有冗余概念，`validEscalationFields` 使 `terminalCardModel` 返回 null。结果是一次已经产出输出的调用，其对话行退化为不可点击的标题加摘要；而模型省略这对字段时，同一工具的行仍可展开。
+
+本分支在调用本身已证明执行过时保留卡片：已结算、非错误、且单一结果文本存在的块把 `allowInvalidEscalation` 传入 `shellCall`，仅该次调用跳过配对校验。运行中、出错、后台、持久 shell 与 spill 预览的调用仍走通用路径，`timeoutMs`、`workdir`、`run_in_background` 保持原有校验。该规则复制了 `diffCardModel` 通过 `allowAppliedMetadata` 已授予成功变更的容忍。
+
+拥有的源文件：`packages/client/ui-tool/src/client/tool/models/terminal-card-model.ts`。
+
+拥有的测试：`packages/client/ui-tool/tests/terminal-card.client.spec.tsx`，它同时承载本分支新增的两个用例与发布版本能满足的畸形字段测试表。
+
+与上面三项不同，取用发布版本会让该测试失败，而不是静默降级，因此它的升级风险是一个失败门禁，而非无声回退。[升权字段配对 Agent Note](../bug-fix/2026-09-21-terminal-card-invalid-escalation-pair.zh.md)负责其论证。
+
 ## Upgrade checkpoints
 
 对每项特性，升级在三种结果之间选择并记录取了哪一种。**Keep（保留）** 取用本地文件。**Adopt（采纳）** 取用发布文件并退役本地决定，这需要删除或改写钉住它的本地测试，并在同一次改动中更新本清单。**Merge（合并）** 取用发布行为并在其上重新施加本地意图；当上游改动了同一区域但没有替换该概念时，这是预期结果。
@@ -63,6 +76,7 @@ Status: implemented
 - **Web diff 卡片**：上游引入滚动正文、行号 gutter 或行内高亮，或不再从 `structuredPatch` 上下文推导行。仅上游改动上下文宽度或编辑距离上限则不需要。
 - **Agent Team**：上游改变 Team 工具行的挂载方式、`apply(ctx, config)` 签名、`mountAgentTeamUi` 的参数个数，或 Team 与 subagent-control 同时声明的工具名。
 - **MCP 客户端**：上游新增 `scope` 键或任何其他逐 Session 的连接选择。同名键并不自动是同一概念：上游的 `scopeOf(ctx)` 是插件注册作用域，而 `session-project` 是子进程与 Session 项目之间的绑定。
+- **Terminal 卡片**：上游让已成功结算的 shell 卡片在可选升权配对失败时仍然保留、改变 `terminalCardModel` 的适用性签名，或在 Client 侧引入冗余概念。重新采纳严格校验也意味着改写钉住该容忍的两个本地用例。
 
 发布的测试文件不能证明本地行为是错的。当发布的测试钉住的是本清单所拒绝的设计时，本地一侧同样拥有该测试文件。
 
@@ -78,12 +92,13 @@ Status: implemented
 
 ## Consequences
 
-升级在协调之前先读本笔记，并且每项特性的结果是被记录下来的，而不是被重新发现。代价是三个上游区域无法原样取用，因此大幅重写其中之一的发布会变成一次合并而非一次检出；上面的检查点通过指明必须重新判定的内容来把这个合并限制在范围内。
+升级在协调之前先读本笔记，并且每项特性的结果是被记录下来的，而不是被重新发现。代价是四个上游区域无法原样取用，因此大幅重写其中之一的发布会变成一次合并而非一次检出；上面的检查点通过指明必须重新判定的内容来把这个合并限制在范围内。
 
-这里的每一条都是"更愿意向上游贡献而非携带 fork"的理由：MCP 连接作用域与按 preset 的 Team 边界是通用需求而非本地偏好，一份已发布的实现会同时免除该补丁与本清单。diff 卡片是三者中唯一真正的本地偏好。
+这里的每一条都是"更愿意向上游贡献而非携带 fork"的理由：MCP 连接作用域与按 preset 的 Team 边界是通用需求而非本地偏好，一份已发布的实现会同时免除该补丁与本清单。diff 卡片是真正的本地偏好，而升权容忍是一项同样属于上游的 Client 严格性修复。
 
 ## Related
 
 - [Web diff 卡片通过滚动视口渲染](../bug-fix/2026-09-15-web-diff-card-scroll-viewport.zh.md) —— 拥有 diff 卡片的决定、其度量，以及它所拒绝的替代方案。
 - [Web diff 卡片比较含上下文的内容](../bug-fix/2026-09-14-web-diff-context.zh.md) —— 本清单所拒绝的已发布上下文 diff 决策。
 - [程序升级期间保留用户数据](2026-09-08-upgrade-environment-preserve-and-merge.zh.md) —— 拥有升级如何隔离、验证与记录。
+- [terminal 卡片容忍畸形的升权字段](../bug-fix/2026-09-21-terminal-card-invalid-escalation-pair.zh.md) —— 拥有本清单必须重新判定的 Client 适用性改动。
