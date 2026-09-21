@@ -264,6 +264,25 @@ describe('terminalCardModel', () => {
     expect(terminalCardModel(running({ argsRaw: shellArgs(fields) }))).toBeNull()
   })
 
+  it('keeps a redundant full-access pair with blank justification once the call settled successfully', () => {
+    // The model can re-request the mode already in force; the host skips
+    // escalation validation for that redundant pair, so the settled result is
+    // the proof the command ran and the card must not disappear behind an
+    // optional field it never displays.
+    const block = settled({
+      call: { name: 'bash', argsRaw: shellArgs({ sandbox_permissions: 'danger-full-access', justification: '' }) },
+    })
+    const model = terminalCardModel(block)
+    expect(model).not.toBeNull()
+    expect(localizeTerminalCardModel(model!, t).card.command).toBe('ls -la')
+  })
+
+  it('keeps an invalid escalation pair generic while the call has no successful result', () => {
+    const redundant = shellArgs({ sandbox_permissions: 'danger-full-access', justification: '' })
+    expect(terminalCardModel(settled({ isError: true, call: { name: 'bash', argsRaw: redundant } }))).toBeNull()
+    expect(terminalCardModel(running({ argsRaw: shellArgs({ sandbox_permissions: 'workspace-write', justification: '' }) }))).toBeNull()
+  })
+
   it('accepts valid optional and unknown standard-shell fields on the open parameter root', () => {
     expect(terminalCardModel(running({ argsRaw: shellArgs({
       timeoutMs: 1_000,
