@@ -12,6 +12,8 @@ describe('Markdown file links', () => {
     ['/workspace/src/index.ts#L24', '/workspace/src/index.ts', { line: 24 }],
     ['../docs/My%20Notes.md#L24-L30', '../docs/My Notes.md', { line: 24 }],
     ['C:/work/file.ts#L2', 'C:/work/file.ts', { line: 2 }],
+    ['C:/work/file.ts:2', 'C:/work/file.ts', { line: 2 }],
+    ['src/main/java/TmplProvider.java:60', 'src/main/java/TmplProvider.java', { line: 60 }],
     ['C:%5Cwork%5Cfile.ts', 'C:\\work\\file.ts', undefined],
     ['docs/%E4%B8%AD%E6%96%87.md', 'docs/中文.md', undefined],
     ['file%23name%3F.txt', 'file#name?.txt', undefined],
@@ -83,7 +85,8 @@ describe('Markdown file links', () => {
     '//example.com/file', '%2F%2Fexample.com/file', '%5C%5Cserver%5Cfile',
     'javascript:alert', 'data:text/plain,hi', 'file:///etc/passwd', 'vscode:open',
     '%6Aavascript:alert', '#L2', 'file.ts?raw=1', 'file%ZZ.ts', 'file%00.ts',
-    'file.ts#heading', 'file.ts#L0', 'file.ts#L3-L2',
+    'file.ts#heading', 'file.ts#L0', 'file.ts#L3-L2', 'file.ts:0',
+    'file.ts:9007199254740992',
     'file.ts#L9007199254740992', 'file.ts#L1-L9007199254740992',
   ])('keeps unsupported destination %s inert', (target) => {
     const openFile = vi.fn()
