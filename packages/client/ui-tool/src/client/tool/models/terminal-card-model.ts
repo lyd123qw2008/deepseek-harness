@@ -182,14 +182,28 @@ interface ShellCall {
   background: boolean
 }
 
-function shellCall(name: string, args: Record<string, unknown>): ShellCall | null {
+/**
+ * Recognize a standard or persistent shell call from its open-root Tool arguments.
+ * @param name - the Tool name.
+ * @param args - parsed open-root Tool arguments.
+ * @param allowInvalidEscalation - keep a call whose optional escalation pair fails
+ *   Client validation, used once the call itself proved it ran (a successful
+ *   settled result); the card never displays those fields, where a genuinely
+ *   malformed request keeps the generic path.
+ * @returns the shell call, or null for the generic path.
+ */
+function shellCall(
+  name: string,
+  args: Record<string, unknown>,
+  allowInvalidEscalation = false,
+): ShellCall | null {
   if (name !== 'bash' && name !== 'pwsh') return null
   const { command, description, timeoutMs, workdir, run_in_background: background } = args
   if (typeof command !== 'string' || command.trim() === '') return null
   if (timeoutMs !== undefined && (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0)) return null
   if (workdir !== undefined && typeof workdir !== 'string') return null
   if (background !== undefined && typeof background !== 'boolean') return null
-  if (!validEscalationFields(args)) return null
+  if (!allowInvalidEscalation && !validEscalationFields(args)) return null
   if (description === undefined) {
     // Standard dsh-tool-bash and dsh-tool-pwsh schemas require `description`;
     // persistent shell providers omit it. Their parameter roots stay open, so
@@ -275,7 +289,11 @@ function parseExitStatus(text: string): { output: string; exitCode?: number; sig
  * Derive terminal props for supported shell and terminal-send calls, including
  * nested PTC dispatch calls. Standard shell results parse their final status
  * marker; persistent shell results, spill previews, background calls, errors,
- * and malformed input use the generic path. {@link isSettledPersistentShellCall} lets that generic
+ * and malformed input use the generic path. A settled successful call keeps its
+ * card even when the optional escalation pair fails Client validation, because
+ * the result itself proves the command ran and the card never displays those
+ * fields — the same tolerance the differential card applies to a successful
+ * mutation's applied metadata. {@link isSettledPersistentShellCall} lets that generic
  * persistent result remain expandable without inventing one process status.
  * @param block - running or settled Tool block.
  * @param sessionCwd - session workspace root used to resolve workdir.
@@ -287,7 +305,9 @@ export function terminalCardModel(
 ): TerminalCardModel | null {
   const parsed = parsedToolCall(block)
   if (parsed === null) return null
-  const call = shellCall(parsed.name, parsed.args) ?? terminalSendCall(parsed.name, parsed.args)
+  const settledOutput = 'kind' in block ? singleResultText(block) : undefined
+  const ranSuccessfully = 'kind' in block && !block.isError && settledOutput !== undefined
+  const call = shellCall(parsed.name, parsed.args, ranSuccessfully) ?? terminalSendCall(parsed.name, parsed.args)
   if (call === null || call.background) return null
 
   const copy: TerminalCardModel['copy'] = call.kind === 'shell'
@@ -307,7 +327,7 @@ export function terminalCardModel(
     }
   }
   if (block.isError || (call.kind === 'shell' && call.persistent) || isSpilledShellCall(block)) return null
-  const output = singleResultText(block)
+  const output = settledOutput
   if (output === undefined) return null
   const status = call.kind === 'terminal-send' ? { output } : parseExitStatus(output)
   return {
