@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-`terminalCardModel` 对根调用与 PTC dispatch 调用应用相同的适用检查，不因 `parentCallId` 拒绝调用。受支持的运行中与已完成的 `bash`、`pwsh` 和 `terminal_send` 调用使用现有 terminal 卡片。后台调用、工具错误、格式错误的输入、缺失的调用头和不受支持的结果内容保留通用回退。持久 shell 在运行中仍可使用 terminal，完成后使用通用展示；非零进程退出仍是 terminal 结果数据，而非工具错误。
+`terminalCardModel` 对根调用与 PTC dispatch 调用应用相同的适用检查，不因 `parentCallId` 拒绝调用。受支持的运行中与已完成的 `bash`、`pwsh` 和 `terminal_send` 调用使用现有 terminal 卡片。后台调用、工具错误、格式错误的输入、缺失的调用头和不受支持的结果内容保留通用回退。畸形的可选升权字段仅在该调用尚无成功结果时保留该回退：已成功结算的调用保留其卡片（[terminal 卡片容忍畸形的升权字段](2026-09-21-terminal-card-invalid-escalation-pair.zh.md)）。持久 shell 在运行中仍可使用 terminal，完成后使用通用展示；非零进程退出仍是 terminal 结果数据，而非工具错误。
 
 本文仅部分取代 [Client 派生工具展示](../architecture/2026-08-23-client-derived-tool-presentation.zh.md)中的 terminal 子调用卡片禁令。该文继续负责 Client 展示所有权及 diff/read/search/web 子调用限制。无需更改 Host 展示转换器、事件、schema、元数据、调用树或模型上下文。[规范工具输出](../architecture/2026-07-20-canonical-tool-output-contract.zh.md)与 [PTC 类型化返回值](../feature/2026-07-20-ptc-typed-tool-returns.zh.md)中的元数据和执行期值决策保持不变；省略元数据不禁止 Client 派生 terminal 卡片。
 
