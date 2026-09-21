@@ -6,13 +6,13 @@ English | [中文](2026-09-16-local-exclusive-upgrade-treatment.zh.md)
 
 ## Problem
 
-This checkout is a long-lived fork that tracks upstream releases while carrying its own behavioral changes. Three of those changes are not presentation tweaks: each replaces shipped behavior in a core package, and each is invisible to a released test suite because the tests that ship with a release describe the upstream design instead. A code upgrade reconciles the two sides file by file, and every file on the local side is a place where taking the released version silently reverts a deliberate decision — or, where the released version kept a different contract, leaves a failing gate behind.
+This checkout is a long-lived fork that tracks upstream releases while carrying its own behavioral changes. Three of those changes are not presentation tweaks: each replaces shipped behavior in a core package, and each is invisible to a released test suite because the tests that ship with a release describe the upstream design instead. A fourth is a Client eligibility rule rather than a core behavior: taking the released model reverts it with no error at runtime, and only the local spec that pins the rule fails. A code upgrade reconciles the two sides file by file, and every file on the local side is a place where taking the released version silently reverts a deliberate decision — or, where the released version kept a different contract, leaves a failing gate behind.
 
 The reconciliation has already gone wrong twice in one upgrade. The released contextual-diff block reached three files, and a first pass cleaned only one, leaving failing tests behind ([web diff card renders through a scroll viewport](../bug-fix/2026-09-15-web-diff-card-scroll-viewport.md)). And because the local `scope` key on the MCP client is an undeclared schema key rather than a rejected one, taking the released client degrades the connection model with no error at all. A per-upgrade reading of the diff cannot catch either: the decision and its boundary have to be recorded once, in one place, so the next upgrade starts from the inventory instead of from `git diff`.
 
 ## Decision
 
-This note is the inventory. It records the three features that a release upgrade must keep on the local side, what each one changes relative to upstream, and the files it owns. The `dsh-upgrade-environment` skill consults it when it reviews personal commits against a target tag; the per-feature Agent Notes own the reasoning, and this note owns the list and the ownership boundaries.
+This note is the inventory. It records the four features that a release upgrade must keep on the local side, what each one changes relative to upstream, and the files it owns. The `dsh-upgrade-environment` skill consults it when it reviews personal commits against a target tag; the per-feature Agent Notes own the reasoning, and this note owns the list and the ownership boundaries.
 
 The features are independent, and an upgrade must judge each on its own; a released change that touches one says nothing about the others.
 
@@ -21,6 +21,7 @@ The features are independent, and an upgrade must judge each on its own; a relea
 | Web diff card through a scroll viewport | Derives contextual hunks with `structuredPatch`, three context lines per side, folding with a hidden-line control and a bounded edit-distance search | Derives rows in the browser, one context line per unchanged segment, a scrolling body, 1-based line-number gutter and word-level highlights | 4 source files, 5 test files, 2 goldens |
 | Agent Team capability isolated by preset | Disables the standard delegation rows and mounts the Team tool row in the profile layer, so a deployment is either standard delegation or Team | Keeps the standard delegation rows as one-shot and installs the Team tool only inside the composition scope of the plugin, gated in the UI by preset id | 4 packages, 11 files |
 | MCP client connection scope | `transport`, `serverName`, `command`, `url` and reconnect tuning; one child for the instance, with a static `cwd` | Adds `scope: 'global' \| 'session-project'`; the session-project pool opens one child per Session whose `cwd` is that Session's project | 4 files |
+| Terminal card survives an invalid escalation pair | Requires a non-empty `justification` whenever `sandbox_permissions` is present, so a pair the Host accepts as redundant still hides the terminal card | Keeps the card for a settled successful call whose result text exists; every other malformed-field state stays generic | 1 source file, 1 test file |
 
 ### Web diff card through a scroll viewport
 
@@ -54,6 +55,18 @@ The reconciliation hazard is specific to this feature: `scope` is an undeclared 
 
 Owned files: `packages/mcp/mcp-client/src/index.ts`, `packages/mcp/mcp-client/src/connection.ts`, `packages/mcp/mcp-client/src/tools.ts`, and `packages/mcp/mcp-client/tests/apply.spec.ts`.
 
+### Terminal card survives an invalid escalation pair
+
+Upstream validates the optional escalation pair on the Client regardless of what the Host accepted. A command that re-requests the mode already in force carries `sandbox_permissions` with an empty `justification`; `isRedundantEscalation` makes the Host skip `validateEscalationArgs` for exactly that pair, so the call runs and settles, while the Client has no redundancy concept and `validEscalationFields` made `terminalCardModel` return null. The conversation row degraded to a non-clickable title and summary for a call that had already produced its output, while the same tool's row stayed expandable wherever the model omitted the pair.
+
+This branch keeps the card when the call itself proves it ran: a settled, non-error block with a single result text passes `allowInvalidEscalation` into `shellCall`, and only that call skips the pair check. Running, errored, background, persistent, and spill-previewed calls stay generic, and `timeoutMs`, `workdir`, and `run_in_background` keep their validation. The rule copies the tolerance `diffCardModel` already grants a successful mutation through `allowAppliedMetadata`.
+
+Owned source: `packages/client/ui-tool/src/client/tool/models/terminal-card-model.ts`.
+
+Owned test: `packages/client/ui-tool/tests/terminal-card.client.spec.tsx`, which carries both the two cases this branch adds and the malformed-field table the released model satisfies.
+
+Unlike the three behaviors above, taking the released model fails this spec rather than degrading in silence, so its upgrade hazard is a failing gate instead of a quiet regression. The [escalation-pair Agent Note](../bug-fix/2026-09-21-terminal-card-invalid-escalation-pair.md) owns the reasoning.
+
 ## Upgrade checkpoints
 
 For each feature, an upgrade decides between three outcomes and records which one it took. **Keep** takes the local file. **Adopt** takes the released file and retires the local decision, which requires deleting or rewriting the local tests that pin it and updating this inventory in the same change. **Merge** takes released behavior and re-applies the local intent on top, which is the expected outcome when upstream changes the same area without replacing the concept.
@@ -63,6 +76,7 @@ The signals that a feature needs re-examination rather than a default keep:
 - **Web diff card**: upstream introduces a scrolling body, a line-number gutter, or inline highlights, or stops deriving rows from `structuredPatch` context. Upstream-only changes to context width or the edit-distance bound do not need one.
 - **Agent Team**: upstream changes how the Team tool row is mounted, the `apply(ctx, config)` signature, the `mountAgentTeamUi` arity, or the tool names that Team and subagent-control both claim.
 - **MCP client**: upstream adds a `scope` key or any other per-Session connection selection. A same-named key is not automatically the same concept: upstream's `scopeOf(ctx)` is plugin-registration scope, while `session-project` is a binding between a child process and a Session's project.
+- **Terminal card**: upstream lets a settled successful shell card outlive a failed optional escalation pair, changes `terminalCardModel`'s eligibility signature, or introduces a Client-side redundancy notion. Adopting the strict check again also means rewriting the two local cases that pin the tolerance.
 
 A released test file is not evidence that the local behavior is wrong. Where a released test pins a design this inventory declines, the local side owns the test file too.
 
@@ -78,12 +92,13 @@ A released test file is not evidence that the local behavior is wrong. Where a r
 
 ## Consequences
 
-An upgrade reads this note before reconciling, and its outcome per feature is recorded rather than rediscovered. The cost is that three upstream areas cannot be taken as-is, so a release that heavily rewrites one of them turns into a merge rather than a checkout; the checkpoints above keep that merge scoped by naming what has to be re-judged.
+An upgrade reads this note before reconciling, and its outcome per feature is recorded rather than rediscovered. The cost is that four upstream areas cannot be taken as-is, so a release that heavily rewrites one of them turns into a merge rather than a checkout; the checkpoints above keep that merge scoped by naming what has to be re-judged.
 
-Every entry here is a reason to prefer contributing upstream over carrying a fork: the MCP connection scope and the per-preset Team boundary are general needs, not local preferences, and a released implementation would remove both the patch and this inventory. The diff card is the one genuine local preference of the three.
+Every entry here is a reason to prefer contributing upstream over carrying a fork: the MCP connection scope and the per-preset Team boundary are general needs, not local preferences, and a released implementation would remove both the patch and this inventory. The diff card is a genuine local preference, and the escalation tolerance is a Client strictness fix that belongs upstream as well.
 
 ## Related
 
 - [Web diff card renders through a scroll viewport](../bug-fix/2026-09-15-web-diff-card-scroll-viewport.md) — owns the diff card decision, its measurements, and the alternatives it declined.
 - [Web diff cards compare contextual content](../bug-fix/2026-09-14-web-diff-context.md) — the released contextual-diff decision this inventory declines.
 - [Preserve user data during program upgrades](2026-09-08-upgrade-environment-preserve-and-merge.md) — owns how an upgrade is isolated, validated, and recorded.
+- [Terminal card survives an invalid escalation pair](../bug-fix/2026-09-21-terminal-card-invalid-escalation-pair.md) — owns the Client eligibility change this inventory must re-judge.
