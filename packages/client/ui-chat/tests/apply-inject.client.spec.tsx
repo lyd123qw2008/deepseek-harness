@@ -55,7 +55,7 @@ async function bench() {
   const layout = { closeRightbar: vi.fn(), openRightbar: vi.fn() }
   runtime.ctx.provide('layout', layout as never)
   const sidebarRight = {
-    openResource: vi.fn<(address: string) => void>(),
+    openResource: vi.fn<(address: string, options?: unknown) => void>(),
     openTab: vi.fn<(kind: string, options?: unknown) => void>(),
   }
   runtime.ctx.provide('sidebarRight', sidebarRight as never)
@@ -168,6 +168,10 @@ describe('Chat inject API', () => {
     const { injected } = b.chatViewApi(b.rootReference)
     await injected.openFile('src/a.ts')
     expect(b.sidebarRight.openResource).toHaveBeenCalledWith(fileAddressFor(ROOT, '/proj', '/proj/src/a.ts'))
+    await injected.openFile('src/a.ts', { line: 60 })
+    expect(b.sidebarRight.openResource).toHaveBeenLastCalledWith(
+      fileAddressFor(ROOT, '/proj', '/proj/src/a.ts'), { params: { line: 60 } },
+    )
     expect(b.openWorkspacePath).not.toHaveBeenCalled()
     await b.runtime.dispose()
   })

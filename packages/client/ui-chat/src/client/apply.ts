@@ -7,6 +7,7 @@ import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-browser/client'
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client'
 import type {} from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import { fileAddressFor, resolveWorkspacePath } from '@deepseek-ai/dsh-util-workspace-path'
 // Type-only service and declaration merges used by the apply world.
@@ -19,7 +20,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {
   ChatNodeTurnDataInjected, ChatScrollPosition, ChatViewInjected,
-  TurnTailOwnerProps,
+  OpenFileOptions, TurnTailOwnerProps,
 } from './contract/slots.ts'
 import type { ChatSnapshot } from './contract/snapshot.ts'
 import { EMPTY_CHAT_SNAPSHOT } from './contract/snapshot.ts'
@@ -131,11 +132,13 @@ export function apply(ctx: Context): void {
           fileMentions: (owner: TurnTailOwnerProps) => ctx.get('chatFileMentions')?.forClosing(owner, sessionId),
           // Resolve the authored path against the Session workspace before
           // handing it to the selected Chat file target.
-          openFile: async (path) => {
+          openFile: async (path, options?: OpenFileOptions) => {
             const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd
             const resolved = resolveWorkspacePath(cwd, path)
             if (fileOpenTarget.target.getSnapshot() === 'sidebar') {
-              ctx.sidebarRight.openResource(fileAddressFor(sessionId, cwd, resolved))
+              const address = fileAddressFor(sessionId, cwd, resolved)
+              if (options?.line === undefined) ctx.sidebarRight.openResource(address)
+              else ctx.sidebarRight.openResource(address, { params: { line: options.line } })
               return
             }
             const result = await ctx.remote.session.openWorkspacePath({ path: resolved })

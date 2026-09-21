@@ -30,9 +30,9 @@ export type UseChatNode = KeyedSnapshotSelectorHook<ChatConversationViewNode | u
 /** Per-key selector hook over one Chat Node's Turn-process presentation. */
 export type UseChatNodeProcess = KeyedSnapshotSelectorHook<ChatTurnProcessPresentation | undefined>
 
-/** Where in a file an open should land. */
+/** Where a Sidebar file preview should land; Host default applications may ignore it. */
 export interface OpenFileOptions {
-  /** 1-based line to reveal; absent = the file's beginning. */
+  /** 1-based line to reveal in a Sidebar preview; absent = the file's beginning. */
   readonly line?: number
 }
 
