@@ -22,6 +22,7 @@ Status: implemented
 | Agent Team 能力按 preset 隔离 | 关闭标准委派行并在 profile 层挂载 Team 工具行，因此一个部署要么是标准委派、要么是 Team | 保留标准委派行并置为 one-shot，只在插件自身的 composition scope 内安装 Team 工具，并在 UI 层按 preset id 门控 | 4 个包、11 个文件 |
 | MCP 客户端连接作用域 | `transport`、`serverName`、`command`、`url` 与重连调优；每个实例一个子进程，`cwd` 为静态值 | 新增 `scope: 'global' \| 'session-project'`；session-project 池为每个 Session 打开一个子进程，其 `cwd` 即该 Session 的项目 | 4 个文件 |
 | Terminal 卡片容忍畸形的升权字段 | 只要存在 `sandbox_permissions` 就要求 `justification` 非空，因此 Host 以冗余为由接受的字段配对仍会隐藏 terminal 卡片 | 已结算且成功的调用只要结果文本存在就保留卡片；其余畸形字段状态仍走通用路径 | 1 个源码文件、1 个测试文件 |
+| 完全展开模式平铺对话 | `expanded` 只隐藏运行中轮次的组头；已完成轮次仍保留整轮控件与其组头 | `expanded` 不折叠也不分组：没有整轮控件、没有组头，每一行过程就位显示 | 2 个源码文件、1 个测试文件、2 个 README |
 
 ### Web diff 卡片通过滚动视口
 
@@ -77,6 +78,7 @@ Status: implemented
 - **Agent Team**：上游改变 Team 工具行的挂载方式、`apply(ctx, config)` 签名、`mountAgentTeamUi` 的参数个数，或 Team 与 subagent-control 同时声明的工具名。
 - **MCP 客户端**：上游新增 `scope` 键或任何其他逐 Session 的连接选择。同名键并不自动是同一概念：上游的 `scopeOf(ctx)` 是插件注册作用域，而 `session-project` 是子进程与 Session 项目之间的绑定。
 - **Terminal 卡片**：上游让已成功结算的 shell 卡片在可选升权配对失败时仍然保留、改变 `terminalCardModel` 的适用性签名，或在 Client 侧引入冗余概念。重新采纳严格校验也意味着改写钉住该容忍的两个本地用例。
+- **完全展开模式平铺对话**：上游移除整轮折叠、提供一个已经就位渲染每一行过程的模式，或改变 `stepGrouping` 对历史组头的门控。仅上游改动摘要文案、限高或实时详情文本则不需要。
 
 发布的测试文件不能证明本地行为是错的。当发布的测试钉住的是本清单所拒绝的设计时，本地一侧同样拥有该测试文件。
 
