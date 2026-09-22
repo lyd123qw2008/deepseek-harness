@@ -52,6 +52,10 @@ function props(actions: TeamActionInjected, sessionId: SessionId = SESSION): Tea
   return {
     sessionId,
     ...actions,
+    // The preset gate reads the viewed Session's agent preset; these cases exercise a Team-capable preset.
+    useSessions: ((select: (state: unknown) => unknown) => select({
+      byId: { [sessionId]: { projectionValues: { agentPreset: 'team-local' } } },
+    })) as never,
     t: makeTranslate(zh, commonZh),
   } as unknown as TeamActionProps
 }

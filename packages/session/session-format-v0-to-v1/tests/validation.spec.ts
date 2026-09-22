@@ -224,7 +224,8 @@ describe('released event and payload inventory', () => {
     expect(Object.keys(validPayloads).sort()).toEqual([...RELEASED_V0_EVENT_TYPES].sort())
     expect(RELEASED_V0_EVENT_TYPES).toHaveLength(52)
     expect(RELEASED_V0_EVENT_TYPES
-      .filter(type => type !== 'assistant/chunk' && type !== 'web/codex-search-llm-request')
+      .filter(type => type !== 'assistant/chunk' && type !== 'web/codex-search-llm-request'
+        && type !== 'tool/code-dispatch' && type !== 'tool/code-dispatch-start')
       .every(type => KNOWN_SESSION_EVENT_TYPES.has(type))).toBe(true)
     expect(KNOWN_SESSION_EVENT_TYPES.has('assistant/chunk')).toBe(false)
     for (const [type, data] of Object.entries(validPayloads)) {

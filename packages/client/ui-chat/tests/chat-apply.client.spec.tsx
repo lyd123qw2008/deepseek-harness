@@ -130,7 +130,7 @@ describe('Chat apply wiring', () => {
     expect(b.runtime.slots.entries('conversation.composer.dock').map(row => row.options.id))
       .toEqual(['activity', 'usage'])
     expect(b.runtime.slots.entries('settings.general.item').map(row => row.options.id))
-      .toEqual(['transcript-view', 'link-opening', 'composer-enter', 'performance-usage'])
+      .toEqual(['transcript-view', 'performance-usage', 'link-opening', 'file-open-target', 'composer-enter'])
     await b.runtime.dispose()
   })
 
