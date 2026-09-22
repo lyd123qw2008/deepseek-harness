@@ -24,7 +24,12 @@ export const Config: z<Config> = z.object({
   enabledPresets: z.array(z.string()).default(['team-local', 'team-pragmatic-local']),
 })
 
-/** Mount the generated Team Remote contribution and its browser UI. */
+/**
+ * Mount the generated Team Remote contribution and its browser UI.
+ * @param ctx - Client Context carrying navigation, locale, slot, and Remote services.
+ * @param config - optional preset allowlist for the visible Team action.
+ * @returns disposer for both the UI registrations and the Remote namespace.
+ */
 export async function apply(ctx: ClientContext, config: Config = {}): Promise<() => Promise<void>> {
   // Static browser plugin activation does not carry Host Loader row config, so
   // the omitted default must still keep ordinary presets Team-free.
