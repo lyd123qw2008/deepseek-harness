@@ -48,17 +48,10 @@ function remoteFailure(message: string): TeamActionResult<never> {
   return { ok: false, error: new RemoteError('gateway/internal', message, {}) }
 }
 
-function props(
-  actions: TeamActionInjected,
-  sessionId: SessionId = SESSION,
-  agentPreset = 'team-local',
-): TeamActionProps {
+function props(actions: TeamActionInjected, sessionId: SessionId = SESSION): TeamActionProps {
   return {
     sessionId,
     ...actions,
-    useSessions: (select: (state: unknown) => unknown) => select({
-      byId: { [sessionId]: { projectionValues: { agentPreset } } },
-    }),
     t: makeTranslate(zh, commonZh),
   } as unknown as TeamActionProps
 }
@@ -72,21 +65,6 @@ function actions(overrides: Partial<TeamActionInjected> = {}): TeamActionInjecte
 }
 
 describe('TeamAction', () => {
-  it('hides the Team action for presets outside the configured allowlist', () => {
-    render(<TeamAction {...props(actions({ enabledPresets: ['team-local'] }), SESSION, 'standard-local')} />)
-    expect(screen.queryByRole('button', { name: /Agent Team/u })).toBeNull()
-  })
-
-  it('defaults to Team-prefixed presets when no browser config is transported', () => {
-    render(<TeamAction {...props(actions(), SESSION, 'standard-local')} />)
-    expect(screen.queryByRole('button', { name: /Agent Team/u })).toBeNull()
-  })
-
-  it('keeps explicit empty allowlists compatible with legacy embedders', () => {
-    render(<TeamAction {...props(actions({ enabledPresets: [] }), SESSION, 'standard-local')} />)
-    expect(screen.getByRole('button', { name: /Agent Team/u })).toBeTruthy()
-  })
-
   it('ignores a stale Team load after the conversation switches sessions', async () => {
     const nextSession = 'next-lead' as SessionId
     const firstLoad = Promise.withResolvers<{ ok: true; value: TeamView }>()
