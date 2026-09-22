@@ -71,3 +71,17 @@ index 5b9cb1680c47083a9a36eefa93124c67c750fd42..dc5a43ebd801fa6d4b7897c3739b588d
                  break;
              }
              case "toolcall_end":
+diff --git a/dist/api/openai-codex-responses.js b/dist/api/openai-codex-responses.js
+--- a/dist/api/openai-codex-responses.js
++++ b/dist/api/openai-codex-responses.js
+@@ -383,4 +383,4 @@
+         deferredTools: toolPlacement.deferred,
+         deferredToolsMode,
+         toolOptions: {
+-            strict: null,
++            strict: false,
+@@ -409,3 +409,3 @@
+     if (toolPlacement.immediate.length > 0) {
+         body.tools = convertResponsesTools(toolPlacement.immediate, {
+-            strict: null,
++            strict: false,
