@@ -73,10 +73,7 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 
 Use `scope: session-project` when the MCP server must inherit the project context that was fixed when a DSH Session was created. The bridge keeps the public tool generation global, but creates and reuses a supervised stdio child for each Session. That child receives the Session's immutable `header.cwd` as its process cwd; calls do not mutate a shared process or inject a server-specific project argument. The default `global` scope remains unchanged.
 
-This is useful for servers such as Engram that auto-detect their project from
-cwd. Streamable HTTP remains global because it has no process working directory.
-Session-scoped children are disposed with the MCP plugin; reconnect policy is
-applied independently to each child.
+This is useful for servers such as Engram that auto-detect their project from cwd. Streamable HTTP remains global because it has no process working directory. Session-scoped children are disposed with the MCP plugin; reconnect policy is applied independently to each child.
 
 ```yaml
 - id: memory-engram
