@@ -10,7 +10,7 @@ Release-specific copy records do not define a reusable upgrade policy. Treating 
 
 ## Decision
 
-The repository now owns [`dsh-upgrade-environment`](../../../skills/dsh-upgrade-environment/SKILL.md), [`scripts/upgrade-environment.manifest.json`](../../../../scripts/upgrade-environment.manifest.json), and `verify-upgrade-environment`. The manifest distinguishes preserved source paths, SQLite state that requires an owning merge or rebuild procedure, and paths excluded for secret isolation or regeneration.
+The repository now owns [`dsh-upgrade-environment`](../../../skills/dsh-upgrade-environment/SKILL.md), [`scripts/upgrade-environment.manifest.json`](../../../../scripts/upgrade-environment.manifest.json), and `verify-upgrade-environment`. The manifest distinguishes preserved source paths, a path the product consumes by renaming it at first start (the entry names the archive that keeps the source bytes), SQLite state that requires an owning merge or rebuild procedure, and paths excluded for secret isolation or regeneration.
 
 The Skill separates code upgrade from data migration. It starts a target worktree at the exact release tag, uses `git cherry` to distinguish patch-equivalent commits, applies reviewed personal commits oldest first with `git cherry-pick -x`, and validates the target code before touching user data.
 
@@ -28,4 +28,4 @@ The Skill keeps source and target worktrees, data homes, Profiles, credentials, 
 
 ## Consequences
 
-Future upgrades share one manifest and one read-only structural check, while product-specific Session decoding, attachment integrity, SQLite queries, Engram diagnostics, Profile loading, and UI smoke tests remain explicit evidence. The process requires a pre-upgrade target-before backup and deliberate manifest updates when a new durable or secret-bearing path is introduced.
+Future upgrades share one manifest and one read-only structural check, while product-specific Session decoding, attachment integrity, SQLite queries, Engram diagnostics, Profile loading, and UI smoke tests remain explicit evidence. The process requires a pre-upgrade target-before backup and deliberate manifest updates when a new durable or secret-bearing path is introduced, or when the product changes how it consumes an existing one.
