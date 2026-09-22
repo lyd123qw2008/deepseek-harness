@@ -81,7 +81,7 @@ export async function mountAgentTeamUi(
   const disposeRemote = await ctx.remote.$mount(contribution)
   const ui = ctx.inject(
     ['sessions', 'uiWorkspace', 'remote.agentTeams', 'slots', 'locale'],
-    scope => registerUi(scope, enabledPresets),
+    (scope) => { registerUi(scope, enabledPresets) },
   )
   try {
     await ui
