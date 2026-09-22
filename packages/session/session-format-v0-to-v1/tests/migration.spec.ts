@@ -6,6 +6,7 @@ import type {
 } from '@deepseek-ai/dsh-session-format'
 import {
   RELEASED_V0_EVENT_TYPES,
+  releasedV0SessionFormatCodec,
   releasedV1SessionFormatCodec,
   restoreReleasedV1Artifact,
   sessionFormatV0ToV1,
@@ -29,6 +30,30 @@ function createMigrationStage(id: string) {
   }
 }
 
+/**
+ * Decode released v0 rows and run the adjacent migration over them.
+ * @param headerValue - released v0 header.
+ * @param rows - released v0 event rows.
+ * @returns the migrated header, inherited cut, and settled events.
+ */
+function migrateRows(headerValue: unknown, rows: readonly unknown[]) {
+  const decoder = releasedV0SessionFormatCodec.createDecoder(headerValue, 'strict')
+  const stage = sessionFormatV0ToV1.createStage({
+    sourceHeader: decoder.header,
+    targetHeader: sessionFormatV0ToV1.migrateHeader(decoder.header),
+    sourceInheritedEventCount: decoder.headerInheritedEventCount,
+    sourceKind: 'decoded',
+  })
+  const output = new SessionFormatEventCollector()
+  const context = {
+    emitEvent(event: SessionFormatEvent): void { stage.transformEvent(event, output) },
+    emitRun(run: SessionFormatEventRun): void { stage.transformRun(run, output) },
+  }
+  for (const row of rows) decoder.decodeRow(row, context)
+  decoder.finish(context)
+  const inheritedEventCount = stage.finish(output)
+  return { header: sessionFormatV0ToV1.migrateHeader(decoder.header), inheritedEventCount, events: output.values }
+}
 describe('released Session format v0 to v1', () => {
   it('changes only the version of a canonical decoded artifact', () => {
     const header = {
@@ -127,8 +152,7 @@ describe('released Session format v0 to v1', () => {
       },
     ]
 
-    const source = releasedV0SessionFormatCodec.decodeArtifact(header, rows)
-    expect(sessionFormatV0ToV1.migrate(source).events).toEqual([{
+    expect(migrateRows(header, rows).events).toEqual([{
       ...rows[0],
       data: {
         version: 3, mode: 'continuable', provider: 'spawn', label: 'child', agentProvider: 'p', agentModel: 'm',
@@ -145,8 +169,7 @@ describe('released Session format v0 to v1', () => {
       data: { version: 2, mode: 'one-shot', provider: 'spawn' },
     }]
 
-    const source = releasedV0SessionFormatCodec.decodeArtifact(header, rows)
-    expect(() => sessionFormatV0ToV1.migrate(source)).toThrow(/lacks required member "label"/)
+    expect(() => migrateRows(header, rows)).toThrow(/lacks required member "label"/)
   })
 
   it('marks the retired Codex search request as an ignorable preserved event', () => {
@@ -165,7 +188,7 @@ describe('released Session format v0 to v1', () => {
       },
     }
 
-    const migrated = sessionFormatV0ToV1.migrate(releasedV0SessionFormatCodec.decodeArtifact(header, [row]))
+    const migrated = migrateRows(header, [row])
     expect(migrated.events).toEqual([{ ...row, ignorable: true }])
   })
 
@@ -198,7 +221,7 @@ describe('released Session format v0 to v1', () => {
       { type: 'turn/end', seq: 5, time: 7, data: { turn: 1, reason: { kind: 'completed' } } },
     ]
 
-    const migrated = sessionFormatV0ToV1.migrate(releasedV0SessionFormatCodec.decodeArtifact(header, rows))
+    const migrated = migrateRows(header, rows)
     const currentReplayState = {
       response: {
         kind: 'pi-ai', version: 2, api: 'openai', provider: 'p', model: 'm', responseId: 'response',
@@ -237,7 +260,7 @@ describe('released Session format v0 to v1', () => {
       },
     }]
 
-    expect(() => sessionFormatV0ToV1.migrate(releasedV0SessionFormatCodec.decodeArtifact(header, rows)))
+    expect(() => migrateRows(header, rows))
       .toThrow(/unexpected member "unexpected"/)
   })
 
