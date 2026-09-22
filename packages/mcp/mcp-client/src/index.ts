@@ -298,8 +298,8 @@ type SessionContext = { key: string; cwd: string }
 
 function sessionContext(exec: ToolExecution): SessionContext | undefined {
   const session = exec.agent?.session
-  const cwd = session?.header?.cwd
+  const cwd = session?.header.cwd
   if (typeof cwd !== 'string' || cwd.length === 0) return undefined
-  const id = session?.header?.id
+  const id = session?.header.id
   return { key: typeof id === 'string' && id.length > 0 ? id : cwd, cwd }
 }
