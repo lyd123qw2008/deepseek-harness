@@ -201,8 +201,15 @@ function member(node: unknown, key: string, own = false): unknown {
 const LEGACY_SECTION_ENTRIES: Record<string, string> = {
   'ui-developer-tools': 'ui-settings',
   'ui-onboarding': 'ui-settings-general',
+  'agent-presets': 'agent-preset-registry',
   /* v8 ignore next -- the base bundle composes one shell executor per platform */
   shell: process.platform === 'win32' ? 'pwsh-sandbox' : 'bash-sandbox',
+}
+
+/** Field names a removed section's replacement entry changed; every other field keeps its name. */
+const LEGACY_SECTION_FIELDS: Record<string, Record<string, string>> = {
+  /* The saved user default became the volatile `selectedDefault`; `default` is now the deployment value. */
+  'agent-presets': { default: 'selectedDefault' },
 }
 
 /** Resolve the inherited layers alone, or keep their raw values when required fields arrive only through the profile.
@@ -237,7 +244,8 @@ export class SettingsForms extends Service {
 
   /** Move the sections of the removed `settings.yaml` into the active profile once the Loader has settled every entry.
    * The document is renamed before the first write, so a partial import never repeats; a section the running
-   * composition rejects is logged and remains only in the renamed file. */
+   * composition rejects is logged and remains only in the renamed file. A section whose owning entry was renamed
+   * carries the field names that entry changed; every other field keeps its name. */
   private async importLegacyDocument(): Promise<void> {
     const profile = this.ownerContext.profileContext
     const path = join(profile.home, 'settings.yaml')
@@ -247,8 +255,12 @@ export class SettingsForms extends Service {
     const sections = parse(await readFile(imported, 'utf8')) as Record<string, object> | null
     for (const [section, values] of Object.entries(sections ?? {})) {
       const ns = LEGACY_SECTION_ENTRIES[section] ?? section
+      const renamed = LEGACY_SECTION_FIELDS[section]
+      const mapped = renamed === undefined
+        ? values
+        : Object.fromEntries(Object.entries(values as Record<string, unknown>).map(([key, value]) => [renamed[key] ?? key, value]))
       try {
-        await this.update(ns, values)
+        await this.update(ns, mapped)
       } catch (error) {
         this.ownerContext.logger.warn('settings: section %s of %s was not imported into entry %s', section, imported, ns)
         this.ownerContext.logger.warn(error)
