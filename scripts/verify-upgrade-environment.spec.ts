@@ -39,6 +39,7 @@ function manifest(): UpgradeManifest {
         copyTime: 'exact',
         ignoredDescendants: [],
         companions: [],
+        renamedTo: 'settings.yaml.imported',
       },
       {
         path: 'storages/session-query.sqlite',
@@ -124,5 +125,38 @@ describe('verifyUpgradeEnvironment', () => {
 
     expect(report.passed).toBe(true)
     expect(report.checkedExactFiles).toBe(0)
+  })
+
+  it('accepts a source document the target consumed under its renamed path', () => {
+    const root = fixture()
+    const source = join(root, 'source')
+    const target = join(root, 'target')
+    write(join(source, 'sessions/source.jsonl.zstd'), 'source-session')
+    write(join(source, 'settings.yaml'), 'source-settings')
+    write(join(source, 'storages/session-query.sqlite'), 'source-index')
+    write(join(target, 'sessions/source.jsonl.zstd'), 'source-session')
+    write(join(target, 'settings.yaml.imported'), 'source-settings')
+    write(join(target, 'storages/session-query.sqlite'), 'target-index')
+
+    const report = verifyUpgradeEnvironment({ source, target, phase: 'copy-time', manifest: manifest() })
+
+    expect(report.passed).toBe(true)
+    expect(report.checkedExactFiles).toBe(2)
+  })
+
+  it('rejects a consumed source document with no renamed counterpart', () => {
+    const root = fixture()
+    const source = join(root, 'source')
+    const target = join(root, 'target')
+    write(join(source, 'sessions/source.jsonl.zstd'), 'source-session')
+    write(join(source, 'settings.yaml'), 'source-settings')
+    write(join(source, 'storages/session-query.sqlite'), 'source-index')
+    write(join(target, 'sessions/source.jsonl.zstd'), 'source-session')
+    write(join(target, 'storages/session-query.sqlite'), 'target-index')
+
+    const report = verifyUpgradeEnvironment({ source, target, phase: 'copy-time', manifest: manifest() })
+
+    expect(report.passed).toBe(false)
+    expect(report.errors).toContain('target/settings.yaml: source path has no target counterpart')
   })
 })

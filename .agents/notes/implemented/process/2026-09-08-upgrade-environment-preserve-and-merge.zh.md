@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决定
 
-仓库现在提供 [`dsh-upgrade-environment`](../../../skills/dsh-upgrade-environment/SKILL.md)、[`scripts/upgrade-environment.manifest.json`](../../../../scripts/upgrade-environment.manifest.json) 和 `verify-upgrade-environment`。manifest 区分需要保留的源路径、必须由所属程序合并或重建的 SQLite 状态，以及因 secret 隔离或重新生成而排除的路径。
+仓库现在提供 [`dsh-upgrade-environment`](../../../skills/dsh-upgrade-environment/SKILL.md)、[`scripts/upgrade-environment.manifest.json`](../../../../scripts/upgrade-environment.manifest.json) 和 `verify-upgrade-environment`。manifest 区分需要保留的源路径、由产品在首次启动时改名消费的路径（条目给出保留源字节的归档路径）、必须由所属程序合并或重建的 SQLite 状态，以及因 secret 隔离或重新生成而排除的路径。
 
 该 Skill 将代码升级与数据迁移分开。它从精确的 release tag 创建目标 worktree，使用 `git cherry` 区分等价补丁，按源历史顺序使用 `git cherry-pick -x` 应用经过审查的个人提交，并在接触用户数据前验证目标代码。
 
@@ -28,4 +28,4 @@ Status: implemented
 
 ## 后果
 
-未来升级共享一个 manifest 和一个只读结构检查，而产品特有的 Session 解码、附件完整性、SQLite 查询、Engram 诊断、Profile 加载和 UI smoke test 仍然是明确的证据。该流程要求升级前的目标备份，并要求新增持久化路径或含 secret 路径时有意更新 manifest。
+未来升级共享一个 manifest 和一个只读结构检查，而产品特有的 Session 解码、附件完整性、SQLite 查询、Engram 诊断、Profile 加载和 UI smoke test 仍然是明确的证据。该流程要求升级前的目标备份，并要求新增持久化路径或含 secret 路径、或产品改变既有路径消费方式时有意更新 manifest。

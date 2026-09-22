@@ -73,6 +73,8 @@ Keep these source paths available when they exist:
 - `storages/lsp`
 - `.dsh/skills`
 
+A home-root `settings.yaml` is a removed format since 0.1.7: the settings provider imports its sections into the active profile and renames the document to `settings.yaml.imported` on first start. The manifest gives that entry a `renamedTo` target, so the validator accepts either path while still requiring the source bytes; the imported sections live in the profile document (`profiles/<name>/cordis.patch.yml`), which the `profiles` entry covers, and a section the running composition rejects remains only in the archive and is logged.
+
 The validator checks source-file coverage and optional target-baseline coverage. It does not replace Session decoders, attachment integrity checks, SQLite queries, Engram diagnostics, or a real startup smoke test.
 
 ## Web launcher ownership
