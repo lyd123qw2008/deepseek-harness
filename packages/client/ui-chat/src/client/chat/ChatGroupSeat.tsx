@@ -132,7 +132,9 @@ export const ChatGroupSeat = memo(function ChatGroupSeat({ groupKey, useChatGrou
     const location = node?.location
     return location?.kind === 'turn' || location?.kind === 'step' ? location.turn : undefined
   })
-  const grouped = props.usePresentation(policy => turnLocation?.status !== 'open' || policy.stepGrouping !== 'none')
+  // A mode without step grouping keeps its members in place for historical Turns too, so only
+  // `collapsed` exposes a group header and a collapsed body.
+  const grouped = props.usePresentation(policy => policy.stepGrouping !== 'none')
   const reason = turnLocation?.end?.data.reason.kind
   const alwaysOpen = presentation?.turnClosed === false || presentation?.hasInterleavedInput === true
     || reason === 'aborted' || reason === 'error'

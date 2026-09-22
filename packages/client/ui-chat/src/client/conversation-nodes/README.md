@@ -44,7 +44,7 @@ Every reply separates secondary groups; only the final answer is protected from 
 | Which rows belong together? | Group boundaries | The reply separates G1 and G2; changing from `read` to `bash` does not. |
 | What did a group do? | Category counts | G1 has `read=1, commands=1`; G2 has `code=1`. Reasoning adds no tool count. |
 | What does its title say? | Group state and summary | Running groups use their latest running activity; closed groups use their highest-count categories. Counts never decide folding. |
-| How much detail is visible? | Display mode and manual group opening | Completed Turns retain group headers and manual bodies in every mode; Expanded directly shows group bodies only in running Turns. |
+| How much detail is visible? | Display mode and manual group opening | Completed Turns retain group headers and manual bodies in Compact and Detailed; Expanded never groups, so its rows stay in place. |
 | Is the process visible at all? | Whole-Turn opening | Closing the Turn hides G1, the intermediate reply, and G2 together. |
 
 ### What the reader sees
@@ -53,7 +53,8 @@ Assume the Turn above completed normally, with no inner disclosure manually open
 
 | Viewing state | Visible content |
 |---|---|
-| Whole Turn collapsed, any mode | Input, whole-Turn control, final response, and footer. No process headers, bodies, or intermediate reply. |
+| Whole Turn collapsed, Compact or Detailed | Input, whole-Turn control, final response, and footer. No process headers, bodies, or intermediate reply. |
+| Any Turn state, Expanded | Input, every process row, the intermediate reply, final response, and footer. No whole-Turn control or group headers. |
 | Whole Turn open, Compact or Detailed | G1/G2 headers, the intermediate reply, and final response. Group bodies start collapsed. |
 | Whole Turn and G1 open, Detailed | G1's reasoning and tool rows with the settled reasoning preview; G2 remains a header. Full reasoning/tool bodies are still manual. |
 | Whole Turn open, Expanded | G1/G2 headers, intermediate reply, and final response. Completed Turns' group bodies still require manual opening. |
@@ -108,15 +109,15 @@ Automatic collapse keeps the process open if hiding it would hide keyboard focus
 <a id="display-modes"></a>
 ## Display modes
 
-Settings → General → Work details stores `ui-chat.transcriptView` as `compact` (default), `detailed`, or `expanded`. A saved legacy `normal` value reads as `detailed` without being written back.
+Settings → General → Work details stores `ui-chat.transcriptView` as `compact` (default), `detailed`, or `expanded`. A saved legacy `normal` value reads as `detailed` without being written back. Expanded is this branch's flat mode: it folds no completed Turn and no group, so process rows and their group members render in place.
 
 | Behavior | Compact | Detailed | Expanded |
 |---|---|---|---|
-| Process-group header | Category summary | Summary and live task detail | Hidden in running Turns; retained in historical Turns |
-| Process-group body | Initially collapsed | Initially collapsed | Directly visible without a group-level height cap in running Turns; manual disclosure in historical Turns |
+| Process-group header | Category summary | Summary and live task detail | Never shown |
+| Process-group body | Initially collapsed | Initially collapsed | Directly visible, without a group-level height cap |
 | Settled reasoning preview | Hidden | First line | First line |
 | Individual reasoning and tool bodies | Manual expansion | Manual expansion | Manual expansion |
-| Eligible completed Turn | Initially collapsed | Initially collapsed | Initially collapsed |
+| Eligible completed Turn | Initially collapsed | Initially collapsed | No whole-Turn control; process rows stay in place |
 
 A closed group's header names the first three categories from its ranked summary, without displaying counts. A group without categories uses the thinking label. A running header names its live tool category, otherwise thinking; Detailed appends live detail. Live titles remain visible for at least 150ms, retaining only the newest pending title.
 

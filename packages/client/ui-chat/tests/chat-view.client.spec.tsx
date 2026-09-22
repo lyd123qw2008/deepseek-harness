@@ -739,11 +739,13 @@ describe('ChatView', () => {
 
     for (const mode of ['detailed', 'expanded', 'compact', 'expanded'] as const) {
       act(() => { h.setTranscriptView(mode) })
-      expect(bodies.map(body => body.hasAttribute('hidden'))).toEqual([false, true, mode !== 'expanded'])
-      expect(headers.map(header => header.closest('[hidden]') !== null)).toEqual([false, false, mode === 'expanded'])
+      // Expanded owns no group disclosure: every member stays in place behind a hidden header.
+      expect(bodies.map(body => body.hasAttribute('hidden'))).toEqual(mode === 'expanded' ? [false, false, false] : [false, true, true])
+      expect(headers.map(header => header.closest('[hidden]') !== null)).toEqual(mode === 'expanded' ? [true, true, true] : [false, false, false])
       expect([...view.container.querySelectorAll('[data-chat-group-key]')]).toEqual(roots)
     }
 
+    act(() => { h.setTranscriptView('compact') })
     act(() => { h.set({ chat: project(true), running: false }) })
     const control = view.container.querySelector<HTMLButtonElement>('[data-turn-process="2"]')!
     expect(control.getAttribute('aria-expanded')).toBe('false')
@@ -1320,8 +1322,7 @@ describe('ChatView', () => {
 
   it.each([
     { mode: 'compact', anchor: 'group' }, { mode: 'detailed', anchor: 'group' },
-    { mode: 'expanded', anchor: 'group' },
-    { mode: 'compact', anchor: 'node' }, { mode: 'detailed', anchor: 'node' }, { mode: 'expanded', anchor: 'node' },
+    { mode: 'compact', anchor: 'node' }, { mode: 'detailed', anchor: 'node' },
   ] as const)(
     'keeps the first visible item in place when paging inserts a steering boundary ($mode, $anchor)', ({ mode, anchor }) => {
       const tool = (seq: number, id: string) => ({ ...toolResult(seq, id), turn: 1 })
@@ -1388,13 +1389,10 @@ describe('ChatView', () => {
   it.each([
     { mode: 'compact', hasProcess: false, hasSteering: false },
     { mode: 'detailed', hasProcess: false, hasSteering: false },
-    { mode: 'expanded', hasProcess: false, hasSteering: false },
     { mode: 'compact', hasProcess: true, hasSteering: false },
     { mode: 'detailed', hasProcess: true, hasSteering: false },
-    { mode: 'expanded', hasProcess: true, hasSteering: false },
     { mode: 'compact', hasProcess: false, hasSteering: true },
     { mode: 'detailed', hasProcess: false, hasSteering: true },
-    { mode: 'expanded', hasProcess: false, hasSteering: true },
   ] as const)('keeps the loaded message anchored when paging exposes steering inside a closed Turn ($mode, process=$hasProcess, steer=$hasSteering)', ({ mode, hasProcess, hasSteering }) => {
     const tool = (seq: number, id: string) => ({ ...toolResult(seq, id), turn: 1 })
     const initial = {
@@ -2345,7 +2343,7 @@ describe('ChatView', () => {
     expect(answer?.hasAttribute('data-turn-process-answer')).toBe(false)
   })
 
-  it.each(['compact', 'detailed', 'expanded'] as const)(
+  it.each(['compact', 'detailed'] as const)(
     'preserves steering-separated process groups in %s mode after Turn completion', (mode) => {
       const nodes = [
         userInTurn(1, 'question', 1),
@@ -2389,7 +2387,7 @@ describe('ChatView', () => {
         view.getByText('second direction').closest('[data-chat-flow-kind]'),
         roots[2], view.getByText('final answer').closest('[data-chat-flow-kind]'),
       ])
-      for (const next of ['compact', 'detailed', 'expanded', mode] as const) {
+      for (const next of ['compact', 'detailed', mode] as const) {
         act(() => { h.setTranscriptView(next) })
         expect(visibleOrder()).toEqual(order)
         expect([...view.container.querySelectorAll('[data-chat-group-key]')]).toEqual(roots)
@@ -2475,20 +2473,29 @@ describe('ChatView', () => {
     expect(turnProcessControl(view.container)?.getAttribute('aria-expanded')).toBe('false')
     expect(processRow.getAttribute('hidden')).toBe('until-found')
 
-    const toggle = turnProcessControl(view.container)!
     for (const mode of ['detailed', 'expanded', 'compact'] as const) {
       act(() => { h.setTranscriptView(mode) })
-      expect(turnProcessControl(view.container)).toBe(toggle)
-      expect(toggle.getAttribute('aria-expanded')).toBe('false')
-      expect(processRow.getAttribute('hidden')).toBe('until-found')
+      const current = turnProcessControl(view.container)
+      if (mode === 'expanded') {
+        // Expanded folds nothing: the whole-Turn control is gone and the process row renders in place.
+        expect(current).toBeNull()
+        expect(processRow.hasAttribute('hidden')).toBe(false)
+      } else {
+        expect(current).not.toBeNull()
+        expect(current?.getAttribute('aria-expanded')).toBe('false')
+        expect(processRow.getAttribute('hidden')).toBe('until-found')
+      }
     }
-    fireEvent.click(toggle)
-    for (const mode of ['detailed', 'expanded', 'compact'] as const) {
+    // Expanded unmounted the control, so the returning compact render mounts a fresh one.
+    fireEvent.click(turnProcessControl(view.container)!)
+    for (const mode of ['detailed', 'compact'] as const) {
       act(() => { h.setTranscriptView(mode) })
-      expect(turnProcessControl(view.container)).toBe(toggle)
-      expect(toggle.getAttribute('aria-expanded')).toBe('true')
+      expect(turnProcessControl(view.container)?.getAttribute('aria-expanded')).toBe('true')
       expect(processRow.getAttribute('hidden')).toBeNull()
     }
+    act(() => { h.setTranscriptView('expanded') })
+    expect(turnProcessControl(view.container)).toBeNull()
+    expect(processRow.hasAttribute('hidden')).toBe(false)
   })
 
   it('folds final-step reasoning under the fallback title when every summary count is zero', () => {
@@ -2676,13 +2683,23 @@ describe('ChatView', () => {
     let group = view.container.querySelector<HTMLElement>('[data-chat-group-key]')
     for (const mode of ['compact', 'detailed', 'expanded'] as const) {
       act(() => { h.setTranscriptView(mode) })
-      expect(toggle.getAttribute('aria-expanded')).toBe('false')
-      expect(row.getAttribute('hidden')).toBe('until-found')
-      if (grouped) expect(group?.getAttribute('hidden')).toBe('until-found')
+      if (mode === 'expanded') {
+        // Expanded owns no disclosure: the whole-Turn control is gone and every row stays in place.
+        expect(turnProcessControl(view.container)).toBeNull()
+        expect(row.hasAttribute('hidden')).toBe(false)
+        if (grouped) expect(group?.hasAttribute('hidden')).toBe(false)
+      } else {
+        expect(toggle.getAttribute('aria-expanded')).toBe('false')
+        expect(row.getAttribute('hidden')).toBe('until-found')
+        if (grouped) expect(group?.getAttribute('hidden')).toBe('until-found')
+      }
       expect(view.getByText('loaded final answer')).toBeTruthy()
     }
-    if (manualOpen) fireEvent.click(toggle)
-    expect(toggle.getAttribute('aria-expanded')).toBe(String(manualOpen))
+    act(() => { h.setTranscriptView('compact') })
+    // Expanded unmounted the control, so the compact render mounts a fresh one.
+    const currentToggle = turnProcessControl(view.container)!
+    if (manualOpen) fireEvent.click(currentToggle)
+    expect(currentToggle.getAttribute('aria-expanded')).toBe(String(manualOpen))
     expect(row.hasAttribute('hidden')).toBe(!manualOpen)
     if (grouped) expect(group?.hasAttribute('hidden')).toBe(!manualOpen)
     const beforePageRow = row
@@ -2720,8 +2737,8 @@ describe('ChatView', () => {
       expect(group?.querySelector('[data-process-activity]')).toBe(groupToggle)
       expect(groupToggle?.getAttribute('aria-expanded')).toBe('true')
     }
-    expect(turnProcessControl(view.container)).toBe(toggle)
-    expect(toggle.getAttribute('aria-expanded')).toBe(String(manualOpen))
+    expect(turnProcessControl(view.container)).toBe(currentToggle)
+    expect(currentToggle.getAttribute('aria-expanded')).toBe(String(manualOpen))
     expect(row.hasAttribute('hidden')).toBe(!manualOpen)
     if (grouped) expect(group?.hasAttribute('hidden')).toBe(!manualOpen)
     expect(view.container.querySelector('[data-chat-node-key="fixture:assistant:1"]')?.hasAttribute('hidden')).toBe(!manualOpen)
@@ -2739,17 +2756,17 @@ describe('ChatView', () => {
       groups.publish()
       h.set({ chat: next, hasMore: true })
     })
-    expect(turnProcessControl(view.container)).toBe(toggle)
-    expect(toggle.getAttribute('aria-expanded')).toBe(String(manualOpen))
+    expect(turnProcessControl(view.container)).toBe(currentToggle)
+    expect(currentToggle.getAttribute('aria-expanded')).toBe(String(manualOpen))
     expect(view.container.querySelector('[data-chat-node-key="fixture:tool:partial"]')).toBe(row)
     expect(row.hasAttribute('hidden')).toBe(!manualOpen)
     if (grouped) {
       expect(view.container.querySelector('[data-chat-group-key]')).toBe(group)
       expect(group?.hasAttribute('hidden')).toBe(!manualOpen)
     }
-    expect(toggle.textContent).toBe(h.props.t('message.turnProcess.took', { duration: formatRunDuration(4_000, h.props.t) }))
+    expect(currentToggle.textContent).toBe(h.props.t('message.turnProcess.took', { duration: formatRunDuration(4_000, h.props.t) }))
     act(() => { h.set({ hasMore: false }) })
-    expect(toggle.getAttribute('aria-expanded')).toBe(String(manualOpen))
+    expect(currentToggle.getAttribute('aria-expanded')).toBe(String(manualOpen))
   })
 
   it('withholds process controls without a loaded Turn boundary and folds completed groups', () => {
