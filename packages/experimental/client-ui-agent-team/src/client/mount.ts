@@ -70,7 +70,7 @@ function registerUi(ctx: ClientContext, enabledPresets?: readonly string[]): voi
  * Mount one generated Team Remote contribution, then register its browser UI.
  * @param ctx - Client Context carrying navigation, locale, slot, and Remote services.
  * @param contribution - generated Team descriptors selected by the browser entry.
- * @param enabledPresets - preset names allowed to expose Team actions.
+ * @param enabledPresets - presets allowed to display the Team action; omitted keeps the `team-` prefix rule.
  * @returns disposer for both the UI registrations and Remote namespace.
  */
 export async function mountAgentTeamUi(
@@ -81,9 +81,7 @@ export async function mountAgentTeamUi(
   const disposeRemote = await ctx.remote.$mount(contribution)
   const ui = ctx.inject(
     ['sessions', 'uiWorkspace', 'remote.agentTeams', 'slots', 'locale'],
-    (scope) => {
-      registerUi(scope, enabledPresets)
-    },
+    scope => registerUi(scope, enabledPresets),
   )
   try {
     await ui

@@ -30,18 +30,18 @@ describe('TranscriptViewPolicy', () => {
     const host = stubConfigForm<ChatSettings>()
     const policy = new TranscriptViewPolicy(host.scope)
 
-    host.publish({ status: 'ready', value: { linkOpening: 'sidebar', transcriptView: 'normal', performanceUsage: 'detailed' }, revision: 1, writable: true })
+    host.publish({ status: 'ready', value: { linkOpening: 'sidebar', transcriptView: 'normal', performanceUsage: 'detailed', fileOpenTarget: 'host' }, revision: 1, writable: true })
     expect(policy.mode.getSnapshot()).toBe('detailed')
     policy.setMode('detailed')
     expect(host.set).not.toHaveBeenCalled()
 
-    host.publish({ value: { linkOpening: 'sidebar', transcriptView: 'compact', performanceUsage: 'detailed' }, revision: 2 })
+    host.publish({ value: { linkOpening: 'sidebar', transcriptView: 'compact', performanceUsage: 'detailed', fileOpenTarget: 'host' }, revision: 2 })
     expect(policy.mode.getSnapshot()).toBe('compact')
   })
 
   it('adopts an accepted section standing at construction', () => {
     const host = stubConfigForm<ChatSettings>()
-    host.publish({ status: 'ready', value: { linkOpening: 'sidebar', transcriptView: 'expanded', performanceUsage: 'detailed' }, revision: 1, writable: true })
+    host.publish({ status: 'ready', value: { linkOpening: 'sidebar', transcriptView: 'expanded', performanceUsage: 'detailed', fileOpenTarget: 'host' }, revision: 1, writable: true })
     expect(new TranscriptViewPolicy(host.scope).mode.getSnapshot()).toBe('expanded')
   })
 })
