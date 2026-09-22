@@ -9,7 +9,7 @@ kind: "package-library"
 
 ## 概述
 
-`dsh-session-format-v0-to-v1` 逐个物理行解码已发布 v0 JSONL 记录语言，并把它转换为共享布局的 v1 格式。除把 `version: 0` 改为 `version: 1` 外，该迁移边会保留经过校验的 header 与事件事实；它也会应用 v0 持久化曾接受的有限旧格式规范化，并把已发布的 subagent descriptor version 2 payload 提升为当前 version 3。该包冻结 v0 reader、严格的 v1 迁移目标校验器，以及词汇中立的 v1 物理 codec，使后续迁移边无需导入最新 Session 表示即可复用它。它的大部分源码是冻结的已发布 v0/v1 事件词表而不是恒等转换本身：`payload-validation.ts` 与 `relationships.ts` 钉住每种第一方事件类型的 payload 成员与生命周期配对，使畸形历史日志在已安装的 current restorer 运行之前就以「不支持的迁移」被拒绝并保留源文件，也使后续重构已发布事件的迁移边无需导入当前 Session 包即可信任其字段。
+`dsh-session-format-v0-to-v1` 逐个物理行解码已发布 v0 JSONL 记录语言，并把它转换为共享布局的 v1 格式。该迁移边保留经过校验的 header 与事件事实，只把 `version: 0` 改为 `version: 1`；它应用 v0 持久化曾接受的有限旧格式规范化，并把已发布的 subagent descriptor version 2 payload 提升为 version 3。该包冻结 v0 reader、严格的 v1 迁移目标校验器，以及词汇中立的 v1 物理 codec，供后续迁移边复用；`payload-validation.ts` 与 `relationships.ts` 钉住每种第一方事件类型的 payload 成员与生命周期配对。
 
 ## 目录
 
