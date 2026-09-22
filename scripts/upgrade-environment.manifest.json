@@ -35,7 +35,8 @@
       "kind": "settings",
       "strategy": "union",
       "sourceMustExist": true,
-      "copyTime": "exact"
+      "copyTime": "exact",
+      "renamedTo": "settings.yaml.imported"
     },
     {
       "path": "openssl-legacy.cnf",

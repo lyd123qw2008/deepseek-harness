@@ -20,6 +20,8 @@ export interface UpgradeManifestEntry {
   readonly copyTime: 'exact' | 'presence' | 'skip'
   readonly ignoredDescendants: readonly string[]
   readonly companions: readonly string[]
+  /** Target path holding the same bytes when the owning application consumes and renames the source path at first start. */
+  readonly renamedTo?: string
 }
 
 /** A source path that must not be copied as the same bytes into the target. */
@@ -121,6 +123,9 @@ function parseEntry(value: unknown, index: number): UpgradeManifestEntry {
   if (ignoredDescendants.some(item => item.length === 0 || item.includes('/') || item === '.' || item === '..')) {
     throw new Error(`entries[${String(index)}].ignoredDescendants must contain directory names`)
   }
+  const renamedTo = value.renamedTo === undefined
+    ? undefined
+    : parsePath(value.renamedTo, `entries[${String(index)}].renamedTo`)
   return {
     path,
     kind,
@@ -129,6 +134,7 @@ function parseEntry(value: unknown, index: number): UpgradeManifestEntry {
     copyTime,
     ignoredDescendants,
     companions: parseStringArray(value.companions, `entries[${String(index)}].companions`, true),
+    ...renamedTo === undefined ? {} : { renamedTo },
   }
 }
 
@@ -270,7 +276,10 @@ function verifyUnion(
     if (entry.sourceMustExist) errors.push(`source/${entry.path}: required path is missing`)
     return { sourceFiles: 0, exactFiles: 0 }
   }
-  const target = listing(targetRoot, entry.path, entry.ignoredDescendants, errors, `target/${entry.path}`)
+  let target = listing(targetRoot, entry.path, entry.ignoredDescendants, errors, `target/${entry.path}`)
+  if (!target.exists && entry.renamedTo !== undefined) {
+    target = listing(targetRoot, entry.renamedTo, entry.ignoredDescendants, errors, `target/${entry.renamedTo}`)
+  }
   if (!target.exists) {
     errors.push(`target/${entry.path}: source path has no target counterpart`)
     return { sourceFiles: source.files.length, exactFiles: 0 }
