@@ -791,7 +791,7 @@ describe('plugin registration', () => {
     )
     const service = (ctx as { get(name: string): ChatFileMentions | undefined }).get('chatFileMentions')
     const mentions = service?.forClosing(owner, SessionId('viewed-session'))
-    expect(mentions?.resolve('report.html')?.label).toBe('Open site/report.html in sidebar')
+    expect(mentions?.resolve('report.html')?.label).toBe('Open site/report.html')
     mentions?.resolve('report.html')?.open()
     expect(opened).toEqual(['site/report.html'])
     const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
@@ -802,7 +802,7 @@ describe('plugin registration', () => {
       const mentions = service?.forClosing(delivered, SessionId('child-session'))
       for (const text of ['report.docx', 'out/report.docx']) {
         const mention = mentions?.resolve(text)
-        expect(mention?.label).toBe('Open out/report.docx in sidebar')
+        expect(mention?.label).toBe('Open out/report.docx')
         mention?.open()
       }
     }
@@ -895,7 +895,7 @@ describe('presented files', () => {
     const matched = selectDeliverables(owner)!
     const props = openProps()
     props.openPresented.mockResolvedValue(null)
-    const view = render(<Deliverables {...props} matched={matched} openPreview={() => {}} sessionId={SessionId('child-session')} t={makeTranslate(en)} />)
+    const view = render(<Deliverables {...props} matched={matched} openPreview={preview} sessionId={SessionId('child-session')} t={makeTranslate(en)} />)
     expect(view.container.querySelectorAll('[data-presented-file]')).toHaveLength(4)
     const expand = view.getByRole('button', { name: 'Show all 8 delivered files' })
     expect(expand.getAttribute('aria-expanded')).toBe('false')
@@ -905,7 +905,7 @@ describe('presented files', () => {
     expect(view.queryByRole('link')).toBeNull()
     fireEvent.click(view.getByRole('button', { name: 'Preview report-0.docx in sidebar' }))
     expect(preview).toHaveBeenCalledTimes(1)
-    expect(preview).toHaveBeenLastCalledWith('report-0.docx')
+    expect(preview).toHaveBeenLastCalledWith('child-session', undefined, 'report-0.docx')
     fireEvent.click(view.getAllByRole('button', { name: 'Native file action' })[0]!)
     expect(props.openPresented).toHaveBeenCalledWith('child-session', 2, 0, 'open', undefined)
     fireEvent.click(view.getByRole('button', { name: 'Collapse delivered files' }))
