@@ -32,7 +32,7 @@ export function mapUsage(usage: PiUsage): TokenUsage {
 }
 
 /**
- * pi-ai 0.84 carries provider diagnostics on AssistantMessage and still flattens
+ * pi-ai 0.85 carries provider diagnostics on AssistantMessage and still flattens
  * several protocol failures into errorMessage. Prefer the structured diagnostic
  * or provider code, then use the narrow text fallback for APIs that expose no
  * usable metadata.
@@ -91,8 +91,6 @@ function validStatus(value: number | undefined): value is number {
 }
 
 function diagnosticFailureCode(message: AssistantMessage): string | undefined {
-  const direct = message.errorCode
-  if (typeof direct === 'string' && direct.trim().length > 0) return direct
   let transportDiagnostic = false
   for (const diagnostic of message.diagnostics ?? []) {
     const code = diagnostic.error?.code
@@ -106,8 +104,6 @@ function diagnosticFailureCode(message: AssistantMessage): string | undefined {
 }
 
 function diagnosticFailureStatus(message: AssistantMessage): number | undefined {
-  const direct = message.errorStatus
-  if (validStatus(direct)) return direct
   for (const diagnostic of message.diagnostics ?? []) {
     const status = diagnostic.details?.status
     if (typeof status === 'number' && validStatus(status)) return status
@@ -182,8 +178,7 @@ function classifyFlattenedPiAiError(message: string): string {
 }
 
 function failureWithMessage(source: AssistantMessage, code: string, text: string): LlmFailure {
-  const directStatus = source.errorStatus
-  const status = validStatus(directStatus) ? directStatus : diagnosticFailureStatus(source)
+  const status = diagnosticFailureStatus(source)
   return {
     message: text,
     code,
