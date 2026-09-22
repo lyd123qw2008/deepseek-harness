@@ -43,7 +43,11 @@ describe('localPathMediaUrl', () => {
     expect(localPathMediaUrl(BASE, '')).toBeUndefined()
     expect(localPathMediaUrl(BASE, '//cdn.example.com/x.png')).toBeUndefined()
     expect(localPathMediaUrl(BASE, 'relative.png')).toBeUndefined()
-    expect(localPathMediaUrl(BASE, 'C:\\tmp\\x.png')).toBeUndefined()
+  })
+
+  it('serves a Windows absolute path through the same Host file API', () => {
+    expect(localPathMediaUrl(BASE, 'C:\\tmp\\x.png'))
+      .toBe(`${BASE}api/file?path=${encodeURIComponent('C:\\tmp\\x.png')}`)
   })
 
   it('encodes the full path including spaces', () => {

@@ -186,12 +186,21 @@ describe('Chat inject API', () => {
     await b.runtime.dispose()
   })
 
-  it('addresses file paths under the Session\'s scope and opens them in the right Sidebar', async () => {
+  it('hands the Session-resolved path to the Host application by default', async () => {
     const b = await bench()
     const { injected } = b.chatViewApi(b.rootReference)
     await injected.openFile('src/a.ts')
-    // Files stay in the product: a relative path is handed to the Sidebar as an
-    // address under this session's scope, not to a desktop opener.
+    expect(b.openWorkspacePath).toHaveBeenCalledWith({ path: '/proj/src/a.ts' })
+    expect(b.sidebarRight.openResource).not.toHaveBeenCalled()
+    await b.runtime.dispose()
+  })
+
+  it('addresses file paths under the Session\'s scope and opens them in the right Sidebar when selected', async () => {
+    const b = await bench({ transcriptView: 'compact', performanceUsage: 'detailed', linkOpening: 'sidebar', fileOpenTarget: 'sidebar' })
+    const { injected } = b.chatViewApi(b.rootReference)
+    await injected.openFile('src/a.ts')
+    // With the Sidebar target a relative path is handed over as an address
+    // under this session's scope, not to a desktop opener.
     expect(b.sidebarRight.openResource).toHaveBeenCalledWith('dsh-resource://file/session/root-1/src/a.ts')
     expect(b.openWorkspacePath).not.toHaveBeenCalled()
 
@@ -353,7 +362,7 @@ describe('Chat inject API', () => {
   })
 
   it('keeps a relative path under the Session without a cwd, and addresses a path outside the workspace absolutely', async () => {
-    const b = await bench()
+    const b = await bench({ transcriptView: 'compact', performanceUsage: 'detailed', linkOpening: 'sidebar', fileOpenTarget: 'sidebar' })
     const NO_CWD = 'root-2' as SessionId
     await b.runtime.sessions.add({
       id: NO_CWD,
