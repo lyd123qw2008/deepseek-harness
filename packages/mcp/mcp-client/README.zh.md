@@ -71,15 +71,9 @@ kind: "package-reference"
 
 ### Session-project stdio 作用域
 
-当 MCP 服务器必须继承 DSH Session 创建时固定的工程上下文时，使用
-`scope: session-project`。桥接层仍然只注册一组公开工具，但会为每个
-Session 创建并复用一个受监督的 stdio 子进程。该子进程继承 Session 不可变
-`header.cwd` 作为进程工作目录；调用不会修改共享进程，也不会注入某个服务
-专用的 project 参数。默认的 `global` 作用域保持原有行为。
+当 MCP 服务器必须继承 DSH Session 创建时固定的工程上下文时，使用 `scope: session-project`。桥接层仍然只注册一组公开工具，但会为每个 Session 创建并复用一个受监督的 stdio 子进程。该子进程继承 Session 不可变 `header.cwd` 作为进程工作目录；调用不会修改共享进程，也不会注入某个服务专用的 project 参数。默认的 `global` 作用域保持原有行为。
 
-这适合 Engram 这类根据 cwd 自动识别工程的服务。Streamable HTTP 没有进程工作
-目录，因此仍然使用全局作用域。Session 子进程随 MCP 插件一起 dispose；每个
-子进程独立使用重连策略。
+这适合 Engram 这类根据 cwd 自动识别工程的服务。Streamable HTTP 没有进程工作目录，因此仍然使用全局作用域。Session 子进程随 MCP 插件一起 dispose；每个子进程独立使用重连策略。
 
 ```yaml
 - id: memory-engram
