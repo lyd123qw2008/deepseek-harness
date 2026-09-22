@@ -37,8 +37,10 @@ const POLICIES: Readonly<Record<TranscriptViewMode, ChatPresentationPolicy>> = {
     settledReasoningPreview: true,
   },
   expanded: {
+    // Local deviation: Expanded keeps every process row in place, so a completed
+    // Turn is never folded behind the whole-Turn control or a group header.
     mode: 'expanded',
-    foldCompletedTurns: true,
+    foldCompletedTurns: false,
     stepGrouping: 'none',
     liveProcessDetail: true,
     settledReasoningPreview: true,

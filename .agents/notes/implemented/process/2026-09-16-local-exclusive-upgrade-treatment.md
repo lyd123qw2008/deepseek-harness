@@ -22,6 +22,7 @@ The features are independent, and an upgrade must judge each on its own; a relea
 | Agent Team capability isolated by preset | Disables the standard delegation rows and mounts the Team tool row in the profile layer, so a deployment is either standard delegation or Team | Keeps the standard delegation rows as one-shot and installs the Team tool only inside the composition scope of the plugin, gated in the UI by preset id | 4 packages, 11 files |
 | MCP client connection scope | `transport`, `serverName`, `command`, `url` and reconnect tuning; one child for the instance, with a static `cwd` | Adds `scope: 'global' \| 'session-project'`; the session-project pool opens one child per Session whose `cwd` is that Session's project | 4 files |
 | Terminal card survives an invalid escalation pair | Requires a non-empty `justification` whenever `sandbox_permissions` is present, so a pair the Host accepts as redundant still hides the terminal card | Keeps the card for a settled successful call whose result text exists; every other malformed-field state stays generic | 1 source file, 1 test file |
+| Flat Expanded transcript | `expanded` hides only running-Turn group headers; a completed Turn keeps the whole-Turn control and its group headers | `expanded` folds and groups nothing: no whole-Turn control, no group header, every process row in place | 2 source files, 1 test file, 2 READMEs |
 
 ### Web diff card through a scroll viewport
 
@@ -77,6 +78,7 @@ The signals that a feature needs re-examination rather than a default keep:
 - **Agent Team**: upstream changes how the Team tool row is mounted, the `apply(ctx, config)` signature, the `mountAgentTeamUi` arity, or the tool names that Team and subagent-control both claim.
 - **MCP client**: upstream adds a `scope` key or any other per-Session connection selection. A same-named key is not automatically the same concept: upstream's `scopeOf(ctx)` is plugin-registration scope, while `session-project` is a binding between a child process and a Session's project.
 - **Terminal card**: upstream lets a settled successful shell card outlive a failed optional escalation pair, changes `terminalCardModel`'s eligibility signature, or introduces a Client-side redundancy notion. Adopting the strict check again also means rewriting the two local cases that pin the tolerance.
+- **Flat Expanded transcript**: upstream removes the whole-Turn fold, ships a mode that already renders every process row in place, or changes how `stepGrouping` gates a historical group header. Upstream-only changes to the summary copy, the height cap, or the live-detail text do not need one.
 
 A released test file is not evidence that the local behavior is wrong. Where a released test pins a design this inventory declines, the local side owns the test file too.
 
