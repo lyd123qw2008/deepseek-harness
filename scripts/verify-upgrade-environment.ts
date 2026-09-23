@@ -20,7 +20,7 @@ export interface UpgradeManifestEntry {
   readonly copyTime: 'exact' | 'presence' | 'skip'
   readonly ignoredDescendants: readonly string[]
   readonly companions: readonly string[]
-  /** Target path holding the same bytes when the owning application consumes and renames the source path at first start. */
+  /** Path holding the same bytes when the owning application consumes and renames the source path at first start, in either home. */
   readonly renamedTo?: string
 }
 
@@ -271,7 +271,10 @@ function verifyUnion(
   phase: UpgradeVerificationOptions['phase'],
   errors: string[],
 ): { sourceFiles: number; exactFiles: number } {
-  const source = listing(sourceRoot, entry.path, entry.ignoredDescendants, errors, `source/${entry.path}`)
+  let source = listing(sourceRoot, entry.path, entry.ignoredDescendants, errors, `source/${entry.path}`)
+  if (!source.exists && entry.renamedTo !== undefined) {
+    source = listing(sourceRoot, entry.renamedTo, entry.ignoredDescendants, errors, `source/${entry.renamedTo}`)
+  }
   if (!source.exists) {
     if (entry.sourceMustExist) errors.push(`source/${entry.path}: required path is missing`)
     return { sourceFiles: 0, exactFiles: 0 }
