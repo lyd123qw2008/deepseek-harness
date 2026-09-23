@@ -40,13 +40,8 @@ export function markdownLabels(t: T): MarkdownLabels {
  */
 export function diffBlockLabels(t: T): DiffBlockLabels {
   return {
-    ...codeToolbarLabels(t),
     copy: t('copy'),
     copied: t('copied'),
-    collapseAria: t('diff.collapseAria'),
-    expandAria: count => t('diff.expandAria', { count }),
-    collapse: t('collapse'),
-    expand: count => t('diff.expandRest', { count }),
     files: count => t(count === 1 ? 'diff.files.one' : 'diff.files.other', { count }),
   }
 }
