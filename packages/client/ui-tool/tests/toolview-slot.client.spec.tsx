@@ -213,15 +213,15 @@ describe('keyed toolview hole through the real machinery', () => {
     await b.runtime.dispose()
   })
 
-  it('file-path clicks travel owner openFile → chat inject → the right Sidebar', async () => {
+  it('file-path clicks travel owner openFile → chat inject → the Host by default', async () => {
     const b = await bench([toolResult(3, 'c1', 'read', '{"path":"src/a.ts"}')])
     const view = b.runtime.renderRoot()
     view.getByText('src/a.ts').click()
     await vi.waitFor(() => {
-      expect(b.sidebarRight.openResource).toHaveBeenCalledWith('dsh-resource://file/session/s1/src/a.ts')
+      expect(b.openWorkspacePath).toHaveBeenCalled()
     })
-    // Nothing on this path reaches the local machine any more.
-    expect(b.openWorkspacePath).not.toHaveBeenCalled()
+    // The Sidebar preview is opt-in, so the default target never reaches it.
+    expect(b.sidebarRight.openResource).not.toHaveBeenCalled()
     await b.runtime.dispose()
   })
 
