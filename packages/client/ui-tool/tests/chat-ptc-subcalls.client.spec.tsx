@@ -125,6 +125,7 @@ async function bench(snapshot: ChatSnapshot) {
   await runtime.sessions.retainFor(runtime.ctx, SID, { source: 'mainView' }).ready
   const openWorkspacePath = vi.fn(async () => ({ ok: true, value: { opened: true } }))
   ctx.provide('uiWorkspace', {} as never)
+  ctx.provide('sidebarRight', { openResource: vi.fn() } as never)
   runtime.remote.provideNamespaces({ session: { openWorkspacePath } })
   const locale = new LocaleRuntime(ctx)
   ctx.provide('locale', locale)
