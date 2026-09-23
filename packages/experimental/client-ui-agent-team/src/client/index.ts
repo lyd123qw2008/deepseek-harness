@@ -1,12 +1,11 @@
-/** Browser entry binding the generated Team Remote artifact to its Client UI. */
+/** Browser entry registering the Agent Teams conversation-header action. */
 
-import agentTeamsRemote from '@deepseek-ai/dsh-experimental-agent-team/remote'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { mountAgentTeamUi } from './mount.ts'
+import { registerAgentTeamUi } from './mount.ts'
 
 export { inject } from './mount.ts'
-export type { TeamActionInjected, TeamActionProps, TeamActionResult } from './TeamAction.tsx'
+export type { TeamActionInjected, TeamActionProps } from './TeamAction.tsx'
 export type { TeamKey } from './locales.ts'
 
 /** Browser-side Team UI configuration. */
@@ -25,13 +24,12 @@ export const Config: z<Config> = z.object({
 })
 
 /**
- * Mount the generated Team Remote contribution and its browser UI.
- * @param ctx - Client Context carrying navigation, locale, slot, and Remote services.
+ * Register the Team locale dictionaries and header action on the Client Context.
+ * @param ctx - Client Context with the declared `inject` services available.
  * @param config - optional preset allowlist for the visible Team action.
- * @returns disposer for both the UI registrations and the Remote namespace.
  */
-export async function apply(ctx: ClientContext, config: Config = {}): Promise<() => Promise<void>> {
+export function apply(ctx: ClientContext, config: Config = {}): void {
   // Static browser plugin activation does not carry Host Loader row config, so
   // the omitted default must still keep ordinary presets Team-free.
-  return await mountAgentTeamUi(ctx, agentTeamsRemote, config.enabledPresets)
+  registerAgentTeamUi(ctx, config.enabledPresets)
 }
