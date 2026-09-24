@@ -4,13 +4,13 @@
 #   pnpm run verify-translation-pairing --write packages/session/session-format-v0-to-v1/README.md
 /:
   en: 4ab6679a500310ef
-  zh: 26b95b9400580d46
+  zh: e5c99afe66c287a1
 /deepseek-ai-dsh-session-format-v0-to-v1:
   en: dff28f1741c3ef24
   zh: 3b4499f2e9838c21
 /deepseek-ai-dsh-session-format-v0-to-v1/summary:
-  en: e67a9a547320a867
-  zh: dc724ea9d6e0905e
+  en: be97fdb60fd79bcc
+  zh: 870d16aa41337826
 /deepseek-ai-dsh-session-format-v0-to-v1/table-of-contents:
   en: d152484eb41ac6b4
   zh: 09388d293f9be9cb
@@ -21,14 +21,14 @@
   en: 7e0ddf0932b414b4
   zh: 4bf4dd76d465e490
 /deepseek-ai-dsh-session-format-v0-to-v1/use-this-package/entry-point:
-  en: 12e0858e80044921
-  zh: 88b4e9709ce24d7d
+  en: af26f2e15c12aaf6
+  zh: f96ffbf0f88ab549
 /deepseek-ai-dsh-session-format-v0-to-v1/understand-the-implementation:
   en: c0cf5fae48838078
-  zh: 958edf61dabcbaba
+  zh: f84dcb428cea6a32
 /deepseek-ai-dsh-session-format-v0-to-v1/further-exploration:
   en: 88c912ab06b3a305
-  zh: 3cf1f3cfda3ae315
+  zh: 36b94087bf5dd5f5
 /deepseek-ai-dsh-session-format-v0-to-v1/model-experience:
   en: 215e7ba838619b7b
   zh: a311da3843709f90
@@ -45,8 +45,8 @@
   en: c78d21c5c83e5854
   zh: 95c8f1a6948b8b56
 /deepseek-ai-dsh-session-format-v0-to-v1/known-limitations-and-deferred-work:
-  en: 8398f2f0e7c7a6b2
-  zh: 73ec58c0ae513772
+  en: ff47afc22bbb6c9e
+  zh: e4f3a3079581d3d0
 /deepseek-ai-dsh-session-format-v0-to-v1/known-limitations-and-deferred-work/dev-note:
   en: e67f633dc6fe7773
   zh: 3bb0c20c93f16f98

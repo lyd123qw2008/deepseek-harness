@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-10-upgrade-web-launcher-generation.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-09-10-upgrade-web-launcher-generation.md
-2026-09-10-upgrade-web-launcher-generation.md: c23657d07c54ec44b4b8f82f29ee26d33b1ea8e2
-2026-09-10-upgrade-web-launcher-generation.zh.md: b91b9d4cb08cef9286352f9bd5fb67a499aa40cc
+/agent-note-generate-isolated-web-launchers-during-upgrades:
+  en: b03a9180bb0a0c0f
+  zh: cc74e1bf40d38e4e
+/agent-note-generate-isolated-web-launchers-during-upgrades/problem:
+  en: 95ea531a7d42ebe9
+  zh: 9da45940d6905905
+/agent-note-generate-isolated-web-launchers-during-upgrades/decision:
+  en: 2c2d9a1d5864a649
+  zh: fe08b85fd34f03e2
+/agent-note-generate-isolated-web-launchers-during-upgrades/alternatives-considered:
+  en: ca60c17d459422e5
+  zh: 1596a3fe563cb47e
+/agent-note-generate-isolated-web-launchers-during-upgrades/consequences:
+  en: fee22ac87f7ca10c
+  zh: fcbe1baf415420a7

@@ -22,6 +22,7 @@ The features are independent, and an upgrade must judge each on its own; a relea
 | Agent Team capability isolated by preset | Disables the standard delegation rows and mounts the Team tool row in the profile layer, so a deployment is either standard delegation or Team | Keeps the standard delegation rows as one-shot and installs the Team tool only inside the composition scope of the plugin, gated in the UI by preset id | 4 packages, 11 files |
 | MCP client connection scope | `transport`, `serverName`, `command`, `url` and reconnect tuning; one child for the instance, with a static `cwd` | Adds `scope: 'global' \| 'session-project'`; the session-project pool opens one child per Session whose `cwd` is that Session's project | 4 files |
 | Terminal card survives an invalid escalation pair | Requires a non-empty `justification` whenever `sandbox_permissions` is present, so a pair the Host accepts as redundant still hides the terminal card | Keeps the card for a settled successful call whose result text exists; every other malformed-field state stays generic | 1 source file, 1 test file |
+| Bash session cwd canonicalization | Uses the Session header's `cwd` verbatim as the base for a relative `workdir` | Canonicalizes it through `canonicalPath`, so a relative `workdir` resolves against the same root the policy stamps onto the call | 1 source file |
 | Flat Expanded transcript | Retired in `dsh-v0.1.7-rc.1`, which ships `verbose`: `foldCompletedTurns: false` with `stepGrouping: 'none'`, and legacy `expanded` reads as `standard` | No local file remains; the migration moves a saved `expanded` preference to `verbose` | — |
 
 ### Retired by dsh-v0.1.7-rc.1
@@ -34,6 +35,12 @@ A release can also retire a local deviation by shipping the behavior. Each retir
 | Office kit pinned to `0.0.2-rc6` with a WASM-on-Windows README note | Kit `^0.1.0` declares `libreoffice-kit-win32-x64`/`-arm64`, the declared-native-engine rule the platform-engine note already documents |
 | Hand-rolled authored-image-path resolver (`localPathMediaUrl` building `api/file?path=`) | Shared `fileMediaUrl`, which validates absolute POSIX and Windows paths and rejects UNC and control characters |
 | Explorer `/select,` invocation tolerating exit code 1 in `path-opener` | `explorerTarget` plus `runExplorer`, which also escape commas and equals signs for Explorer's command line |
+
+### Retired by dsh-v0.1.7-rc.2
+
+| Retired deviation | Released replacement |
+|---|---|
+| Redundant-escalation tolerance mirrored from `tool-bash` into `tool-pwsh` | The shared `approveEscalation` returns the effective mode when the requested mode equals it, so both shells accept a repeated pair through one implementation |
 
 ### Web diff card through a scroll viewport
 

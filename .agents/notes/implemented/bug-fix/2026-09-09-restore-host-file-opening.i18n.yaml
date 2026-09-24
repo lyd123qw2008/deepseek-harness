@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-09-restore-host-file-opening.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-09-restore-host-file-opening.md
-2026-09-09-restore-host-file-opening.md: c13086744bcb5a97133cc80566204a158f636402
-2026-09-09-restore-host-file-opening.zh.md: 1b97ff822afe78b679027f1785866de583ce4f7b
+/agent-note-restore-host-file-opening-in-web-chat:
+  en: aefc0f13dac28f4e
+  zh: aefc0f13dac28f4e
+/agent-note-restore-host-file-opening-in-web-chat/problem:
+  en: f7415e877147f6ca
+  zh: 41fadb3ceb6edb5e
+/agent-note-restore-host-file-opening-in-web-chat/decision:
+  en: 0d2bf4476a378713
+  zh: f2b998073c3bd961
+/agent-note-restore-host-file-opening-in-web-chat/alternatives-considered:
+  en: 1beabb7200ccda18
+  zh: 94a14e5ed2271f51
+/agent-note-restore-host-file-opening-in-web-chat/consequences:
+  en: 5dda772936847bc7
+  zh: 3ce339bd3cac5ba0
