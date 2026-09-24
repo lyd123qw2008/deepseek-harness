@@ -13,7 +13,7 @@ describe('Chat presentation policy', () => {
     ['compact', true, 'collapsed', false, false],
     ['standard', true, 'collapsed', true, true],
     ['detailed', true, 'history', true, true],
-    ['verbose', false, 'none', true, false],
+    ['verbose', false, 'none', true, true],
   ] as const)('maps %s to stable presentation capabilities', (mode, foldCompletedTurns, stepGrouping, settledReasoningPreview, liveProcessDetail) => {
     const policy = presentationPolicyFor(mode)
     expect(policy).toEqual({ mode, foldCompletedTurns, stepGrouping, settledReasoningPreview, liveProcessDetail })

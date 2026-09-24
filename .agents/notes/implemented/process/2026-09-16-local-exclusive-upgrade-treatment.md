@@ -6,13 +6,13 @@ English | [中文](2026-09-16-local-exclusive-upgrade-treatment.zh.md)
 
 ## Problem
 
-This checkout is a long-lived fork that tracks upstream releases while carrying its own behavioral changes. Three of those changes are not presentation tweaks: each replaces shipped behavior in a core package, and each is invisible to a released test suite because the tests that ship with a release describe the upstream design instead. A fourth is a Client eligibility rule rather than a core behavior: taking the released model reverts it with no error at runtime, and only the local spec that pins the rule fails. A code upgrade reconciles the two sides file by file, and every file on the local side is a place where taking the released version silently reverts a deliberate decision — or, where the released version kept a different contract, leaves a failing gate behind.
+This checkout is a long-lived fork that tracks upstream releases while carrying its own behavioral changes. Most of those changes are not presentation tweaks: each replaces shipped behavior in a core package, and each is invisible to a released test suite because the tests that ship with a release describe the upstream design instead. One is a Client eligibility rule rather than a core behavior: taking the released model reverts it with no error at runtime, and only the local spec that pins the rule fails. A code upgrade reconciles the two sides file by file, and every file on the local side is a place where taking the released version silently reverts a deliberate decision — or, where the released version kept a different contract, leaves a failing gate behind.
 
 The reconciliation has already gone wrong twice in one upgrade. The released contextual-diff block reached three files, and a first pass cleaned only one, leaving failing tests behind ([web diff card renders through a scroll viewport](../bug-fix/2026-09-15-web-diff-card-scroll-viewport.md)). And because the local `scope` key on the MCP client is an undeclared schema key rather than a rejected one, taking the released client degrades the connection model with no error at all. A per-upgrade reading of the diff cannot catch either: the decision and its boundary have to be recorded once, in one place, so the next upgrade starts from the inventory instead of from `git diff`.
 
 ## Decision
 
-This note is the inventory. It records the four features that a release upgrade must keep on the local side, what each one changes relative to upstream, and the files it owns. The `dsh-upgrade-environment` skill consults it when it reviews personal commits against a target tag; the per-feature Agent Notes own the reasoning, and this note owns the list and the ownership boundaries.
+This note is the inventory. It records the features that a release upgrade must keep on the local side, what each one changes relative to upstream, and the files it owns. The `dsh-upgrade-environment` skill consults it when it reviews personal commits against a target tag; the per-feature Agent Notes own the reasoning, and this note owns the list and the ownership boundaries.
 
 The features are independent, and an upgrade must judge each on its own; a released change that touches one says nothing about the others.
 
@@ -22,6 +22,7 @@ The features are independent, and an upgrade must judge each on its own; a relea
 | Agent Team capability isolated by preset | Disables the standard delegation rows and mounts the Team tool row in the profile layer, so a deployment is either standard delegation or Team | Keeps the standard delegation rows as one-shot and installs the Team tool only inside the composition scope of the plugin, gated in the UI by preset id | 4 packages, 11 files |
 | MCP client connection scope | `transport`, `serverName`, `command`, `url` and reconnect tuning; one child for the instance, with a static `cwd` | Adds `scope: 'global' \| 'session-project'`; the session-project pool opens one child per Session whose `cwd` is that Session's project | 4 files |
 | Terminal card survives an invalid escalation pair | Requires a non-empty `justification` whenever `sandbox_permissions` is present, so a pair the Host accepts as redundant still hides the terminal card | Keeps the card for a settled successful call whose result text exists; every other malformed-field state stays generic | 1 source file, 1 test file |
+| Live process detail in `verbose` | Withholds it (`verbose.liveProcessDetail: false`), so a running process group shows no live task detail | Keeps it, so a running group's header carries its live task detail | 1 source file, 1 test file |
 | Flat Expanded transcript | Retired in `dsh-v0.1.7-rc.1`, which ships `verbose`: `foldCompletedTurns: false` with `stepGrouping: 'none'`, and legacy `expanded` reads as `standard` | No local file remains; the migration moves a saved `expanded` preference to `verbose` | — |
 
 ### Retired by dsh-v0.1.7-rc.1
@@ -90,6 +91,7 @@ The signals that a feature needs re-examination rather than a default keep:
 - **MCP client**: upstream adds a `scope` key or any other per-Session connection selection. A same-named key is not automatically the same concept: upstream's `scopeOf(ctx)` is plugin-registration scope, while `session-project` is a binding between a child process and a Session's project.
 - **Terminal card**: upstream lets a settled successful shell card outlive a failed optional escalation pair, changes `terminalCardModel`'s eligibility signature, or introduces a Client-side redundancy notion. Adopting the strict check again also means rewriting the two local cases that pin the tolerance.
 - **Retired deviations**: a release that changes the released replacement's contract puts the deviation back on the table — for `verbose`, that means any return of the whole-Turn fold or of a grouped historical header.
+- **Live process detail in `verbose`**: upstream changes how `liveProcessDetail` gates a running group's detail, or ships `verbose` with the detail enabled again; dropping the override is then the one-line revert plus the spec row.
 
 A released test file is not evidence that the local behavior is wrong. Where a released test pins a design this inventory declines, the local side owns the test file too.
 
@@ -105,7 +107,7 @@ A released test file is not evidence that the local behavior is wrong. Where a r
 
 ## Consequences
 
-An upgrade reads this note before reconciling, and its outcome per feature is recorded rather than rediscovered. The cost is that four upstream areas cannot be taken as-is, so a release that heavily rewrites one of them turns into a merge rather than a checkout; the checkpoints above keep that merge scoped by naming what has to be re-judged.
+An upgrade reads this note before reconciling, and its outcome per feature is recorded rather than rediscovered. The cost is that several upstream areas cannot be taken as-is, so a release that heavily rewrites one of them turns into a merge rather than a checkout; the checkpoints above keep that merge scoped by naming what has to be re-judged.
 
 Every entry here is a reason to prefer contributing upstream over carrying a fork: the MCP connection scope and the per-preset Team boundary are general needs, not local preferences, and a released implementation would remove both the patch and this inventory. The diff card is a genuine local preference, and the escalation tolerance is a Client strictness fix that belongs upstream as well.
 
