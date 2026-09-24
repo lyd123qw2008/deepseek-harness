@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-02-bounded-session-query-fingerprints.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-02-bounded-session-query-fingerprints.md
-2026-09-02-bounded-session-query-fingerprints.md: 68664bb3a42144944ab977890d23c071c024e1a0
-2026-09-02-bounded-session-query-fingerprints.zh.md: 7ff2c7bfce1e411c3317e5cb3b80efc2d8d4856d
+/agent-note-bounded-session-query-fingerprints:
+  en: c3088168f11f1703
+  zh: 2dd4defa371ea605
+/agent-note-bounded-session-query-fingerprints/problem:
+  en: 41c08b5248c10eb6
+  zh: c494fbd6caac4c38
+/agent-note-bounded-session-query-fingerprints/decision:
+  en: bc9f672f4d16482e
+  zh: f448dc4ae1c08754
+/agent-note-bounded-session-query-fingerprints/testing:
+  en: 6d3bca4f7fdb9483
+  zh: aa0336ef43bb4c5e
+/agent-note-bounded-session-query-fingerprints/alternatives-considered:
+  en: 4e1cbbdfa2b2914b
+  zh: 9d68943358b1a312
+/agent-note-bounded-session-query-fingerprints/consequences:
+  en: 857d4c7852544455
+  zh: df96b3b810106553

@@ -22,6 +22,7 @@ Status: implemented
 | Agent Team 能力按 preset 隔离 | 关闭标准委派行并在 profile 层挂载 Team 工具行，因此一个部署要么是标准委派、要么是 Team | 保留标准委派行并置为 one-shot，只在插件自身的 composition scope 内安装 Team 工具，并在 UI 层按 preset id 门控 | 4 个包、11 个文件 |
 | MCP 客户端连接作用域 | `transport`、`serverName`、`command`、`url` 与重连调优；每个实例一个子进程，`cwd` 为静态值 | 新增 `scope: 'global' \| 'session-project'`；session-project 池为每个 Session 打开一个子进程，其 `cwd` 即该 Session 的项目 | 4 个文件 |
 | Terminal 卡片容忍畸形的升权字段 | 只要存在 `sandbox_permissions` 就要求 `justification` 非空，因此 Host 以冗余为由接受的字段配对仍会隐藏 terminal 卡片 | 已结算且成功的调用只要结果文本存在就保留卡片；其余畸形字段状态仍走通用路径 | 1 个源码文件、1 个测试文件 |
+| bash 会话 cwd 规范化 | 直接使用 Session header 的 `cwd` 作为相对 `workdir` 的基准 | 通过 `canonicalPath` 规范化，使相对 `workdir` 与策略为本次调用加盖的 workspace 根一致 | 1 个源码文件 |
 | 完全展开模式平铺对话 | 已由 `dsh-v0.1.7-rc.1` 取代：该版本提供 `verbose`（`foldCompletedTurns: false` 且 `stepGrouping: 'none'`），旧值 `expanded` 读取为 `standard` | 不再保留本地文件；迁移把已保存的 `expanded` 偏好改为 `verbose` | — |
 
 ### 由 dsh-v0.1.7-rc.1 取代的偏差
@@ -34,6 +35,12 @@ Status: implemented
 | Office kit 固定 `0.0.2-rc6` 并附 Windows 使用 WASM 的 README 说明 | kit `^0.1.0` 声明 `libreoffice-kit-win32-x64`/`-arm64`，符合平台引擎决策中既有的“按声明的原生引擎”规则 |
 | 手写的作者图片路径解析（`localPathMediaUrl` 自行拼 `api/file?path=`） | 共享的 `fileMediaUrl`：校验 POSIX 与 Windows 绝对路径，拒绝 UNC 与控制字符 |
 | `path-opener` 中容忍 Explorer 退出码 1 的 `/select,` 调用 | `explorerTarget` 配合 `runExplorer`，并为 Explorer 命令行转义逗号与等号 |
+
+### 由 dsh-v0.1.7-rc.2 取代的偏差
+
+| 已退役偏差 | 发布版替代实现 |
+|---|---|
+| 从 `tool-bash` 镜像到 `tool-pwsh` 的冗余升权容忍 | 共享的 `approveEscalation` 在请求模式与生效模式相同时直接返回生效模式，两个 shell 因此共用同一份实现 |
 
 ### Web diff 卡片通过滚动视口
 

@@ -1164,7 +1164,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-experimental-tool-agent-team`
 
 - `inject`: `agents` · `agentTeams` · `tools` · `systemPrompt`
-- `source`: [`packages/experimental/tool-agent-team/src/index.ts:17`](../packages/experimental/tool-agent-team/src/index.ts)
+- `source`: [`packages/experimental/tool-agent-team/src/index.ts:18`](../packages/experimental/tool-agent-team/src/index.ts)
 
 ```ts config-catalog
 /** Tool routing configuration. */
@@ -1856,7 +1856,7 @@ export type PiAiThinkingTokenBudgetField = NonNullable<OpenAICompletionsCompat['
 
 - `inject`: `llm`
 - `refs`: [`ModelModality`](../packages/llm/llm/src/index.ts) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · [`SystemPromptUpdate`](../packages/llm/llm/src/index.ts) · [`ToolUpdate`](../packages/llm/llm/src/index.ts)
-- `source`: [`packages/test-support/llm-replay/src/index.ts:1129`](../packages/test-support/llm-replay/src/index.ts)
+- `source`: [`packages/test-support/llm-replay/src/index.ts:1135`](../packages/test-support/llm-replay/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config: the {@link ReplayConfig} inputs, each defaulting to its `DSH_SNAPSHOT_*` env var in `apply`. */
@@ -1993,7 +1993,7 @@ export interface LspLocalServerConfig {
 ## `@deepseek-ai/dsh-mcp-client`
 
 - `inject`: `tools`
-- `source`: [`packages/mcp/mcp-client/src/index.ts:104`](../packages/mcp/mcp-client/src/index.ts)
+- `source`: [`packages/mcp/mcp-client/src/index.ts:110`](../packages/mcp/mcp-client/src/index.ts)
 
 ```ts config-catalog
 /** Configuration for one stdio or Streamable HTTP MCP server. */
@@ -2017,6 +2017,11 @@ export interface StdioConfig {
   env: Record<string, string>
   /** Working directory for the child process. */
   cwd: string
+  /**
+   * Connection scope. `global` preserves one child; `session-project` creates
+   * one child per DSH Session cwd while keeping the public tool names stable.
+   */
+  scope?: 'global' | 'session-project'
   /** Timeout per tool call or resource request in milliseconds. */
   toolCallTimeoutMs: number
   /** Fail plugin activation when the initial connection or tool synchronization fails. */
@@ -2832,7 +2837,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-skill-filesystem`
 
 - `inject`: `skills`
-- `source`: [`packages/skill/skill-filesystem/src/index.ts:49`](../packages/skill/skill-filesystem/src/index.ts)
+- `source`: [`packages/skill/skill-filesystem/src/index.ts:56`](../packages/skill/skill-filesystem/src/index.ts)
 
 ```ts config-catalog
 /** Local filesystem skill provider configuration. */
@@ -2859,6 +2864,12 @@ export interface Config {
   watchMaxProjects?: number
   /** Whether watched symbolic links follow their target files. */
   watchFollowSymlinks?: boolean
+  /** Maximum native `rename` events from one watched directory per burst window; zero disables Windows burst recovery. */
+  watchNativeBurstLimit?: number
+  /** Milliseconds over which native `rename` events are counted for burst recovery. */
+  watchNativeBurstWindowMs?: number
+  /** Milliseconds to wait before reopening a watcher paused by a native event burst. */
+  watchNativeRecoveryMs?: number
   /** Bundled skill root; defaults to `$DSH_BUNDLED_SKILL_DIR` when default roots are included, otherwise mounts none. */
   bundledSkillDir?: string
 }
