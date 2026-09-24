@@ -108,7 +108,12 @@ A launcher check fails when a required file is missing, differs from the target 
 5. Restore Engram from a consistent SQLite snapshot, then run its doctor and project/observation queries. Preserve project names and observations. A healthy SQLite file is not proof that the user's Engram records survived.
 6. Reinstall Profile dependencies in the target Profile. Apply only release-specific configuration adaptations after the copy-time audit. Keep `.credentials.yaml`, `.anonymous-user-id`, API keys, bearer tokens, `.env` files, npm tokens, and other machine identity isolated unless the user explicitly authorizes a redacted transfer.
 7. Run the launcher check, then start only the target compiled application on the target port. Validate the landing page, authenticated API, Session listing/page/search, long-session pagination, attachments, tool views, child Sessions, settings, and the required user workflow. Record target-generated Sessions and logs after the copy-time checksum point; they are not copy-time losses.
-8. Run the validator again after migration and smoke tests:
+8. Finish with the incremental Session delta whenever the Session that served the copy kept growing, or whenever a step above ran after the target instance had already loaded those Sessions. The [Session migration skill](../dsh-session-migration/SKILL.md) owns that wrap-up: it re-syncs the generations, attachments, projection cache, and derived indexes, verifies them with the product's frame decoder, and restarts the target instance because a running instance never re-reads a Session it already holds in memory.
+
+   ```sh
+   corepack pnpm run migrate:session-increment -- --source <source-home> --target <target-home> --session <session-id> --restart <target-port>
+   ```
+9. Run the validator again after migration and smoke tests:
 
    ```sh
    corepack pnpm run verify-upgrade-environment --source <source-home> --target <target-home> --phase post-migration
