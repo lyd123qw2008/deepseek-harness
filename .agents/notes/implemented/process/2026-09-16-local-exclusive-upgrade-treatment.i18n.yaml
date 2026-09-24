@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-09-16-local-exclusive-upgrade-treatment.md
-2026-09-16-local-exclusive-upgrade-treatment.md: 5ef7e836c3d11227a3b88fef16cb9debbcd9fc8b
-2026-09-16-local-exclusive-upgrade-treatment.zh.md: b074de4a683911371ddd1bb140e74274e3f2dff6
+2026-09-16-local-exclusive-upgrade-treatment.md: 7b01be86ee564205594400008c891320512f2813
+2026-09-16-local-exclusive-upgrade-treatment.zh.md: b158911de9a19f8a990f691637ad7d8bce902916
