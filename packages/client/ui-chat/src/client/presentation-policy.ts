@@ -47,9 +47,7 @@ const POLICIES: Readonly<Record<TranscriptViewMode, ChatPresentationPolicy>> = {
     mode: 'verbose',
     foldCompletedTurns: false,
     stepGrouping: 'none',
-    // Local deviation: the released `verbose` withholds live detail, and this
-    // deployment keeps the running row's live task detail visible.
-    liveProcessDetail: true,
+    liveProcessDetail: false,
     settledReasoningPreview: true,
   },
 }

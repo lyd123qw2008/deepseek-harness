@@ -22,7 +22,6 @@ The features are independent, and an upgrade must judge each on its own; a relea
 | Agent Team capability isolated by preset | Disables the standard delegation rows and mounts the Team tool row in the profile layer, so a deployment is either standard delegation or Team | Keeps the standard delegation rows as one-shot and installs the Team tool only inside the composition scope of the plugin, gated in the UI by preset id | 4 packages, 11 files |
 | MCP client connection scope | `transport`, `serverName`, `command`, `url` and reconnect tuning; one child for the instance, with a static `cwd` | Adds `scope: 'global' \| 'session-project'`; the session-project pool opens one child per Session whose `cwd` is that Session's project | 4 files |
 | Terminal card survives an invalid escalation pair | Requires a non-empty `justification` whenever `sandbox_permissions` is present, so a pair the Host accepts as redundant still hides the terminal card | Keeps the card for a settled successful call whose result text exists; every other malformed-field state stays generic | 1 source file, 1 test file |
-| Live process detail in `verbose` | Withholds it (`verbose.liveProcessDetail: false`), so a running process group shows no live task detail | Keeps it, so a running group's header carries its live task detail | 1 source file, 1 test file |
 | Flat Expanded transcript | Retired in `dsh-v0.1.7-rc.1`, which ships `verbose`: `foldCompletedTurns: false` with `stepGrouping: 'none'`, and legacy `expanded` reads as `standard` | No local file remains; the migration moves a saved `expanded` preference to `verbose` | — |
 
 ### Retired by dsh-v0.1.7-rc.1
@@ -91,7 +90,6 @@ The signals that a feature needs re-examination rather than a default keep:
 - **MCP client**: upstream adds a `scope` key or any other per-Session connection selection. A same-named key is not automatically the same concept: upstream's `scopeOf(ctx)` is plugin-registration scope, while `session-project` is a binding between a child process and a Session's project.
 - **Terminal card**: upstream lets a settled successful shell card outlive a failed optional escalation pair, changes `terminalCardModel`'s eligibility signature, or introduces a Client-side redundancy notion. Adopting the strict check again also means rewriting the two local cases that pin the tolerance.
 - **Retired deviations**: a release that changes the released replacement's contract puts the deviation back on the table — for `verbose`, that means any return of the whole-Turn fold or of a grouped historical header.
-- **Live process detail in `verbose`**: upstream changes how `liveProcessDetail` gates a running group's detail, or ships `verbose` with the detail enabled again; dropping the override is then the one-line revert plus the spec row.
 
 A released test file is not evidence that the local behavior is wrong. Where a released test pins a design this inventory declines, the local side owns the test file too.
 
