@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-02-codex-tool-schema-strictness.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-02-codex-tool-schema-strictness.md
-2026-09-02-codex-tool-schema-strictness.md: a424485c8f168d971ce0fd5493f0c06ce4482fc4
-2026-09-02-codex-tool-schema-strictness.zh.md: b8a57d7819d31603ba21850975f573e3965491b3
+/agent-note-codex-tool-schemas-use-explicit-non-strict-sampling:
+  en: edcd91200b12ffbc
+  zh: 718bf69e22e4a5d0
+/agent-note-codex-tool-schemas-use-explicit-non-strict-sampling/problem:
+  en: 2d935e4524ede590
+  zh: bbb92249e1fce6ef
+/agent-note-codex-tool-schemas-use-explicit-non-strict-sampling/decision:
+  en: 20ef90897c7fc166
+  zh: 31f4ae95c71aa6d2
+/agent-note-codex-tool-schemas-use-explicit-non-strict-sampling/alternatives-considered:
+  en: 93823bf4f35b9b37
+  zh: 753c4a48d2edd15a
+/agent-note-codex-tool-schemas-use-explicit-non-strict-sampling/testing:
+  en: 09d6805f9a5a52ea
+  zh: 1db9395278a9096a
+/agent-note-codex-tool-schemas-use-explicit-non-strict-sampling/consequences:
+  en: e3d1d62c14135313
+  zh: 76b6bf5feb9dbc99

@@ -3,14 +3,14 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/experimental/agent-team-profile/README.md
 /:
-  en: e263a0edd266210f
-  zh: c5779bf7f64631d3
+  en: 06fd7c8927a5cc5a
+  zh: 5d918ffd19beb137
 /deepseek-ai-dsh-experimental-agent-team-profile:
   en: 3deb4b95d9e58c8d
   zh: 0ba043a54428445e
 /deepseek-ai-dsh-experimental-agent-team-profile/summary:
-  en: 3ca34df3ee31841d
-  zh: a413140d89be2d05
+  en: dd3f2a81c7d5025b
+  zh: c3cb24ee7edcbe96
 /deepseek-ai-dsh-experimental-agent-team-profile/table-of-contents:
   en: d152484eb41ac6b4
   zh: 09388d293f9be9cb
@@ -18,17 +18,17 @@
   en: bbff250eba0f1b89
   zh: 0a618f05cc88ee2b
 /deepseek-ai-dsh-experimental-agent-team-profile/use-this-package/install-into-a-profile:
-  en: 97ef5916c04bf2a1
-  zh: 51f9d2bc3fca7936
+  en: ab4dce50ec775b17
+  zh: d58c62c8201bde66
 /deepseek-ai-dsh-experimental-agent-team-profile/use-this-package/what-you-get:
-  en: f0e95e60095fc5cb
-  zh: 8c36603b423475d0
+  en: 77a36b4bac7c9ad1
+  zh: dde895a9014689e9
 /deepseek-ai-dsh-experimental-agent-team-profile/understand-the-implementation:
-  en: dbfca16ca57c0723
-  zh: 38ccf89793e21f68
+  en: 811028caedda1cbb
+  zh: e2b4d116b6cedc35
 /deepseek-ai-dsh-experimental-agent-team-profile/further-exploration:
-  en: 76e92afc23c0ec7c
-  zh: 7bd671bd557a91ee
+  en: 17a7146c0e0f2ccf
+  zh: 46675f215ce5de20
 /deepseek-ai-dsh-experimental-agent-team-profile/model-experience:
   en: 215e7ba838619b7b
   zh: a311da3843709f90
@@ -36,17 +36,17 @@
   en: 8e1e365ff3b0dfb2
   zh: c6c91fbf1e1df934
 /deepseek-ai-dsh-experimental-agent-team-profile/model-experience/team-policy-and-tools/what-the-model-sees:
-  en: f54dc1725b90365b
-  zh: 5a505996f7684231
+  en: 4990a2cb468d7489
+  zh: 78d2564061a5999f
 /deepseek-ai-dsh-experimental-agent-team-profile/model-experience/team-policy-and-tools/token-effect:
-  en: da8c178179ba50ba
-  zh: c53d5863bc14be79
+  en: 7705dbfeaa2fc88b
+  zh: cef7e4acf239473c
 /deepseek-ai-dsh-experimental-agent-team-profile/model-experience/team-policy-and-tools/kv-cache-effect:
   en: e331337b094aacde
   zh: bb2e5df5ebeb9305
 /deepseek-ai-dsh-experimental-agent-team-profile/known-limitations-and-deferred-work:
-  en: 0413821c2fc20bea
-  zh: 53e135425dd82e12
+  en: 3f0a0358d9e97902
+  zh: d6486b401a1b544e
 /deepseek-ai-dsh-experimental-agent-team-profile/known-limitations-and-deferred-work/dev-note:
   en: e67f633dc6fe7773
   zh: 3bb0c20c93f16f98
