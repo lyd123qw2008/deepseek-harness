@@ -207,7 +207,11 @@ function compareSession(
     const to = join(targetRoot, file)
     const source = readGeneration(from, zstd)
     const target = readGeneration(to, zstd)
-    const identical = source !== undefined && target !== undefined && hash(from) === hash(to)
+    // A generation both homes lack is simply not part of this Session's history,
+    // so it is not a difference; one side only is a real gap.
+    const identical = source === undefined && target === undefined
+      ? true
+      : source !== undefined && target !== undefined && hash(from) === hash(to)
     return { file, ...(source === undefined ? {} : { source }), ...(target === undefined ? {} : { target }), identical }
   })
 }
@@ -306,22 +310,36 @@ function readUserEnvironment(): Record<string, string | undefined> {
 }
 
 /**
- * Stop and start one target instance so it reloads its Sessions from disk.
+ * Stop one target instance through its generated launcher.
+ *
+ * The index refresh replaces SQLite files, and a running instance holds them
+ * open, so the instance stops before any copy and restarts after them.
+ * @param home - target data home holding the launchers.
+ * @param port - instance port.
+ */
+function stopInstance(home: string, port: number): void {
+  if (process.platform !== 'win32') throw new Error('--restart currently supports the Windows launchers only')
+  const stop = join(home, `stop-web-${String(port)}.cmd`)
+  if (!existsSync(stop)) throw new Error(`no stop launcher for port ${String(port)} in ${home}`)
+  spawnSync('cmd.exe', ['/c', stop], { stdio: 'ignore' })
+}
+
+/**
+ * Start one target instance so it reloads its Sessions from disk, and wait for
+ * the URL it prints.
  *
  * A running instance keeps every loaded Session in memory, so replacing its log
  * files changes nothing until the process restarts.
  * @param home - target data home holding the launchers.
  * @param port - instance port.
- * @returns the URL the restarted instance printed.
+ * @returns the URL the started instance printed.
  */
-async function restartInstance(home: string, port: number): Promise<string> {
+async function startInstance(home: string, port: number): Promise<string> {
   if (process.platform !== 'win32') throw new Error('--restart currently supports the Windows launchers only')
-  const stop = join(home, `stop-web-${String(port)}.cmd`)
   const start = join(home, `start-web-${String(port)}.cmd`)
-  if (!existsSync(stop) || !existsSync(start)) throw new Error(`no launchers for port ${String(port)} in ${home}`)
+  if (!existsSync(start)) throw new Error(`no start launcher for port ${String(port)} in ${home}`)
   const log = join(home, 'logs', `web-${String(port)}.log`)
   const before = existsSync(log) ? statSync(log).mtimeMs : 0
-  spawnSync('cmd.exe', ['/c', stop], { stdio: 'ignore' })
   const environment: NodeJS.ProcessEnv = { ...process.env }
   for (const [key, value] of Object.entries(readUserEnvironment())) {
     if (SYSTEM_ENVIRONMENT.has(key) || value === undefined) continue
@@ -403,6 +421,13 @@ async function main(): Promise<void> {
   if (selected.length === 0) throw new Error('no Session matched the source home and --session filters')
 
   const copy = !values.check
+  const restartPort = values.restart === undefined ? undefined : Number(values.restart)
+  if (restartPort !== undefined && !Number.isInteger(restartPort)) throw new Error('--restart must be a port number')
+  if (restartPort !== undefined && values.check) throw new Error('--check and --restart are mutually exclusive')
+  // The index refresh replaces SQLite files the running instance holds open, and
+  // a running instance never re-reads a Session it already loaded, so the target
+  // stops before the copy and starts again after it.
+  if (restartPort !== undefined) stopInstance(target, restartPort)
   const report: MigrationReport = {
     source,
     target,
@@ -426,11 +451,7 @@ async function main(): Promise<void> {
     }
     report.indexes = written
   }
-  if (values.restart !== undefined) {
-    const port = Number(values.restart)
-    if (!Number.isInteger(port)) throw new Error('--restart must be a port number')
-    report.restarted = { port, url: await restartInstance(target, port) }
-  }
+  if (restartPort !== undefined) report.restarted = { port: restartPort, url: await startInstance(target, restartPort) }
 
   const behind = report.sessions.filter(session => !session.identical)
   if (values.json) console.log(JSON.stringify(report, null, 2))
@@ -454,9 +475,17 @@ async function main(): Promise<void> {
     if (report.restarted !== undefined) {
       console.log(`  restarted port ${String(report.restarted.port)}: ${report.restarted.url}`)
     }
-    console.log(behind.length === 0
-      ? 'all generations byte-identical'
-      : `${String(behind.length)} Session(s) still differ (the source home is live): ${behind.map(s => s.session).join(', ')}`)
+    if (behind.length === 0) console.log('all generations byte-identical')
+    else {
+      const shown = behind.slice(0, 5).map(session => session.session).join(', ')
+      const more = behind.length > 5 ? `, +${String(behind.length - 5)} more` : ''
+      console.log(`${String(behind.length)} Session(s) still differ (the source home is live): ${shown}${more}`)
+      // The source grows while this runs, so name the generations that differ.
+      for (const session of behind.slice(0, 5)) {
+        const files = session.generations.filter(generation => !generation.identical).map(generation => generation.file)
+        console.log(`  ${session.session}: ${files.join(', ')}`)
+      }
+    }
   }
   if (values.check && behind.length > 0) process.exitCode = 1
 }
