@@ -1,6 +1,43 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-16-local-exclusive-upgrade-treatment.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-09-16-local-exclusive-upgrade-treatment.md
-2026-09-16-local-exclusive-upgrade-treatment.md: 7b01be86ee564205594400008c891320512f2813
-2026-09-16-local-exclusive-upgrade-treatment.zh.md: b158911de9a19f8a990f691637ad7d8bce902916
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment:
+  en: f92bc7a8b28032a6
+  zh: 38a548cba81189f3
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/problem:
+  en: 6f5a1a5758095bb9
+  zh: 49184d9300caad4d
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/decision:
+  en: cd69a70b1da385a3
+  zh: 66a3a5d4aeeb5896
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/decision/retired-by-dsh-v0-1-7-rc-1:
+  en: f5e5fbe343fe6333
+  zh: 15817c8f379571c5
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/decision/retired-by-dsh-v0-1-7-rc-2:
+  en: ca8fa651e87db1d1
+  zh: ff00259ce0f94257
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/decision/web-diff-card-through-a-scroll-viewport:
+  en: 13c13d7760c8e225
+  zh: 27260cbf377213e6
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/decision/agent-team-capability-isolated-by-preset:
+  en: 350aaff22ba64591
+  zh: 52d7931f1d7ddef9
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/decision/mcp-client-connection-scope:
+  en: fa4920fa28b410db
+  zh: 02f4a749792a68c1
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/decision/terminal-card-survives-an-invalid-escalation-pair:
+  en: b79a1c2ae11b647d
+  zh: b1f1370997ac129f
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/upgrade-checkpoints:
+  en: d5711d4f56ba83bc
+  zh: a269a70c68e88b6f
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/alternatives-considered:
+  en: d9312fa32cc8c946
+  zh: 542472625e0c0c97
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/consequences:
+  en: f278b396e66043de
+  zh: 693240819903c748
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/related:
+  en: 08f1c2aff4c41c29
+  zh: 3c249e06cd57d034

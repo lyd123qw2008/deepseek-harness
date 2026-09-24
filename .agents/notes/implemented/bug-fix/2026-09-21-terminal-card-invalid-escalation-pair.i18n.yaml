@@ -1,6 +1,25 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-21-terminal-card-invalid-escalation-pair.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-21-terminal-card-invalid-escalation-pair.md
-2026-09-21-terminal-card-invalid-escalation-pair.md: 7c27f0140b2a28f82508bfaf2b3ed2bb6bd7a4b7
-2026-09-21-terminal-card-invalid-escalation-pair.zh.md: 8991998da6d70da4e1b2d55bc240ca0ce9730062
+/agent-note-terminal-card-survives-an-invalid-escalation-pair:
+  en: e0cfc84e99266221
+  zh: a3b29896542bb217
+/agent-note-terminal-card-survives-an-invalid-escalation-pair/problem:
+  en: ef104cb233c41188
+  zh: aeb280992a7b2605
+/agent-note-terminal-card-survives-an-invalid-escalation-pair/decision:
+  en: 6bb995cba8d25b14
+  zh: d25d931874a9ebd1
+/agent-note-terminal-card-survives-an-invalid-escalation-pair/alternatives-considered:
+  en: fedbce24572c49b4
+  zh: 6392a62e4e920eb2
+/agent-note-terminal-card-survives-an-invalid-escalation-pair/consequences:
+  en: 7355d0c98ee090f4
+  zh: 62788f2084ede8e1
+/agent-note-terminal-card-survives-an-invalid-escalation-pair/verification:
+  en: ef063ab3bd350e19
+  zh: ac50016fde75c4af
+/agent-note-terminal-card-survives-an-invalid-escalation-pair/related:
+  en: 803f0648485c9ade
+  zh: 78d4dd783d31b242

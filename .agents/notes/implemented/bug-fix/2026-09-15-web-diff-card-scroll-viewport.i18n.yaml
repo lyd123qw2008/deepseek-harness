@@ -1,6 +1,28 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-15-web-diff-card-scroll-viewport.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-15-web-diff-card-scroll-viewport.md
-2026-09-15-web-diff-card-scroll-viewport.md: 199467b61f83d0775ae7f72d67088998b764af75
-2026-09-15-web-diff-card-scroll-viewport.zh.md: de73b70c6d19571e97e028fd00fbc3bc8804a4ab
+/agent-note-web-diff-card-renders-through-a-scroll-viewport:
+  en: 23803d5e45627599
+  zh: 14246a95b1570204
+/agent-note-web-diff-card-renders-through-a-scroll-viewport/problem:
+  en: 8ed911222d94c9bd
+  zh: fb27ac38a7bd1b87
+/agent-note-web-diff-card-renders-through-a-scroll-viewport/decision:
+  en: 481f7fe9b1659f2b
+  zh: fd22fd28c03ae8b5
+/agent-note-web-diff-card-renders-through-a-scroll-viewport/alternatives-considered:
+  en: 6ae0eaba1f3319c2
+  zh: 732d949a38192cff
+/agent-note-web-diff-card-renders-through-a-scroll-viewport/measurement:
+  en: 21347476644a9ebb
+  zh: 387795a12fe9b824
+/agent-note-web-diff-card-renders-through-a-scroll-viewport/testing:
+  en: 63bbc066f40cdc6b
+  zh: c0289e2c58c49c0b
+/agent-note-web-diff-card-renders-through-a-scroll-viewport/consequences:
+  en: 38a7781558b11517
+  zh: 79f124cb2371f6d9
+/agent-note-web-diff-card-renders-through-a-scroll-viewport/related:
+  en: 33fa128154a088e6
+  zh: 500cd236be4c6a73
