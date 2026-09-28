@@ -38,6 +38,18 @@ describe('upgrade Web launchers', () => {
     expect(existsSync(join(options.dataHome, 'start-web-3089.cmd'))).toBe(true)
   })
 
+  it('decodes native child output as UTF-8 so the log keeps its check marks and CJK text', () => {
+    const options = fixture()
+
+    writeWebLaunchers(options)
+
+    // Windows PowerShell 5.1 otherwise decodes a native command's stdout with the
+    // console code page, which turns the UTF-8 a provider or MCP child prints into
+    // mojibake in the mirrored log.
+    const run = readFileSync(join(options.dataHome, 'run-web-3089.ps1'), 'utf8')
+    expect(run).toContain('[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)')
+  })
+
   it('renders legacy TLS setup when the target data home carries its config', () => {
     const options = fixture()
     writeFileSync(join(options.dataHome, 'openssl-legacy.cnf'), 'legacy')
