@@ -309,10 +309,11 @@ describe('ToolRow', () => {
         newText: 'start\nsecond\nthird\nnew\nfourth\nfifth\nend',
       }] },
     }} />)
-    expect(view.getByText('+1 -1')).toBeTruthy()
+    expect(view.container.querySelector('[data-disclosure-row]')?.textContent).toContain('+1 -1')
     expect(view.container.querySelector('[data-diff]')).toBeNull()
     fireEvent.click(view.getByRole('button'))
-    expect(view.getByText(/└ \+1 -1/)).toBeTruthy()
+    expect(view.getAllByText('+1')).toHaveLength(1)
+    expect(view.getAllByText('-1')).toHaveLength(1)
     // Each unchanged segment contributes only the line nearest the change, so the
     // outer `start`/`end` rows never reach the card and the totals stay +1 -1.
     expect(view.getByText('third')).toBeTruthy()

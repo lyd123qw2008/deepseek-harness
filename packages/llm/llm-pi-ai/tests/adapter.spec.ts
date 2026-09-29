@@ -14,6 +14,7 @@ import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { stream as codexResponsesStream } from '@earendil-works/pi-ai/api/openai-codex-responses'
+import { normalizeContext } from '@earendil-works/pi-ai/utils/transcript'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { DEFAULT_MAX_REQUEST_IMAGE_BYTES, resolveProfiles } from '../src/config.ts'
 import { memoryAuth } from './auth-double.ts'
@@ -261,7 +262,7 @@ describe('PiAiAdapter provider routing', () => {
     let payload: unknown
     const stream = codexResponsesStream(
       { ...model, baseUrl: 'https://example.invalid' },
-      { messages: [], tools: [tool] },
+      normalizeContext({ messages: [], tools: [tool] }),
       {
         apiKey: `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'test-account' } })).toString('base64url')}.signature`,
         onPayload: (body) => {
@@ -286,18 +287,16 @@ describe('PiAiAdapter provider routing', () => {
     let deferredPayload: unknown
     const deferredStream = codexResponsesStream(
       { ...model, baseUrl: 'https://example.invalid' },
-      {
-        messages: [{
-          role: 'toolResult',
-          toolCallId: 'load-tool',
-          toolName: 'tool-loader',
-          content: [{ type: 'text', text: 'loaded' }],
-          addedToolNames: ['session_search'],
-          isError: false,
-          timestamp: 0,
-        }],
-        tools: [tool],
-      },
+      // 0.87 declares a tool that becomes available mid-transcript through a LATER system message
+      // carrying `toolsAdded`; the leading message is the base prompt, so this is the deferred
+      // placement, whose conversion takes the shared `toolOptions`.
+      normalizeContext({
+        messages: [
+          { role: 'system', content: 'base', timestamp: 0 },
+          { role: 'user', content: 'hi', timestamp: 1 },
+          { role: 'system', content: 'loaded', toolsAdded: [tool], timestamp: 2 },
+        ],
+      }),
       {
         apiKey: `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'test-account' } })).toString('base64url')}.signature`,
         onPayload: (body) => {
