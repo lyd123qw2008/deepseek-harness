@@ -50,6 +50,18 @@ describe('upgrade Web launchers', () => {
     expect(run).toContain('[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)')
   })
 
+  it('logs a native stderr line as its message rather than its exception type name', () => {
+    const options = fixture()
+
+    writeWebLaunchers(options)
+
+    // 5.1 turns each native stderr line into an ErrorRecord. A blank line's record has an
+    // empty message, so `[string]$_` yields `System.Management.Automation.RemoteException`
+    // and the blank line around a provider's notice becomes that line in the log.
+    const run = readFileSync(join(options.dataHome, 'run-web-3089.ps1'), 'utf8')
+    expect(run).toContain('$item.Exception.Message')
+  })
+
   it('renders legacy TLS setup when the target data home carries its config', () => {
     const options = fixture()
     writeFileSync(join(options.dataHome, 'openssl-legacy.cnf'), 'legacy')
