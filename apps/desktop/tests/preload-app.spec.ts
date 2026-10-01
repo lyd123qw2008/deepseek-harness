@@ -166,6 +166,13 @@ it.each(['win32', 'darwin'] as const)('installs the embedded mandatory UI only i
   }
 })
 
+it('does not install the mandatory overlay in a same-origin child frame', async () => {
+  vi.stubGlobal('location', new URL('dsh-app://app/'))
+  vi.stubGlobal('process', { ...process, platform: 'win32', isMainFrame: false })
+  await import('../src/preload-app.ts')
+  expect(installMandatoryUpdateOverlay).not.toHaveBeenCalled()
+})
+
 it('exposes constrained shortcut operations and releases configuration subscriptions', async () => {
   vi.stubGlobal('location', new URL('dsh-app://app/'))
   await import('../src/preload-app.ts')

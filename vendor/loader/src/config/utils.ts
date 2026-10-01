@@ -1,12 +1,28 @@
 import { valueMap } from '@deepseek-ai/cosmokit'
 
-// eslint-disable-next-line no-new-func
-/** Evaluate a JavaScript expression against a loader context scope. */
-export const evaluate = new Function('ctx', 'expr', `
-  with (ctx) {
-    return eval(expr)
+type LoaderExpressionEvaluator = (ctx: object, expr: string) => any
+
+let expressionEvaluator: LoaderExpressionEvaluator | undefined
+
+/**
+ * Evaluate a JavaScript expression against a loader context scope.
+ *
+ * Host-built browser rosters contain package identities only and never call
+ * this evaluator. Keep construction lazy so importing the Loader does not make
+ * a renderer's CSP allow `unsafe-eval`; Host-side config expressions still run
+ * when the Node Loader explicitly evaluates them.
+ */
+export function evaluate(ctx: object, expr: string): any {
+  if (typeof process === 'undefined' || typeof process.versions?.node !== 'string') {
+    throw new Error('loader: !!js expressions are unavailable in browser plugin entries')
   }
-`) as ((ctx: object, expr: string) => any)
+  expressionEvaluator ??= new Function('ctx', 'expr', `
+    with (ctx) {
+      return eval(expr)
+    }
+  `) as LoaderExpressionEvaluator // eslint-disable-line no-new-func
+  return expressionEvaluator(ctx, expr)
+}
 
 /** Recursively replace YAML `!!js` expression nodes with evaluated values. */
 export function interpolate(ctx: object, value: any) {

@@ -675,6 +675,18 @@ describe('desktop main startup', () => {
     }
   })
 
+  it('keeps the initial mandatory status IPC registered and inert when policy configuration is absent', async () => {
+    await readyForUpdate()
+    const status = harness.handlers.get(MANDATORY_IPC.status)
+    if (status === undefined) throw new Error('main did not register inactive mandatory status IPC')
+    expect(invoke(MANDATORY_IPC.status, 'app')).toMatchObject({
+      policy: { blocking: false, checking: false }, update: { phase: 'idle' }, deferred: false,
+    })
+    expect(harness.handlers.has(MANDATORY_IPC.action)).toBe(false)
+    const sender = harness.windows[0]!.webContents
+    expect(() => status({ sender: {}, senderFrame: sender.mainFrame })).toThrow('unowned renderer')
+  })
+
   it('accepts product IPC only from the current application top frame in the owned main window', async () => {
     await readyForUpdate()
     const sender = harness.windows[0]!.webContents

@@ -6,7 +6,7 @@ import { MANDATORY_IPC } from '../src/mandatory-update-ipc.ts'
 import { resolveDesktopLocale } from '../src/locale.ts'
 import type { MandatoryUpdateView } from '../src/mandatory-update-window.ts'
 
-const ipc = vi.hoisted(() => ({ on: vi.fn(), off: vi.fn(), invoke: vi.fn(async () => {}) }))
+const ipc = vi.hoisted(() => ({ on: vi.fn(), off: vi.fn(), invoke: vi.fn(async (..._args: unknown[]): Promise<unknown> => undefined) }))
 vi.mock('electron', () => ({ ipcRenderer: ipc }))
 let dom: JSDOM
 let channel: MessageChannel
@@ -46,6 +46,23 @@ function setup() {
   expect(post).toHaveBeenCalledWith({ type: 'dsh-mandatory-connect' }, 'dsh-app://shell', [channel.port2])
   return { publish, view, root, frame, focus, host: root.host as HTMLElement }
 }
+
+it('keeps the inactive mandatory-status response frame-free', async () => {
+  dom = new JSDOM('<html><body><button>Product action</button></body></html>', { url: 'dsh-app://app/' })
+  vi.stubGlobal('window', dom.window)
+  vi.stubGlobal('document', dom.window.document)
+  vi.stubGlobal('HTMLElement', dom.window.HTMLElement)
+  ipc.invoke.mockResolvedValueOnce({
+    locale: resolveDesktopLocale('zh-CN'),
+    policy: { blocking: false, checking: false },
+    update: { phase: 'idle' },
+    deferred: false,
+  })
+  installMandatoryUpdateOverlay()
+  await Promise.resolve()
+  expect(ipc.invoke).toHaveBeenCalledExactlyOnceWith(MANDATORY_IPC.status)
+  expect(dom.window.document.querySelector('[data-mandatory-update-overlay]')).toBeNull()
+})
 
 it('uses an in-page frame below the caption and reuses it on updates', () => {
   const f = setup()

@@ -7,6 +7,21 @@ const MIME: Readonly<Record<string, string>> = {
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json',
   '.woff2': 'font/woff2', '.png': 'image/png', '.ico': 'image/x-icon',
 }
+// The Desktop document executes Host-owned inline injection rows and loads
+// Cordis closures as external Blob scripts (not eval). Interactive HTML preview
+// also uses Blob script/style assets; PDF.js needs WASM compilation for some
+// decoders. Remote preview scripts/styles stay blocked; string eval stays barred.
+const APP_CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self' blob: 'unsafe-inline' 'wasm-unsafe-eval'",
+  "style-src 'self' blob: 'unsafe-inline'",
+  "img-src 'self' data: blob: http: https:",
+  "font-src 'self' data:",
+  "connect-src 'self' ws://127.0.0.1:*",
+  "frame-src 'self' blob: http: https:",
+  "worker-src 'self' blob:",
+  "form-action 'self'",
+].join('; ')
 const BOOT = '<script>globalThis.__DSH_BOOT_READY__ = Promise.withResolvers()</script>'
 
 /**
@@ -20,6 +35,7 @@ export async function serveWebDocument(request: Request, root: string): Promise<
   const url = new URL(request.url)
   let pathname: string
   try { pathname = decodeURIComponent(url.pathname) } catch { return new Response(null, { status: 400 }) }
+  const isAppIndex = url.hostname === 'app' && (pathname === '/' || pathname === '/index.html')
   const target = resolve(root, '.' + (pathname === '/' ? '/index.html' : pathname))
   const directory = resolve(root)
   if (!target.startsWith(directory + sep)) return new Response(null, { status: 403 })
@@ -28,10 +44,13 @@ export async function serveWebDocument(request: Request, root: string): Promise<
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Response(null, { status: 404 })
     throw error
   }
-  const content = pathname === '/' || pathname === '/index.html'
+  const content = isAppIndex
     ? body.toString().replace('<head>', '<head>' + BOOT) : new Uint8Array(body)
   return new Response(request.method === 'HEAD' ? null : content, {
-    headers: { 'content-type': MIME[extname(target)] ?? 'application/octet-stream' },
+    headers: {
+      'content-type': MIME[extname(target)] ?? 'application/octet-stream',
+      ...(isAppIndex ? { 'content-security-policy': APP_CONTENT_SECURITY_POLICY } : {}),
+    },
   })
 }
 

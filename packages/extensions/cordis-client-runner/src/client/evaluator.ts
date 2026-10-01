@@ -8,6 +8,7 @@
  */
 
 import * as React from 'react'
+import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
 import type { CordisDynamicPluginId } from '@deepseek-ai/dsh-api-remotes/client'
 
 /** A mountable plugin as the closure must return it (FUNCTION or OBJECT form). */
@@ -125,6 +126,58 @@ function errorText(arg: unknown): string {
   }
 }
 
+/** Compile one dynamic closure as a same-origin Blob script allowed by the Desktop CSP. */
+function loadClientFactory(clientCode: string, parameters: readonly string[]): Promise<(...args: unknown[]) => Promise<unknown>> {
+  if (typeof document === 'undefined') throw new Error('client half evaluation requires a browser document')
+  const key = `__DSH_CORDIS_CLIENT_HALF_${randomUUID().replaceAll('-', '')}`
+  // Keep the prefix on one physical line: client source begins on line 2, just
+  // as it does in the old Function body and the Host's define-time precheck.
+  const source = `globalThis[${JSON.stringify(key)}] = function (${parameters.join(', ')}) { return (async () => {\n${clientCode}\n})() }`
+  const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }))
+  return new Promise((resolve, reject) => {
+    let script: HTMLScriptElement | undefined
+    let capturedError: Error | undefined
+    let cleaned = false
+    const captureScriptError = (event: ErrorEvent): void => {
+      if (event.filename !== url) return
+      capturedError = event.error instanceof Error ? event.error : new SyntaxError(event.message || 'client half failed to parse')
+      event.preventDefault()
+    }
+    const cleanup = (): void => {
+      if (cleaned) return
+      cleaned = true
+      window.removeEventListener('error', captureScriptError)
+      script?.remove()
+      Reflect.deleteProperty(globalThis, key)
+      URL.revokeObjectURL(url)
+    }
+    const fail = (error: Error): void => { cleanup(); reject(error) }
+    const onLoad = (): void => {
+      const factory = (globalThis as Record<string, unknown>)[key]
+      cleanup()
+      if (typeof factory !== 'function') {
+        reject(capturedError ?? new Error('client half script loaded without publishing its factory'))
+        return
+      }
+      resolve(factory as (...args: unknown[]) => Promise<unknown>)
+    }
+    const onError = (): void => {
+      fail(capturedError ?? new Error('client half script failed to load; check the renderer CSP'))
+    }
+    try {
+      window.addEventListener('error', captureScriptError)
+      script = document.createElement('script')
+      script.async = true
+      script.src = url
+      script.addEventListener('load', onLoad, { once: true })
+      script.addEventListener('error', onError, { once: true })
+      document.head.appendChild(script)
+    } catch (error) {
+      fail(error instanceof Error ? error : new Error(String(error)))
+    }
+  })
+}
+
 /** Tagged write-through console; error lines additionally copy into the load report. */
 function taggedConsole(pluginId: CordisDynamicPluginId, noteError: (message: string) => void): Console {
   const tag = `[cordis:${pluginId}]`
@@ -173,12 +226,9 @@ export async function evaluateClientHalf(
   const parameters = ['React', 'console', 'styles', 'host', 'harness', ...Object.keys(traps), 'process', 'Buffer']
   let closure: (...args: unknown[]) => Promise<unknown>
   try {
-    // The wrapper mirrors the host precheck exactly, so line offsets match.
-    // Evaluating a definition's browser half IS this package's product: the
-    // source arrived from a host process that accepted and prechecked it.
-    // oxlint-disable-next-line typescript/no-implied-eval -- see above
-    const factory = new Function(...parameters, `return (async () => {\n${clientCode}\n})()`)
-    closure = factory as (...args: unknown[]) => Promise<unknown>
+    // Loading this as an external Blob script keeps it compatible with the
+    // Desktop CSP without granting `unsafe-eval` to the application document.
+    closure = await loadClientFactory(clientCode, parameters)
   } catch (error) {
     if (!(error instanceof SyntaxError)) throw error
     // Engine-divergence fallback: the host precheck already carried the

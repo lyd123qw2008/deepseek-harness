@@ -6,7 +6,7 @@
  * the style bookkeeping whose disposal the runner owns.
  */
 import * as React from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CordisDynamicPluginId } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   DynamicCordisStyles,
@@ -17,6 +17,60 @@ import {
 import type { DynamicCordisClosureEnv, DynamicCordisEvaluatedPlugin } from '../src/client/evaluator.ts'
 
 const ID = 'dyn-1' as CordisDynamicPluginId
+const scripts = new Map<string, Blob>()
+const createdBlobs: Blob[] = []
+const revokedUrls: string[] = []
+let scriptSequence = 0
+let allocationFailure: Error | undefined
+let appendFailure: Error | undefined
+let loadFailure = false
+
+beforeEach(() => {
+  scripts.clear()
+  createdBlobs.length = 0
+  revokedUrls.length = 0
+  scriptSequence = 0
+  allocationFailure = undefined
+  appendFailure = undefined
+  loadFailure = false
+  const appendChild = document.head.appendChild.bind(document.head)
+  vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+    if (allocationFailure !== undefined) throw allocationFailure
+    if (!(blob instanceof Blob)) throw new TypeError('Expected client script Blob')
+    const url = `blob:http://localhost/dsh-test-${++scriptSequence}`
+    scripts.set(url, blob)
+    createdBlobs.push(blob)
+    return url
+  })
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation((url) => {
+    revokedUrls.push(url)
+    scripts.delete(url)
+  })
+  vi.spyOn(document.head, 'appendChild').mockImplementation((node) => {
+    const script = node instanceof HTMLScriptElement ? node : undefined
+    const blob = script === undefined ? undefined : scripts.get(script.src)
+    if (script === undefined || blob === undefined) return appendChild(node)
+    if (appendFailure !== undefined) throw appendFailure
+    if (loadFailure) {
+      script.dispatchEvent(new Event('error'))
+      return script
+    }
+    const appended = appendChild(node)
+    void blob.text().then((source) => {
+      try {
+        // oxlint-disable-next-line typescript/no-implied-eval, typescript/no-unsafe-call -- simulate an external script.
+        new Function(source)()
+        script.dispatchEvent(new Event('load'))
+      } catch (error) {
+        window.dispatchEvent(new ErrorEvent('error', { error, filename: script.src, message: String(error) }))
+        script.dispatchEvent(new Event('error'))
+      }
+    })
+    return appended
+  })
+})
+
+afterEach(() => { vi.restoreAllMocks(); scripts.clear() })
 
 function env(overrides: Partial<DynamicCordisClosureEnv> = {}): DynamicCordisClosureEnv {
   return {
@@ -47,6 +101,20 @@ describe('evaluateClientHalf', () => {
     expect(object.inject).toEqual(['slots'])
     // Same instance as the page's React: a second copy would break hooks.
     expect(object.apply({})).toBe(React)
+  })
+
+  it('loads the factory through a revocable Blob script and preserves classic closure semantics', async () => {
+    const { plugin } = await run(`
+      const captured = [this === globalThis, arguments.length]
+      return { apply: () => captured }
+    `)
+    expect((plugin as DynamicCordisEvaluatedPlugin).apply({})).toEqual([true, 13])
+    expect(createdBlobs).toHaveLength(1)
+    expect(createdBlobs[0]).toBeInstanceOf(Blob)
+    expect(revokedUrls).toHaveLength(1)
+    expect(revokedUrls[0]).toMatch(/^blob:/)
+    expect(document.head.querySelector('script[src^="blob:"]')).toBeNull()
+    expect(Object.keys(globalThis).some(key => key.startsWith('__DSH_CORDIS_CLIENT_HALF_'))).toBe(false)
   })
 
   it('accepts the function form', async () => {
@@ -98,22 +166,33 @@ describe('evaluateClientHalf', () => {
     await expect(run('return (')).rejects.toThrow(/no JSX, no TypeScript/)
   })
 
-  it('names the missing return, and rejects a non-plugin value', async () => {
+  it('names the missing return, rejects non-plugin values, and preserves runtime body errors', async () => {
     await expect(run('const x = 1')).rejects.toThrow(/did you forget `return`/)
     await expect(run('return 42')).rejects.toThrow(/must `return` a plugin/)
+    await expect(run('throw new Error("closure body failed")')).rejects.toThrow('closure body failed')
   })
 
-  it('propagates a non-syntax construction failure untouched', async () => {
-    const boom = new TypeError('engine refused')
-    // The constructor is the only failure seam before evaluation; a
-    // non-SyntaxError must not be reinterpreted as a source problem.
-    vi.stubGlobal('Function', function stub(): never { throw boom })
-    try {
-      await expect(run('return () => {}')).rejects.toBe(boom)
-    } finally {
-      vi.unstubAllGlobals()
-    }
-    expect(typeof Function).toBe('function')
+  it('cleans up the script URL and temporary node when a Blob script fails to load', async () => {
+    loadFailure = true
+    await expect(run('return () => {}')).rejects.toThrow('client half script failed to load')
+    expect(revokedUrls).toHaveLength(1)
+    expect(document.head.querySelector('script[src^="blob:"]')).toBeNull()
+    expect(Object.keys(globalThis).some(key => key.startsWith('__DSH_CORDIS_CLIENT_HALF_'))).toBe(false)
+  })
+
+  it('cleans up resources when appending the Blob script throws', async () => {
+    const boom = new Error('script attachment failed')
+    appendFailure = boom
+    await expect(run('return () => {}')).rejects.toBe(boom)
+    expect(revokedUrls).toHaveLength(1)
+    expect(Object.keys(globalThis).some(key => key.startsWith('__DSH_CORDIS_CLIENT_HALF_'))).toBe(false)
+  })
+
+  it('propagates Blob allocation failures untouched', async () => {
+    const boom = new TypeError('Blob URLs unavailable')
+    allocationFailure = boom
+    await expect(run('return () => {}')).rejects.toBe(boom)
+    expect(revokedUrls).toHaveLength(0)
   })
 })
 

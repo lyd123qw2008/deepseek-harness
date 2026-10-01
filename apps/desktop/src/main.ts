@@ -50,6 +50,7 @@ import { readDesktopLoginShellEnvironment, resolveDesktopLoginShellConfig } from
 import { DesktopMandatoryUpdatePolicy, resolveDesktopPolicyConfig, type DesktopPolicyState } from './mandatory-update-policy.ts'
 import { desktopClientMetadata, desktopClientVersion } from './client-metadata.ts'
 import { DesktopMandatoryUpdateWindow } from './mandatory-update-window.ts'
+import { MANDATORY_IPC } from './mandatory-update-ipc.ts'
 import { DesktopPolicyTestAuth } from './policy-test-auth.ts'
 import { DesktopUpdateDialog, type UpdateDialogOptions } from './update-dialog.ts'
 import { readDesktopRuntime } from './runtime-tree.ts'
@@ -422,6 +423,20 @@ async function main(): Promise<void> {
       throw new Error('dsh desktop: rejected IPC from an unowned renderer')
     }
   }
+  // Windows installs the overlay preload even when development deliberately
+  // leaves mandatory-policy polling disabled. Keep its initial status query
+  // registered from the first page load; a configured policy replaces this
+  // inert, sender-checked handler before publishing an actionable view.
+  const inactiveMandatoryView = () => ({
+    locale,
+    policy: { blocking: false, checking: false },
+    update: updateState,
+    deferred: false,
+  })
+  ipcMain.handle(MANDATORY_IPC.status, (event) => {
+    assertProductSender(event)
+    return inactiveMandatoryView()
+  })
   let navigation: { window: BrowserWindow; url: string; promise: Promise<void> } | undefined
   const navigateMain = (url: string): Promise<void> => {
     const window = mainWindow
@@ -1310,6 +1325,9 @@ async function main(): Promise<void> {
       wasBlocking = state.blocking
     }, policyAuth?.request, () => desktopClientMetadata(locale.id))
     const policy = mandatoryPolicy
+    // The preload may already query the inert fallback. Swap synchronously, so
+    // configured policy state is authoritative before any actionable view exists.
+    ipcMain.removeHandler(MANDATORY_IPC.status)
     mandatoryUI = new DesktopMandatoryUpdateWindow({
       overlays: updateOverlays,
       preload: fileURLToPath(new URL('./preload-mandatory.cjs', import.meta.url)), locale,
