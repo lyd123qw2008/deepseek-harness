@@ -21,7 +21,6 @@ The features are independent, and an upgrade must judge each on its own; a relea
 | Web diff card through a scroll viewport | Derives contextual hunks with `structuredPatch`, three context lines per side, folding with a hidden-line control and a bounded edit-distance search | Derives rows in the browser, one context line per unchanged segment, a scrolling body, 1-based line-number gutter and word-level highlights | 4 source files, 5 test files, 2 goldens |
 | Agent Team capability isolated by preset | Disables the standard delegation rows and mounts the Team tool row in the profile layer, so a deployment is either standard delegation or Team | Keeps the standard delegation rows as one-shot and installs the Team tool only inside the composition scope of the plugin, gated in the UI by preset id | 4 packages, 11 files |
 | MCP client connection scope | `transport`, `serverName`, `command`, `url` and reconnect tuning; one child for the instance, with a static `cwd` | Adds `scope: 'global' \| 'session-project'`; the session-project pool opens one child per Session whose `cwd` is that Session's project | 4 files |
-| Terminal card survives an invalid escalation pair | Requires a non-empty `justification` whenever `sandbox_permissions` is present, so a pair the Host accepts as redundant still hides the terminal card | Keeps the card for a settled successful call whose result text exists; every other malformed-field state stays generic | 1 source file, 1 test file |
 | Bash session cwd canonicalization | Uses the Session header's `cwd` verbatim as the base for a relative `workdir` | Canonicalizes it through `canonicalPath`, so a relative `workdir` resolves against the same root the policy stamps onto the call | 1 source file |
 | Flat Expanded transcript | Retired in `dsh-v0.1.7-rc.1`, which ships `verbose`: `foldCompletedTurns: false` with `stepGrouping: 'none'`, and legacy `expanded` reads as `standard` | No local file remains; the migration moves a saved `expanded` preference to `verbose` | — |
 
@@ -41,6 +40,13 @@ A release can also retire a local deviation by shipping the behavior. Each retir
 | Retired deviation | Released replacement |
 |---|---|
 | Redundant-escalation tolerance mirrored from `tool-bash` into `tool-pwsh` | The shared `approveEscalation` returns the effective mode when the requested mode equals it, so both shells accept a repeated pair through one implementation |
+
+### Retired by dsh-v0.2.1-alpha.1
+
+| Retired deviation | Released replacement |
+|---|---|
+| Terminal card survives an invalid escalation pair | The released `shellCall` no longer validates the escalation pair at all — its comment records that the fields' validity depends on the Session's sandbox mode, which only the Host knows — so the local `allowInvalidEscalation` parameter and its two cases are gone. The released spec covers the same ground with a parameterized "escalation fields the Host accepts" case |
+| `allowAppliedMetadata` on the diff card | The released `intendedDiff` dropped its `validEscalationFields` check for the same reason, so the local bypass that existed only to skip it is gone. The local parts of that file — the viewport height and the optional 1-based hunk-start validation — stay |
 
 ### Web diff card through a scroll viewport
 
@@ -76,15 +82,9 @@ Owned files: `packages/mcp/mcp-client/src/index.ts`, `packages/mcp/mcp-client/sr
 
 ### Terminal card survives an invalid escalation pair
 
-Upstream validates the optional escalation pair on the Client regardless of what the Host accepted. A command that re-requests the mode already in force carries `sandbox_permissions` with an empty `justification`; `isRedundantEscalation` makes the Host skip `validateEscalationArgs` for exactly that pair, so the call runs and settles, while the Client has no redundancy concept and `validEscalationFields` made `terminalCardModel` return null. The conversation row degraded to a non-clickable title and summary for a call that had already produced its output, while the same tool's row stayed expandable wherever the model omitted the pair.
+Retired by `dsh-v0.2.1-alpha.1`. Upstream had validated the optional escalation pair on the Client regardless of what the Host accepted: a command re-requesting the mode already in force carries `sandbox_permissions` with an empty `justification`, `isRedundantEscalation` makes the Host skip `validateEscalationArgs` for exactly that pair, and `validEscalationFields` made `terminalCardModel` return null anyway, so the row degraded to a non-clickable title for a call that had already produced its output.
 
-This branch keeps the card when the call itself proves it ran: a settled, non-error block with a single result text passes `allowInvalidEscalation` into `shellCall`, and only that call skips the pair check. Running, errored, background, persistent, and spill-previewed calls stay generic, and `timeoutMs`, `workdir`, and `run_in_background` keep their validation. The rule copies the tolerance `diffCardModel` already grants a successful mutation through `allowAppliedMetadata`.
-
-Owned source: `packages/client/ui-tool/src/client/tool/models/terminal-card-model.ts`.
-
-Owned test: `packages/client/ui-tool/tests/terminal-card.client.spec.tsx`, which carries both the two cases this branch adds and the malformed-field table the released model satisfies.
-
-Unlike the three behaviors above, taking the released model fails this spec rather than degrading in silence, so its upgrade hazard is a failing gate instead of a quiet regression. The [escalation-pair Agent Note](../bug-fix/2026-09-21-terminal-card-invalid-escalation-pair.md) owns the reasoning.
+This branch kept the card for a settled, non-error block with a single result text by threading `allowInvalidEscalation` into `shellCall`, and `diffCardModel` carried the same tolerance as `allowAppliedMetadata`. The release removed the Client-side check from both models outright — `shellCall`'s comment now records that the fields' validity depends on the Session's sandbox mode, which only the Host knows — so both local bypasses lost their reason to exist and were dropped with the two cases that pinned them. The released spec keeps the coverage as a parameterized "escalation fields the Host accepts" case, and the [escalation-pair Agent Note](../../archived/bug-fix/2026-09-21-terminal-card-invalid-escalation-pair.md) is archived with it.
 
 ## Upgrade checkpoints
 
@@ -95,7 +95,7 @@ The signals that a feature needs re-examination rather than a default keep:
 - **Web diff card**: upstream introduces a scrolling body, a line-number gutter, or inline highlights, or stops deriving rows from `structuredPatch` context. Upstream-only changes to context width or the edit-distance bound do not need one.
 - **Agent Team**: upstream changes how the Team tool row is mounted, the `apply(ctx, config)` signature, the `mountAgentTeamUi` arity, or the tool names that Team and subagent-control both claim.
 - **MCP client**: upstream adds a `scope` key or any other per-Session connection selection. A same-named key is not automatically the same concept: upstream's `scopeOf(ctx)` is plugin-registration scope, while `session-project` is a binding between a child process and a Session's project.
-- **Terminal card**: upstream lets a settled successful shell card outlive a failed optional escalation pair, changes `terminalCardModel`'s eligibility signature, or introduces a Client-side redundancy notion. Adopting the strict check again also means rewriting the two local cases that pin the tolerance.
+- **Terminal card**: retired in `dsh-v0.2.1-alpha.1`; the signal to re-open it is a release that validates the escalation pair on the Client again.
 - **Retired deviations**: a release that changes the released replacement's contract puts the deviation back on the table — for `verbose`, that means any return of the whole-Turn fold or of a grouped historical header.
 
 A released test file is not evidence that the local behavior is wrong. Where a released test pins a design this inventory declines, the local side owns the test file too.
@@ -119,6 +119,6 @@ Every entry here is a reason to prefer contributing upstream over carrying a for
 ## Related
 
 - [Web diff card renders through a scroll viewport](../bug-fix/2026-09-15-web-diff-card-scroll-viewport.md) — owns the diff card decision, its measurements, and the alternatives it declined.
-- [Web diff cards compare contextual content](../bug-fix/2026-09-14-web-diff-context.md) — the released contextual-diff decision this inventory declines.
+- [Web diff cards compare contextual content](../../archived/bug-fix/2026-09-14-web-diff-context.md) — the released contextual-diff decision this inventory declines.
 - [Preserve user data during program upgrades](2026-09-08-upgrade-environment-preserve-and-merge.md) — owns how an upgrade is isolated, validated, and recorded.
-- [Terminal card survives an invalid escalation pair](../bug-fix/2026-09-21-terminal-card-invalid-escalation-pair.md) — owns the Client eligibility change this inventory must re-judge.
+- [Terminal card survives an invalid escalation pair](../../archived/bug-fix/2026-09-21-terminal-card-invalid-escalation-pair.md) — the historical decision this inventory retired in `dsh-v0.2.1-alpha.1`.

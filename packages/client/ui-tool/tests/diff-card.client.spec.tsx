@@ -153,17 +153,6 @@ describe('diffCardModel', () => {
     }))).toEqual({ card: { diffs: [{ path: 'notes/new.txt', oldText: null, newText: 'hello fixture\n' }] } })
   })
 
-  it('keeps running invalid escalation calls generic', () => {
-    const argsRaw = JSON.stringify({
-      file_path: 'notes/demo.txt',
-      old_string: 'hello',
-      new_string: 'hello fixture',
-      sandbox_permissions: 'danger-full-access',
-      justification: '',
-    })
-    expect(diffCardModel(running({ argsRaw }))).toBeNull()
-  })
-
   it('uses the intended write diff when successful metadata reports no applied hunk', () => {
     const writeArgs = JSON.stringify({ file_path: 'notes/new.txt', content: 'hello fixture\n' })
     expect(diffCardModel(settled({

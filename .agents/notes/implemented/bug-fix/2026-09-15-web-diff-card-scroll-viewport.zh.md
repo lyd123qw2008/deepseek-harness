@@ -56,5 +56,5 @@ Web diff 卡片最初按整段新旧两侧渲染，配合首尾高度上限和�
 ## Related
 
 - [Web diff 卡片](../../archived/feature/2026-07-30-web-diff-card.md) — 本呈现所取代的最初"上限加展开"设计；它当时推迟的行号 gutter 方案正是本卡片现在交付的。
-- [Web diff 卡片比较含上下文的内容](2026-09-14-web-diff-context.zh.md) — 官方上下文 diff 决策；其有界比较与粗粒度回退即上面所拒绝的替代方案。
+- [Web diff 卡片比较含上下文的内容](../../archived/bug-fix/2026-09-14-web-diff-context.md) — 官方上下文 diff 决策；其有界比较与粗粒度回退即上面所拒绝的替代方案。
 - [客户端推导工具呈现](../architecture/2026-08-23-client-derived-tool-presentation.zh.md) — 本卡片所遵循的归属边界。

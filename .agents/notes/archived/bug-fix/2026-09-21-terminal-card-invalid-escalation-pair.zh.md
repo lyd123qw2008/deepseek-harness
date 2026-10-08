@@ -1,6 +1,7 @@
 # Agent Note: terminal 卡片容忍畸形的升权字段
 
 Status: implemented
+Archived: 2026-10-03
 
 [English](2026-09-21-terminal-card-invalid-escalation-pair.md) | 中文
 

@@ -56,5 +56,5 @@ The card needs no expand state, so a diff has no interactive surface beyond copy
 ## Related
 
 - [Web diff card](../../archived/feature/2026-07-30-web-diff-card.md) — the original cap-and-expand design this presentation replaces; its deferred line-number-gutter alternative is what this card now ships.
-- [Web diff cards compare contextual content](2026-09-14-web-diff-context.md) — the upstream contextual-diff decision; its bounded comparison and coarse fallback are the alternatives declined above.
+- [Web diff cards compare contextual content](../../archived/bug-fix/2026-09-14-web-diff-context.md) — the upstream contextual-diff decision; its bounded comparison and coarse fallback are the alternatives declined above.
 - [Client-derived tool presentation](../architecture/2026-08-23-client-derived-tool-presentation.md) — the ownership boundary this card stays inside.

@@ -1,6 +1,7 @@
 # Agent Note: Terminal card survives an invalid escalation pair
 
 Status: implemented
+Archived: 2026-10-03
 
 English | [中文](2026-09-21-terminal-card-invalid-escalation-pair.zh.md)
 

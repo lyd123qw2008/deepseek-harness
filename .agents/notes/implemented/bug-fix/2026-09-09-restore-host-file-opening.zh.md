@@ -10,7 +10,7 @@ English | [中文](2026-09-09-restore-host-file-opening.md)
 
 ## Decision
 
-Chat 所有的 `openFile` 使用 `resolveWorkspacePath` 相对于 Session 工作区解析路径，然后调用 `ctx.remote.session.openWorkspacePath`。因此路径校验与桌面交接仍由 Host 负责，包括平台文件关联。产出文件 chip、read 行、改写行与通用单文件行都使用这个回调。右侧 Sidebar 仍可通过自己的 Files 文件树与 `dsh-resource://file` 预览路径使用，但不再是 Chat 或 Tool 文件链接的默认目的地。更早的产出文件决定仍负责 chip 词汇与 Host 打开器的理由（[从 Web UI 打开产出文件](../feature/2026-07-31-web-workspace-file-links.zh.md)）。
+Chat 所有的 `openFile` 使用 `resolveWorkspacePath` 相对于 Session 工作区解析路径，然后调用 `ctx.remote.session.openWorkspacePath`。因此路径校验与桌面交接仍由 Host 负责，包括平台文件关联。产出文件 chip、read 行、改写行与通用单文件行都使用这个回调。右侧 Sidebar 仍可通过自己的 Files 文件树与 `dsh-resource://file` 预览路径使用，但不再是 Chat 或 Tool 文件链接的默认目的地。更早的产出文件决定仍负责 chip 词汇与 Host 打开器的理由（[从 Web UI 打开产出文件](../../archived/feature/2026-07-31-web-workspace-file-links.md)）。
 
 Chat 与 Tool 的 owner 接口再次只接收路径。行导航选项只服务于产品内文本预览，因此从默认文件链接路径中移除；桌面应用仍可自行决定是否支持打开到某一行。
 

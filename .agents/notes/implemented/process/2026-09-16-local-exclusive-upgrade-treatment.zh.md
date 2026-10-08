@@ -21,7 +21,6 @@ Status: implemented
 | Web diff 卡片通过滚动视口 | 用 `structuredPatch` 推导上下文 hunk，每侧三行上下文，折叠配合隐藏行控件，并有有界编辑距离搜索 | 在浏览器端推导行，每段未改动内容一行上下文，正文可滚动，带 1-based 行号 gutter 与词级高亮 | 4 个源码文件、5 个测试文件、2 个 golden |
 | Agent Team 能力按 preset 隔离 | 关闭标准委派行并在 profile 层挂载 Team 工具行，因此一个部署要么是标准委派、要么是 Team | 保留标准委派行并置为 one-shot，只在插件自身的 composition scope 内安装 Team 工具，并在 UI 层按 preset id 门控 | 4 个包、11 个文件 |
 | MCP 客户端连接作用域 | `transport`、`serverName`、`command`、`url` 与重连调优；每个实例一个子进程，`cwd` 为静态值 | 新增 `scope: 'global' \| 'session-project'`；session-project 池为每个 Session 打开一个子进程，其 `cwd` 即该 Session 的项目 | 4 个文件 |
-| Terminal 卡片容忍畸形的升权字段 | 只要存在 `sandbox_permissions` 就要求 `justification` 非空，因此 Host 以冗余为由接受的字段配对仍会隐藏 terminal 卡片 | 已结算且成功的调用只要结果文本存在就保留卡片；其余畸形字段状态仍走通用路径 | 1 个源码文件、1 个测试文件 |
 | bash 会话 cwd 规范化 | 直接使用 Session header 的 `cwd` 作为相对 `workdir` 的基准 | 通过 `canonicalPath` 规范化，使相对 `workdir` 与策略为本次调用加盖的 workspace 根一致 | 1 个源码文件 |
 | 完全展开模式平铺对话 | 已由 `dsh-v0.1.7-rc.1` 取代：该版本提供 `verbose`（`foldCompletedTurns: false` 且 `stepGrouping: 'none'`），旧值 `expanded` 读取为 `standard` | 不再保留本地文件；迁移把已保存的 `expanded` 偏好改为 `verbose` | — |
 
@@ -41,6 +40,13 @@ Status: implemented
 | 已退役偏差 | 发布版替代实现 |
 |---|---|
 | 从 `tool-bash` 镜像到 `tool-pwsh` 的冗余升权容忍 | 共享的 `approveEscalation` 在请求模式与生效模式相同时直接返回生效模式，两个 shell 因此共用同一份实现 |
+
+### 由 dsh-v0.2.1-alpha.1 取代的偏差
+
+| 已退役偏差 | 发布版替代实现 |
+|---|---|
+| Terminal 卡片容忍畸形的升权字段 | 发布的 `shellCall` 不再校验升权字段——其注释记录这些字段是否有效取决于只有 Host 知道的 Session 沙箱模式——因此本地的 `allowInvalidEscalation` 参数及其两个用例一并移除。发布的测试用参数化的“Host 接受的升权字段”用例覆盖同一范围 |
+| diff 卡片上的 `allowAppliedMetadata` | 发布的 `intendedDiff` 出于同样的理由去掉了 `validEscalationFields` 校验，因此那个只为跳过它而存在的本地旁路随之移除。该文件中真正属于本地的部分——视口高度与可选的 1-based hunk 起始行校验——保留 |
 
 ### Web diff 卡片通过滚动视口
 
@@ -76,15 +82,9 @@ Status: implemented
 
 ### Terminal 卡片容忍畸形的升权字段
 
-上游在 Client 侧一律校验可选的升权字段，不区分 Host 是否已经接受。当命令重复请求现行模式时，它携带 `sandbox_permissions` 与空的 `justification`；`isRedundantEscalation` 让 Host 恰好对该配对跳过 `validateEscalationArgs`，于是调用照常执行并结算，而 Client 没有冗余概念，`validEscalationFields` 使 `terminalCardModel` 返回 null。结果是一次已经产出输出的调用，其对话行退化为不可点击的标题加摘要；而模型省略这对字段时，同一工具的行仍可展开。
+已由 `dsh-v0.2.1-alpha.1` 取代。上游此前在 Client 侧一律校验可选的升权字段，不区分 Host 是否已经接受：当命令重复请求现行模式时，它携带 `sandbox_permissions` 与空的 `justification`，`isRedundantEscalation` 让 Host 恰好对该配对跳过 `validateEscalationArgs`，而 `validEscalationFields` 仍让 `terminalCardModel` 返回 null，于是这次已经产出输出的调用，其对话行退化为不可点击的标题。
 
-本分支在调用本身已证明执行过时保留卡片：已结算、非错误、且单一结果文本存在的块把 `allowInvalidEscalation` 传入 `shellCall`，仅该次调用跳过配对校验。运行中、出错、后台、持久 shell 与 spill 预览的调用仍走通用路径，`timeoutMs`、`workdir`、`run_in_background` 保持原有校验。该规则复制了 `diffCardModel` 通过 `allowAppliedMetadata` 已授予成功变更的容忍。
-
-拥有的源文件：`packages/client/ui-tool/src/client/tool/models/terminal-card-model.ts`。
-
-拥有的测试：`packages/client/ui-tool/tests/terminal-card.client.spec.tsx`，它同时承载本分支新增的两个用例与发布版本能满足的畸形字段测试表。
-
-与上面三项不同，取用发布版本会让该测试失败，而不是静默降级，因此它的升级风险是一个失败门禁，而非无声回退。[升权字段配对 Agent Note](../bug-fix/2026-09-21-terminal-card-invalid-escalation-pair.zh.md)负责其论证。
+本分支当时通过把 `allowInvalidEscalation` 传入 `shellCall`，在已结算、非错误、且单一结果文本存在的块上保留卡片，而 `diffCardModel` 以 `allowAppliedMetadata` 承载同一容忍。发布版把 Client 侧校验从两个模型中一并移除——`shellCall` 的注释现在记录这些字段是否有效取决于只有 Host 知道的 Session 沙箱模式——因此两处本地旁路都失去了存在理由，并连同钉住它们的两个用例一起移除。发布的测试用参数化的“Host 接受的升权字段”用例保留覆盖，[升权字段配对 Agent Note](../../archived/bug-fix/2026-09-21-terminal-card-invalid-escalation-pair.md) 也随之归档。
 
 ## Upgrade checkpoints
 
@@ -95,7 +95,7 @@ Status: implemented
 - **Web diff 卡片**：上游引入滚动正文、行号 gutter 或行内高亮，或不再从 `structuredPatch` 上下文推导行。仅上游改动上下文宽度或编辑距离上限则不需要。
 - **Agent Team**：上游改变 Team 工具行的挂载方式、`apply(ctx, config)` 签名、`mountAgentTeamUi` 的参数个数，或 Team 与 subagent-control 同时声明的工具名。
 - **MCP 客户端**：上游新增 `scope` 键或任何其他逐 Session 的连接选择。同名键并不自动是同一概念：上游的 `scopeOf(ctx)` 是插件注册作用域，而 `session-project` 是子进程与 Session 项目之间的绑定。
-- **Terminal 卡片**：上游让已成功结算的 shell 卡片在可选升权配对失败时仍然保留、改变 `terminalCardModel` 的适用性签名，或在 Client 侧引入冗余概念。重新采纳严格校验也意味着改写钉住该容忍的两个本地用例。
+- **Terminal 卡片**：已由 `dsh-v0.2.1-alpha.1` 退役；重新开启它的信号是发布版又在 Client 侧校验升权字段。
 - **已退役偏差**：当发布版改变替代实现的契约时，该偏差需重新评估——对 `verbose` 而言，意味着整轮折叠或历史组头分组回归。
 
 发布的测试文件不能证明本地行为是错的。当发布的测试钉住的是本清单所拒绝的设计时，本地一侧同样拥有该测试文件。
@@ -119,6 +119,6 @@ Status: implemented
 ## Related
 
 - [Web diff 卡片通过滚动视口渲染](../bug-fix/2026-09-15-web-diff-card-scroll-viewport.zh.md) —— 拥有 diff 卡片的决定、其度量，以及它所拒绝的替代方案。
-- [Web diff 卡片比较含上下文的内容](../bug-fix/2026-09-14-web-diff-context.zh.md) —— 本清单所拒绝的已发布上下文 diff 决策。
+- [Web diff 卡片比较含上下文的内容](../../archived/bug-fix/2026-09-14-web-diff-context.md) —— 本清单所拒绝的已发布上下文 diff 决策。
 - [程序升级期间保留用户数据](2026-09-08-upgrade-environment-preserve-and-merge.zh.md) —— 拥有升级如何隔离、验证与记录。
-- [terminal 卡片容忍畸形的升权字段](../bug-fix/2026-09-21-terminal-card-invalid-escalation-pair.zh.md) —— 拥有本清单必须重新判定的 Client 适用性改动。
+- [terminal 卡片容忍畸形的升权字段](../../archived/bug-fix/2026-09-21-terminal-card-invalid-escalation-pair.md) —— 本清单在 `dsh-v0.2.1-alpha.1` 中退役的那项历史决定。
