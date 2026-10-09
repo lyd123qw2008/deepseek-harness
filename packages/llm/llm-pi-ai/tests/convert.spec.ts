@@ -3,9 +3,11 @@ import { AttachmentId, ImageVariantId } from '@deepseek-ai/dsh-attachment'
 import type { AttachmentStore, ImageAttachmentRef, ImageRequestTarget, RequestImageAttachment } from '@deepseek-ai/dsh-attachment'
 import { createToolResultMessage, createUserMessage, ToolCallId, CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, createMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, StreamChunk } from '@deepseek-ai/dsh-llm'
-import type { AssistantMessage, AssistantMessageEvent, Usage } from '@earendil-works/pi-ai'
+import type { AssistantMessage, AssistantMessageEvent, Model, Usage } from '@earendil-works/pi-ai'
+import { convertResponsesMessages } from '@earendil-works/pi-ai/api/openai-responses-shared'
 import { transformMessages } from '@earendil-works/pi-ai/api/transform-messages'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
+import { normalizeContext } from '@earendil-works/pi-ai/utils/transcript'
 import { toPiContext } from '../src/context.ts'
 import { toPiReplayState } from '../src/replay.ts'
 import { mapStopReason, mapUsage, toStreamChunks } from '../src/stream.ts'
@@ -402,6 +404,214 @@ describe('toPiContext', () => {
         { type: 'toolCall', id: 'c1', name: 'f', arguments: { a: 1 }, thoughtSignature: 'tool-sig' },
       ],
     })
+  })
+
+  it('rebuilds the DeepSeek Responses reasoning item from durable reasoning', () => {
+    const reasoningText = 'check the tool result'
+    const content = [{ type: 'reasoning_text', text: reasoningText }]
+    const capturedReasoning = {
+      type: 'reasoning',
+      id: 'rs_123',
+      status: 'completed',
+      summary: [],
+      encrypted_content: 'rs_123-0',
+      metadata: { internal_chat_message_metadata_passthrough: true },
+    }
+    const capturedReasoningWithContent = {
+      ...capturedReasoning,
+      content: [{ type: 'reasoning_text', text: 'stale signature text' }],
+    }
+    const expectedReasoning = { type: 'reasoning', content }
+    const persisted = toPiReplayState(assistant({
+      api: 'openai-responses',
+      provider: 'deepseek',
+      model: 'deepseek-flash',
+      content: [{
+        type: 'thinking',
+        thinking: reasoningText,
+        thinkingSignature: JSON.stringify(capturedReasoningWithContent),
+      }],
+    }), undefined, 'durable-text')
+    const stored = {
+      response: persisted.response,
+      blocks: [{ type: 'reasoning', thinkingSignature: JSON.stringify(capturedReasoning) }],
+    }
+
+    const persistedBlock = persisted.blocks?.[0]
+    if (typeof persistedBlock !== 'object' || persistedBlock === null || Array.isArray(persistedBlock)) {
+      throw new Error('missing persisted reasoning block')
+    }
+    const persistedSignature = (persistedBlock as { thinkingSignature?: unknown }).thinkingSignature
+    if (typeof persistedSignature !== 'string') throw new Error('missing persisted reasoning signature')
+    expect(JSON.parse(persistedSignature)).toEqual(expectedReasoning)
+
+    const context = toPiContext({
+      provider: 'deepseek', model: 'deepseek-flash',
+      messages: [createMessage({
+        role: 'assistant',
+        content: [{ type: 'reasoning', text: reasoningText }],
+        source: { kind: 'model', provider: 'deepseek', model: 'deepseek-flash', replayState: stored },
+      })],
+    }, undefined, undefined, 'durable-text')
+    const message = context.messages[0] as AssistantMessage
+    const thinking = message.content[0]
+    expect(thinking).toMatchObject({ type: 'thinking', thinking: reasoningText })
+    if (thinking?.type !== 'thinking') throw new Error('missing replayed thinking block')
+    expect(JSON.parse(thinking.thinkingSignature ?? '')).toEqual(expectedReasoning)
+
+    const model: Model<'openai-responses'> = {
+      id: 'deepseek-flash', name: 'DeepSeek Flash', api: 'openai-responses',
+      provider: 'deepseek', baseUrl: 'https://example.test/v1', reasoning: true,
+      input: ['text'], contextWindow: 1_000_000, maxTokens: 300_000,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    }
+    expect(convertResponsesMessages(
+      model,
+      normalizeContext(context),
+      new Set(['openai', 'openai-codex', 'opencode']),
+    )).toContainEqual(expectedReasoning)
+  })
+
+  it('builds DeepSeek Responses reasoning only from durable text', () => {
+    const reasoningText = 'durable reasoning'
+    const persisted = toPiReplayState(assistant({
+      api: 'openai-responses',
+      provider: 'deepseek',
+      model: 'deepseek-flash',
+      content: [{ type: 'thinking', thinking: reasoningText }],
+    }), undefined, 'durable-text')
+    const expectedSignature = JSON.stringify({
+      type: 'reasoning', content: [{ type: 'reasoning_text', text: reasoningText }],
+    })
+    const block = persisted.blocks?.[0]
+    if (typeof block !== 'object' || block === null || Array.isArray(block)) {
+      throw new Error('missing persisted reasoning block')
+    }
+    expect((block as { thinkingSignature?: unknown }).thinkingSignature).toBe(expectedSignature)
+
+    const context = toPiContext({
+      provider: 'deepseek', model: 'deepseek-flash',
+      messages: [createMessage({
+        role: 'assistant',
+        content: [{ type: 'reasoning', text: reasoningText }],
+        source: {
+          kind: 'model',
+          provider: 'deepseek',
+          model: 'deepseek-flash',
+          replayState: { response: persisted.response, blocks: [{ type: 'reasoning' }] },
+        },
+      })],
+    }, undefined, undefined, 'durable-text')
+    const replayed = context.messages[0] as AssistantMessage
+    expect(replayed.content[0]).toMatchObject({ type: 'thinking', thinking: reasoningText, thinkingSignature: expectedSignature })
+
+    const empty = toPiReplayState(assistant({
+      api: 'openai-responses',
+      provider: 'deepseek',
+      model: 'deepseek-flash',
+      content: [{ type: 'thinking', thinking: '', thinkingSignature: JSON.stringify({ type: 'reasoning', encrypted_content: 'ciphertext' }) }],
+    }), undefined, 'durable-text')
+    const emptyBlock = empty.blocks?.[0]
+    if (typeof emptyBlock !== 'object' || emptyBlock === null || Array.isArray(emptyBlock)) {
+      throw new Error('missing empty reasoning block')
+    }
+    expect(emptyBlock).toEqual({ type: 'reasoning' })
+
+    const emptyContext = toPiContext({
+      provider: 'deepseek', model: 'deepseek-flash',
+      messages: [createMessage({
+        role: 'assistant',
+        content: [{ type: 'reasoning', text: '' }],
+        source: {
+          kind: 'model',
+          provider: 'deepseek',
+          model: 'deepseek-flash',
+          replayState: {
+            response: empty.response,
+            blocks: [{ type: 'reasoning', thinkingSignature: JSON.stringify({ type: 'reasoning', encrypted_content: 'ciphertext' }) }],
+          },
+        },
+      })],
+    }, undefined, undefined, 'durable-text')
+    const emptyModel: Model<'openai-responses'> = {
+      id: 'deepseek-flash', name: 'DeepSeek Flash', api: 'openai-responses',
+      provider: 'deepseek', baseUrl: 'https://example.test/v1', reasoning: true,
+      input: ['text'], contextWindow: 1_000_000, maxTokens: 300_000,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    }
+    expect(convertResponsesMessages(
+      emptyModel,
+      normalizeContext(emptyContext),
+      new Set(['openai', 'openai-codex', 'opencode']),
+    )).not.toContainEqual(expect.objectContaining({ type: 'reasoning' }))
+  })
+
+  it('applies durable-text to matching Responses history from an earlier protocol', () => {
+    const reasoningText = 'chat reasoning text'
+    const context = toPiContext({
+      provider: 'deepseek',
+      model: 'deepseek-flash',
+      messages: [createMessage({
+        role: 'assistant',
+        content: [{ type: 'reasoning', text: reasoningText }],
+        source: {
+          kind: 'model',
+          provider: 'deepseek',
+          model: 'deepseek-flash',
+          replayState: {
+            response: {
+              kind: 'pi-ai', version: 2, api: 'openai-completions', provider: 'deepseek',
+              model: 'deepseek-flash', stopReason: 'stop',
+            },
+            blocks: [{ type: 'reasoning', thinkingSignature: 'reasoning_content' }],
+          },
+        },
+      })],
+    }, undefined, undefined, 'durable-text')
+    const thinking = (context.messages[0] as AssistantMessage).content[0]
+    expect(thinking).toMatchObject({
+      type: 'thinking',
+      thinking: reasoningText,
+      thinkingSignature: JSON.stringify({
+        type: 'reasoning', content: [{ type: 'reasoning_text', text: reasoningText }],
+      }),
+    })
+  })
+
+  it('defaults DeepSeek Responses reasoning replay to native signatures', () => {
+    const signature = JSON.stringify({ type: 'reasoning', id: 'rs_1', encrypted_content: 'opaque' })
+    const persisted = toPiReplayState(assistant({
+      api: 'openai-responses',
+      provider: 'deepseek',
+      model: 'deepseek-flash',
+      content: [{ type: 'thinking', thinking: '', thinkingSignature: signature }],
+    }))
+    const block = persisted.blocks?.[0]
+    if (typeof block !== 'object' || block === null || Array.isArray(block)) {
+      throw new Error('missing persisted reasoning block')
+    }
+    expect((block as { thinkingSignature?: unknown }).thinkingSignature).toBe(signature)
+  })
+
+  it('keeps another Responses provider’s encrypted reasoning verbatim', () => {
+    const nativeReasoning = {
+      type: 'reasoning', id: 'rs_openai', status: 'completed', summary: [], encrypted_content: 'openai-ciphertext',
+    }
+    const persisted = toPiReplayState(assistant({
+      api: 'openai-responses',
+      provider: 'openai',
+      model: 'gpt-5',
+      content: [{
+        type: 'thinking',
+        thinking: 'private reasoning',
+        thinkingSignature: JSON.stringify(nativeReasoning),
+      }],
+    }))
+    const block = persisted.blocks?.[0]
+    if (typeof block !== 'object' || block === null || Array.isArray(block)) {
+      throw new Error('missing persisted reasoning block')
+    }
+    expect(JSON.parse((block as { thinkingSignature: string }).thinkingSignature)).toEqual(nativeReasoning)
   })
 
   it.each(['high', ''])('preserves provider thinking level %j through durable projection and replay', (providerThinkingLevel) => {

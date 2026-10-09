@@ -76,6 +76,64 @@ beforeEach(() => {
 })
 
 describe('PiAiAdapter provider routing', () => {
+  it('captures durable-text reasoning replay only when the model opts in', async () => {
+    const nativeItem = { type: 'reasoning', id: 'rs_native', status: 'completed', summary: [], encrypted_content: 'opaque' }
+    const signature = JSON.stringify(nativeItem)
+    const response = {
+      id: 'resp_1',
+      object: 'response',
+      created_at: 1,
+      model: 'deepseek-flash',
+      output: [
+        { type: 'reasoning', id: 'rs_native', status: 'completed', summary: [], encrypted_content: 'opaque' },
+        { type: 'message', id: 'msg_1', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'done' }] },
+      ],
+      status: 'completed',
+      usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+    }
+    const events = [
+      JSON.stringify({ type: 'response.created', response: { id: 'resp_1' } }),
+      JSON.stringify({ type: 'response.output_item.added', output_index: 0, item: { type: 'reasoning', id: 'rs_native', summary: [] } }),
+      JSON.stringify({ type: 'response.reasoning_text.delta', output_index: 0, delta: 'durable text' }),
+      JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: response.output[0] }),
+      JSON.stringify({ type: 'response.output_item.added', output_index: 1, item: { type: 'message', id: 'msg_1', role: 'assistant', content: [] } }),
+      JSON.stringify({ type: 'response.output_text.delta', output_index: 1, delta: 'done' }),
+      JSON.stringify({ type: 'response.output_item.done', output_index: 1, item: response.output[1] }),
+      JSON.stringify({ type: 'response.completed', response }),
+    ]
+    const configured = await mockServer([{ events }])
+    const native = await mockServer([{ events }])
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: {
+        deepseek: {
+          apiKeyEnv: 'PI_TEST_KEY',
+          api: 'openai-responses',
+          baseURL: `${configured.url}/v1`,
+          models: [{ id: 'deepseek-flash', reasoningReplay: 'durable-text' }],
+        },
+        'deepseek-native': {
+          apiKeyEnv: 'PI_TEST_KEY',
+          api: 'openai-responses',
+          baseURL: `${native.url}/v1`,
+          models: [{ id: 'deepseek-flash' }],
+        },
+      },
+    })
+    const configuredResult = await assemble(ctx, { provider: 'deepseek', model: 'deepseek-flash', messages: [] })
+    const nativeResult = await assemble(ctx, { provider: 'deepseek-native', model: 'deepseek-flash', messages: [] })
+    const configuredState = configuredResult.message.source.kind === 'model' ? configuredResult.message.source.replayState : undefined
+    const nativeState = nativeResult.message.source.kind === 'model' ? nativeResult.message.source.replayState : undefined
+    const configuredBlocks = (configuredState as { blocks?: { type: string; thinkingSignature?: string }[] } | undefined)?.blocks
+    const nativeBlocks = (nativeState as { blocks?: { type: string; thinkingSignature?: string }[] } | undefined)?.blocks
+    expect(configuredBlocks?.[0]).toEqual({
+      type: 'reasoning',
+      thinkingSignature: JSON.stringify({ type: 'reasoning', content: [{ type: 'reasoning_text', text: 'durable text' }] }),
+    })
+    expect(nativeBlocks?.[0]).toEqual({ type: 'reasoning', thinkingSignature: signature })
+  })
+
   it('resolves a catalog model dynamically and uses a private endpoint', async () => {
     const server = await mockServer([{ events: textEvents }])
     const ctx = await harness(server.url)
