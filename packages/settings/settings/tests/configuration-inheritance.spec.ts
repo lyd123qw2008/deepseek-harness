@@ -65,7 +65,7 @@ it('recomposes unoverridden entries after bundle changes and returns empty confi
   expect(read().find(row => row.entry.options.id === 'second')!.inherited).toEqual({ ordinary: 'new bundle value' })
 })
 
-it.each([0, 13, 190])('bounds composition work for 190 entries with %i config overrides', async (overrideCount) => {
+it.each([0, 13, 191])('bounds composition work for 191 entries with %i config overrides', async (overrideCount) => {
   const { ctx, profile, start } = await configurationFixture({ hmr: false })
   await ctx.fiber.dispose()
   const bundlePath = join(profile.dir, 'node_modules', 'test-bundle', 'cordis.patch.yml')
@@ -82,7 +82,7 @@ it.each([0, 13, 190])('bounds composition work for 190 entries with %i config ov
   const compose = vi.spyOn(appBoot, 'composeEntries')
   try {
     const rows = restored.configEditor.configuration()
-    expect(rows).toHaveLength(190)
+    expect(rows).toHaveLength(191)
     expect(rows.find(row => row.entry.options.id === 'generated-0')!.inherited).toEqual({ ordinary: 'value-0' })
     expect(compose).toHaveBeenCalledTimes(overrideCount + Number(overrideCount < rows.length))
   } finally {

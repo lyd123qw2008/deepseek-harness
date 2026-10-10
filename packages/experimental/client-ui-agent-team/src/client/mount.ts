@@ -25,8 +25,9 @@ export const inject = ['sessions', 'uiWorkspace', 'slots', 'locale']
  * The panel reads the Lead Session's `agentTeam` projection from the shared
  * Session store; this registration performs no Team RPC.
  * @param ctx - Client Context carrying the injected navigation, locale, slot, and Session services.
+ * @param enabledPresets - presets allowed to display the Team action; omitted keeps the `team-` prefix rule.
  */
-export function registerAgentTeamUi(ctx: ClientContext): void {
+export function registerAgentTeamUi(ctx: ClientContext, enabledPresets?: readonly string[]): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'client-ui-agent-team: dictionaries')
   const sessions = ctx.sessions
   const leadSessionId = (sessionId: SessionId): SessionId => {
@@ -35,6 +36,7 @@ export function registerAgentTeamUi(ctx: ClientContext): void {
   }
 
   const actions: TeamActionInjected = {
+    ...(enabledPresets === undefined ? {} : { enabledPresets }),
     openTeammate(sessionId: SessionId, childSessionId: SessionId): void {
       const parentSessionId = leadSessionId(sessionId)
       if ((sessions.retainInfo(sessionId).getSnapshot().retainedBy.mainView ?? 0) === 0) return

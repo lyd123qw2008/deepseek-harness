@@ -43,6 +43,10 @@
     "watch": "tsdown --watch"
   },
   "license": "MIT",
+  "dependencies": {
+    "@deepseek-ai/schemastery": "workspace:^",
+    "react": "^18.2.0"
+  },
   "peerDependencies": {
     "@deepseek-ai/dsh-api-session-controller": "workspace:*",
     "@deepseek-ai/dsh-client-locale": "workspace:*",

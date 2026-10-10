@@ -136,7 +136,7 @@ describe('Chat apply wiring', () => {
     expect(b.runtime.slots.entries('conversation.composer.dock').map(row => row.options.id))
       .toEqual(['activity', 'usage'])
     expect(b.runtime.slots.entries('settings.general.item').map(row => row.options.id))
-      .toEqual(['transcript-view', 'link-opening', 'composer-enter', 'performance-usage'])
+      .toEqual(['transcript-view', 'file-open-target', 'link-opening', 'composer-enter', 'performance-usage'])
     await b.runtime.dispose()
   })
 
@@ -195,7 +195,7 @@ describe('Chat apply wiring', () => {
     expect(b.chatSettings.set).toHaveBeenCalledWith('transcriptView', choice)
 
     b.chatSettings.publish({
-      status: 'ready', value: { linkOpening: 'sidebar', transcriptView: 'compact', performanceUsage: 'detailed' }, revision: 1, writable: true,
+      status: 'ready', value: { linkOpening: 'sidebar', transcriptView: 'compact', performanceUsage: 'detailed', fileOpenTarget: 'host' }, revision: 1, writable: true,
     })
     expect(face.hooks.transcriptView.getSnapshot()).toBe('compact')
   })
@@ -212,7 +212,7 @@ describe('Chat apply wiring', () => {
       setCollapseTiming('next-input')
       expect(hooks.collapseTiming.getSnapshot()).toBe('next-input')
       expect(b.chatSettings.set).not.toHaveBeenCalled()
-      b.chatSettings.publish({ status: 'ready', value: { linkOpening: 'sidebar', transcriptView: 'standard', performanceUsage: 'detailed' }, revision: 1, writable: true })
+      b.chatSettings.publish({ status: 'ready', value: { linkOpening: 'sidebar', transcriptView: 'standard', performanceUsage: 'detailed', fileOpenTarget: 'host' }, revision: 1, writable: true })
       expect(hooks.transcriptView.getSnapshot()).toBe('standard')
       expect(hooks.collapseTiming.getSnapshot()).toBe('next-input')
       expect(b.runtime.slots.entries('settings.general.item').map(entry => entry.options.id))
@@ -243,7 +243,7 @@ describe('Chat apply wiring', () => {
     expect(face.hooks.performanceUsage.getSnapshot()).toBe('detailed')
     face.setPerformanceUsage('compact')
     expect(b.chatSettings.set).toHaveBeenCalledWith('performanceUsage', 'compact')
-    b.chatSettings.publish({ value: { linkOpening: 'sidebar', transcriptView: 'compact', performanceUsage: 'compact' } })
+    b.chatSettings.publish({ value: { linkOpening: 'sidebar', transcriptView: 'compact', performanceUsage: 'compact', fileOpenTarget: 'host' } })
     expect(face.hooks.performanceUsage.getSnapshot()).toBe('compact')
     for (const entry of [
       ...b.runtime.slots.entries('conversation.composer.dock'),

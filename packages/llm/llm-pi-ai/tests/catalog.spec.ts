@@ -732,6 +732,29 @@ describe('modelOverrides', () => {
     return model
   }
 
+  it('resolves per-model Responses reasoning replay strategy for models and overrides', () => {
+    const target = deepseekModel()
+    const resolvedModels = resolveProfiles({
+      deepseek: {
+        api: 'openai-responses',
+        models: [{ id: target.id, reasoningReplay: 'durable-text' }],
+      },
+    }).get('deepseek')
+    expect(resolvedModels?.reasoningReplay.get(target.id)).toBe('durable-text')
+
+    const resolvedOverride = resolveProfiles({
+      deepseek: {
+        api: 'openai-responses',
+        modelOverrides: { [target.id]: { reasoningReplay: 'durable-text' } },
+      },
+    }).get('deepseek')
+    expect(resolvedOverride?.reasoningReplay.get(target.id)).toBe('durable-text')
+
+    expect(() => resolveProfiles({
+      deepseek: { models: [{ id: target.id, reasoningReplay: 'durable-text' }] },
+    })).toThrow(/only to the openai-responses protocol/)
+  })
+
   it('reshapes one catalog model while the rest of the catalog keeps serving', () => {
     const catalogSize = getBuiltinModels('deepseek').length
     const target = deepseekModel()

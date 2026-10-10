@@ -27,6 +27,7 @@ export async function configurationFixture(options: { schema?: z; apply?: (ctx: 
     { id: 'default-model', name: 'cordis:model', config: { provider: 'test', model: 'original' } },
     { id: 'first', name: 'cordis:probe', config: { ordinary: 'fixed', token: 'private' } },
     { id: 'second', name: 'cordis:probe', config: { ordinary: 'second' } },
+    { id: 'agent-preset-registry', name: 'cordis:presets', config: { default: 'standard' } },
   ] }]))
   writeFileSync(join(dir, 'cordis.yml'), '[]\n')
   const profile: ProfileContext = {
@@ -37,12 +38,21 @@ export async function configurationFixture(options: { schema?: z; apply?: (ctx: 
     Config: options.schema ?? z.object({ ordinary: z.string().required(), count: z.number().min(1).default(2).volatile(), token: z.string().role('secret').volatile(), list: z.array(z.object({ name: z.string().required(), token: z.string().role('secret') })).volatile() }),
     apply: options.apply ?? (() => {}),
   }
+  /** Stands in for the shipped preset registry whose Config the legacy `agent-presets` section feeds. */
+  const Presets = {
+    Config: z.object({
+      default: z.string().required(),
+      selectedDefault: z.string().volatile(),
+      modeSelectionEnabled: z.boolean().default(true).volatile(),
+    }),
+    apply: () => {},
+  }
   const start = async (): Promise<Context> => {
     const ctx = await boot('test', join(dir, 'cordis.yml'), readProfilePatches('test', profile), (ctx) => {
       ctx.provide('profileContext', profile)
       ctx.provide('appReady', { onReady: (listener: () => void) => { listener(); return () => {} } })
       Object.assign(ctx.loader.builtins, {
-        editor: ConfigEditor, settings: Settings, model: DefaultModel, probe: Probe,
+        editor: ConfigEditor, settings: Settings, model: DefaultModel, probe: Probe, presets: Presets,
       })
     })
     onTestFinished(async () => { await ctx.fiber.dispose() })
