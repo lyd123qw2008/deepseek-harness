@@ -16,13 +16,6 @@
       "copyTime": "exact"
     },
     {
-      "path": ".agent-presets",
-      "kind": "agent-preset",
-      "strategy": "union",
-      "sourceMustExist": true,
-      "copyTime": "presence"
-    },
-    {
       "path": "profiles",
       "kind": "profile",
       "strategy": "union",
