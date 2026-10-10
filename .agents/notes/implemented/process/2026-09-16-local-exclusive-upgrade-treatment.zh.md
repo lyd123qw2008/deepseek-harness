@@ -19,7 +19,7 @@ Status: implemented
 | 特性 | 上游状态 | 本地状态 | 拥有的文件 |
 |---|---|---|---|
 | Web diff 卡片通过滚动视口 | 用 `structuredPatch` 推导上下文 hunk，每侧三行上下文，折叠配合隐藏行控件，并有有界编辑距离搜索 | 在浏览器端推导行，每段未改动内容一行上下文，正文可滚动，带 1-based 行号 gutter 与词级高亮 | 4 个源码文件、5 个测试文件、2 个 golden |
-| Agent Team 能力按 preset 隔离 | 关闭标准委派行并在 profile 层挂载 Team 工具行，因此一个部署要么是标准委派、要么是 Team | 保留标准委派行并置为 one-shot，只在插件自身的 composition scope 内安装 Team 工具，并在 UI 层按 preset id 门控 | 4 个包、11 个文件 |
+| Agent Team 能力按 preset 隔离 | 关闭标准委派行并在 profile 层挂载 Team 工具行，因此一个部署要么是标准委派、要么是 Team | 已由用户在 `dsh-v0.2.1-alpha.2` 决定退役；不再保留本地文件 | — |
 | MCP 客户端连接作用域 | `transport`、`serverName`、`command`、`url` 与重连调优；每个实例一个子进程，`cwd` 为静态值 | 新增 `scope: 'global' \| 'session-project'`；session-project 池为每个 Session 打开一个子进程，其 `cwd` 即该 Session 的项目 | 4 个文件 |
 | bash 会话 cwd 规范化 | 直接使用 Session header 的 `cwd` 作为相对 `workdir` 的基准 | 通过 `canonicalPath` 规范化，使相对 `workdir` 与策略为本次调用加盖的 workspace 根一致 | 1 个源码文件 |
 | 完全展开模式平铺对话 | 已由 `dsh-v0.1.7-rc.1` 取代：该版本提供 `verbose`（`foldCompletedTurns: false` 且 `stepGrouping: 'none'`），旧值 `expanded` 读取为 `standard` | 不再保留本地文件；迁移把已保存的 `expanded` 偏好改为 `verbose` | — |
@@ -53,6 +53,7 @@ Status: implemented
 | 被取代的偏差 | 发布版替代物 |
 |---|---|
 | `skill-filesystem` 的 Windows watcher 突发恢复 | 本分支合并的原生 `raw` 事件通路已不存在：发布版 watcher 是 chokidar，`WatchHandle` 只有 `{ mode, close() }`，没有 `on('raw')` 可挂载，其配置也已经读 `watchUsePolling` / `watchPollIntervalMs`。突发窗口、`handleNativeRawEvent` 与 `watchNativeBurstWindowMs` 连同固定它们的两个测试文件一并删除 |
+| Agent Team 能力按 preset 隔离 | 由用户在 `dsh-v0.2.1-alpha.2` 决定退役，并非发布版提供了替代物。发布版插件在每个成员 scope 安装 Team 工具，preset composition 不再门控；浏览器的 `enabledPresets` 开关与 `agent-team-profile` patch 一并放弃。该特性提供的边界被有意让出：Team-aware preset 不再能对普通会话隐藏 Team 工具。它的测试通过裸 `scope.ctx.plugin(...)` 断言门控，而发布版改用 Loader 的 `mountPreset` 挂载 preset composition，因此在 `dsh-v0.2.1-alpha.2` 上该门控同样没有可验证的路径 |
 
 ### Web diff 卡片通过滚动视口
 
@@ -70,13 +71,11 @@ Status: implemented
 
 ### Agent Team 能力按 preset 隔离
 
-上游的 Agent Teams profile 层直接关闭 `tool-subagent` 与 `tool-subagent-fork`，以便把"直接委派与协调"移交给 Team 工具，并在该层挂载 Team 工具行。这使该层成为一个部署级的选择：挂载它会在所有地方移除标准委派，而 Team UI bundle 全局挂载、没有 preset 门控，因此普通会话也会多出一个 Team 入口。
+已由用户在 `dsh-v0.2.1-alpha.2` 决定退役。该特性曾把标准委派行保留为 one-shot、从 profile 层移除 Team 工具行、把 `@deepseek-ai/dsh-experimental-tool-agent-team` 门控在本插件自身的 composition scope 上，并新增浏览器 `enabledPresets` 开关。现在全部移除：四个 Team 包与发布版逐字节一致，因此 Team 感知的 preset 不再能对普通会话隐藏 Team 工具。
 
-本分支把标准委派行保留为 one-shot（`backgroundMode: one-shot`）并从 profile 层移除 Team 工具行。随后 `@deepseek-ai/dsh-experimental-tool-agent-team` 只为其 scope 链包含本插件自身 composition scope 的 agent 安装工具，于是 Team 感知的 preset 成为能力边界，而 Team 服务仍归宿主所有。浏览器侧新增 `enabledPresets`，对其他 preset 不渲染任何内容，同时保持插槽挂载以维持稳定注册与 HMR。
+这个决定是在门控失去可验证性之后做出的。它的测试用裸 `scope.ctx.plugin(...)` 挂载来断言该边界，而 `dsh-v0.2.1-alpha.2` 改用 Loader 的 `mountPreset` 挂载 preset composition；在那种挂载下插件从未激活，因此该门控在本版本上也没有得到验证的路径。促成该特性的重叠并未因退役而改变：`tool-subagent-control` 及其 `list-agents` 伴生仍然注册 `list_agents`、`send_message` 与 `interrupt_agent`，正是 Team 插件注册的那三个名字，因此作用域注册表仍可能交给同一个 agent 两个同名工具，而它们的答案来自不同 roster。
 
-这种重叠并非假设：`tool-subagent-control` 及其 `list-agents` 伴生注册了 `list_agents`、`send_message` 与 `interrupt_agent`，正是 Team 插件注册的那三个名字。作用域注册表只在同一个 scope 内拒绝重名，因此两层都能干净挂载，并交给同一个 agent 两个同名工具，而它们的答案来自不同的 roster——这是静默，不是报错。这就是两层必须保持镜像的原因。
-
-拥有的文件：`packages/experimental/agent-team-profile/cordis.patch.yml` 及其 profile 测试、`packages/experimental/tool-agent-team/src/index.ts` 及其测试，以及 `packages/experimental/client-ui-agent-team`（其 `Config`、`TeamAction.tsx`、`mount.ts`、`index.ts` 与两个客户端测试）。该能力只占改动的一半：选择加入的 preset 位于数据 home 的 `.agent-presets/team-local` 与 `.agent-presets/team-pragmatic-local`，它们自己挂载 `tool-agent-team`。一个保留了 preset 却丢失本补丁的 Profile，会让那些 preset 请求一个该层不再提供的能力。
+若要恢复该边界，应通过发布版的 preset composition 挂载来表达，而不是通过 `createScope` 加直接插件挂载。
 
 ### MCP 客户端连接作用域
 
@@ -101,7 +100,7 @@ Status: implemented
 以下是"需要重新审视而非默认保留"的信号：
 
 - **Web diff 卡片**：上游引入滚动正文、行号 gutter 或行内高亮，或不再从 `structuredPatch` 上下文推导行。仅上游改动上下文宽度或编辑距离上限则不需要。
-- **Agent Team**：上游改变 Team 工具行的挂载方式、`apply(ctx, config)` 签名、`mountAgentTeamUi` 的参数个数，或 Team 与 subagent-control 同时声明的工具名。
+- **Agent Team**：已在 `dsh-v0.2.1-alpha.2` 退役；恢复它的信号是出现一种能表达该能力边界的 preset composition 挂载方式，加上 `tool-subagent-control` 与 Team 插件仍在共同声明那三个重叠工具名（`list_agents`、`send_message`、`interrupt_agent`）。
 - **MCP 客户端**：上游新增 `scope` 键或任何其他逐 Session 的连接选择。同名键并不自动是同一概念：上游的 `scopeOf(ctx)` 是插件注册作用域，而 `session-project` 是子进程与 Session 项目之间的绑定。
 - **Terminal 卡片**：已由 `dsh-v0.2.1-alpha.1` 退役；重新开启它的信号是发布版又在 Client 侧校验升权字段。
 - **已退役偏差**：当发布版改变替代实现的契约时，该偏差需重新评估——对 `verbose` 而言，意味着整轮折叠或历史组头分组回归。

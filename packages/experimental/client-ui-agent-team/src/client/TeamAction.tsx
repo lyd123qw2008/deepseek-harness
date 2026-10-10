@@ -19,12 +19,6 @@ import css from './TeamAction.module.css'
 
 /** Business actions injected by the browser plugin. */
 export interface TeamActionInjected {
-  /**
-   * Presets allowed to display this Team action. An omitted value defaults to
-   * preset ids beginning with `team-`; an explicit empty list allows every
-   * preset for legacy embedders.
-   */
-  enabledPresets?: readonly string[]
   /** Open a roster Session from the current conversation. */
   openTeammate: (sessionId: SessionId, childSessionId: SessionId) => void
 }
@@ -183,7 +177,7 @@ function TaskCard({ task, t }: { task: TeamTask; t: TranslateNS<typeof NS> }) {
 
 /** Render the Team roster and read-only task board. */
 export function TeamAction({
-  sessionId, enabledPresets, useSession, useSessions, useSessionStatus, openTeammate, t,
+  sessionId, useSession, useSessions, useSessionStatus, openTeammate, t,
 }: TeamActionProps) {
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -197,12 +191,6 @@ export function TeamAction({
   const positioned = position !== null
   const leadSessionId = useSession(snapshot => snapshot.subagent?.address.parentSessionId) ?? sessionId
   const team = useSessions(state => state.projectionsBySession[leadSessionId]?.values.agentTeam)
-  const teamEnabled = useSessions((state) => {
-    const preset = state.projectionsBySession[leadSessionId]?.values.agentPreset
-    if (enabledPresets === undefined) return typeof preset === 'string' && preset.startsWith('team-')
-    return enabledPresets.length === 0
-      || (typeof preset === 'string' && enabledPresets.includes(preset))
-  })
   const opening = useSession(snapshot => snapshot.openState === 'loading')
   const listing = useSessions(state => state.phase === 'pending')
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -273,11 +261,6 @@ export function TeamAction({
   }, [open])
 
   const compact = team !== undefined && team.members.length === 1 && team.tasks.length === 0
-
-  // The Web bundle can expose the Team UI globally, while a deployment chooses
-  // the Team-capable presets explicitly. Keep the slot mounted for HMR and
-  // stable registration, but render no Team affordance for ordinary presets.
-  if (!teamEnabled) return null
 
   return (
     <div

@@ -61,17 +61,9 @@ function bench(options: {
   const sessionId = options.sessionId ?? SESSION
   const byId: Record<SessionId, SessionSummary> = {}
   for (const [id, running] of Object.entries(options.running ?? {}) as [SessionId, boolean][]) byId[id] = summary(id, running)
-  // The preset gate reads the lead Session's `agentPreset` projection, so every
-  // case starts from a Team-capable preset while keeping its own projection values.
-  const leadId = options.parentSessionId ?? sessionId
-  const projections = { ...(options.projections ?? { [SESSION]: { state: 'ready', error: null, values: { agentTeam: team } } }) }
-  projections[leadId] = {
-    state: 'ready', error: null, ...projections[leadId],
-    values: { agentPreset: 'team-local', ...(projections[leadId]?.values ?? {}) },
-  } as Projections[SessionId]
   const sessions = createSnapshotStore<SessionListState>({
     ids: Object.keys(byId) as SessionId[], byId, phase: 'ready',
-    projectionsBySession: projections,
+    projectionsBySession: options.projections ?? { [SESSION]: { state: 'ready', error: null, values: { agentTeam: team } } },
   })
   const statuses = createSnapshotStore<SessionStatusSnapshot>(options.statuses ?? new Map())
   const session = createSnapshotStore<SessionSnapshot>({
@@ -122,13 +114,7 @@ function setProjectionSnapshot(
 ): void {
   act(() => {
     const current = sessions.getSnapshot()
-    sessions.set({
-      ...current,
-      projectionsBySession: {
-        ...current.projectionsBySession,
-        [sessionId]: { ...snapshot, values: { agentPreset: 'team-local', ...snapshot.values } },
-      },
-    })
+    sessions.set({ ...current, projectionsBySession: { ...current.projectionsBySession, [sessionId]: snapshot } })
   })
 }
 
@@ -224,7 +210,7 @@ describe('TeamAction', () => {
     expect(screen.getByRole('status').textContent).toBe(zh.loading)
     act(() => { b.sessions.set({
       ...b.sessions.getSnapshot(), phase: 'ready',
-      projectionsBySession: { [SESSION]: { state: 'idle', error: null, values: { agentTeam: team, agentPreset: 'team-local' } } },
+      projectionsBySession: { [SESSION]: { state: 'idle', error: null, values: { agentTeam: team } } },
     }) })
     expect(screen.getByText('Implement runtime')).toBeTruthy()
     expect(screen.queryByRole('status')).toBeNull()

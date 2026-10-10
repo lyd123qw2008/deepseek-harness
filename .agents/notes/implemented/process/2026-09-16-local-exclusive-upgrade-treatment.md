@@ -19,7 +19,7 @@ The features are independent, and an upgrade must judge each on its own; a relea
 | Feature | Upstream state | Local state | Owned files |
 |---|---|---|---|
 | Web diff card through a scroll viewport | Derives contextual hunks with `structuredPatch`, three context lines per side, folding with a hidden-line control and a bounded edit-distance search | Derives rows in the browser, one context line per unchanged segment, a scrolling body, 1-based line-number gutter and word-level highlights | 4 source files, 5 test files, 2 goldens |
-| Agent Team capability isolated by preset | Disables the standard delegation rows and mounts the Team tool row in the profile layer, so a deployment is either standard delegation or Team | Keeps the standard delegation rows as one-shot and installs the Team tool only inside the composition scope of the plugin, gated in the UI by preset id | 4 packages, 11 files |
+| Agent Team capability isolated by preset | Disables the standard delegation rows and mounts the Team tool row in the profile layer, so a deployment is either standard delegation or Team | Retired in `dsh-v0.2.1-alpha.2` by owner decision; no local file remains | — |
 | MCP client connection scope | `transport`, `serverName`, `command`, `url` and reconnect tuning; one child for the instance, with a static `cwd` | Adds `scope: 'global' \| 'session-project'`; the session-project pool opens one child per Session whose `cwd` is that Session's project | 4 files |
 | Bash session cwd canonicalization | Uses the Session header's `cwd` verbatim as the base for a relative `workdir` | Canonicalizes it through `canonicalPath`, so a relative `workdir` resolves against the same root the policy stamps onto the call | 1 source file |
 | Flat Expanded transcript | Retired in `dsh-v0.1.7-rc.1`, which ships `verbose`: `foldCompletedTurns: false` with `stepGrouping: 'none'`, and legacy `expanded` reads as `standard` | No local file remains; the migration moves a saved `expanded` preference to `verbose` | — |
@@ -53,6 +53,7 @@ A release can also retire a local deviation by shipping the behavior. Each retir
 | Retired deviation | Released replacement |
 |---|---|
 | Windows watcher burst recovery in `skill-filesystem` | The native `raw` event path this branch coalesced no longer exists: the released watcher is chokidar with a `WatchHandle` of `{ mode, close() }`, so there is no `on('raw')` to attach to, and its config already reads `watchUsePolling` / `watchPollIntervalMs`. The burst window, its `handleNativeRawEvent`, and `watchNativeBurstWindowMs` were dropped with the two test files that pinned them |
+| Agent Team capability isolated by preset | Retired by owner decision on `dsh-v0.2.1-alpha.2`, not because the release replaced it. The released plugin installs Team tools in every member scope, and the preset composition no longer gates them; the browser `enabledPresets` switch and the `agent-team-profile` patch went with it. The boundary the feature provided is deliberately given up: a Team-aware preset can no longer withhold Team tools from ordinary sessions. Its test asserted the gate through a bare `scope.ctx.plugin(...)` mount while the release mounts preset compositions through the Loader's `mountPreset`, so the gate had no verified path on `dsh-v0.2.1-alpha.2` either |
 
 ### Web diff card through a scroll viewport
 
@@ -70,13 +71,11 @@ Do not confuse this feature's files with the host-file-opening change (`fix(clie
 
 ### Agent Team capability isolated by preset
 
-Upstream's Agent Teams profile layer disables `tool-subagent` and `tool-subagent-fork` outright so that "direct delegation and coordination" move to the Team tools, and it mounts the Team tool row in that layer. That makes the layer a deployment-wide choice: mounting it removes standard delegation everywhere, and the Team UI bundles globally with no preset gate, so ordinary sessions grow a Team affordance.
+Retired by owner decision in `dsh-v0.2.1-alpha.2`. The feature kept the standard delegation rows as one-shot, removed the Team tool row from the profile layer, gated `@deepseek-ai/dsh-experimental-tool-agent-team` on the plugin's own composition scope, and added a browser `enabledPresets` switch. All of it is gone: the four Team packages now match the release byte for byte, so a Team-aware preset can no longer withhold Team tools from ordinary sessions.
 
-This branch keeps the standard delegation rows as one-shot (`backgroundMode: one-shot`) and removes the Team tool row from the profile layer. `@deepseek-ai/dsh-experimental-tool-agent-team` then installs its tools only for an agent whose scope chain contains the plugin's own composition scope, so a Team-aware preset becomes the capability boundary while the Team service stays host-owned. The browser side gains `enabledPresets` and renders nothing for other presets while keeping the slot mounted for stable registration and HMR.
+The decision was made after the gate stopped verifying. Its test asserted the boundary by mounting the plugin with a bare `scope.ctx.plugin(...)`, while `dsh-v0.2.1-alpha.2` mounts preset compositions through the Loader's `mountPreset`; under that mount the plugin never activated, so the gate had no demonstrated path on this release. The overlap that motivated the feature is unchanged by this retirement: `tool-subagent-control` and its `list-agents` companion still register `list_agents`, `send_message`, and `interrupt_agent`, the same three names the Team plugin registers, so a scoped registry still hands one agent two same-named tools whose answers come from different rosters.
 
-The overlap is not hypothetical: `tool-subagent-control` and its `list-agents` companion register `list_agents`, `send_message`, and `interrupt_agent`, the same three names the Team plugin registers. Scoped registries reject a duplicate only inside one scope, so both layers can mount cleanly and hand one agent two same-named tools whose answers come from different rosters — silence, not an error. That is why the two layers must stay mirrored.
-
-Owned files: `packages/experimental/agent-team-profile/cordis.patch.yml` and its profile test, `packages/experimental/tool-agent-team/src/index.ts` and its test, and `packages/experimental/client-ui-agent-team` (its `Config`, `TeamAction.tsx`, `mount.ts`, `index.ts`, and both client tests). The capability is only half the change: the presets that opt in live in the data home under `.agent-presets/team-local` and `.agent-presets/team-pragmatic-local`, which mount `tool-agent-team` themselves. A Profile that keeps its presets but loses this patch leaves those presets requesting a capability the layer no longer provides.
+Reinstating the boundary means expressing it through the released preset-composition mount rather than through `createScope` plus a direct plugin mount.
 
 ### MCP client connection scope
 
@@ -101,7 +100,7 @@ For each feature, an upgrade decides between three outcomes and records which on
 The signals that a feature needs re-examination rather than a default keep:
 
 - **Web diff card**: upstream introduces a scrolling body, a line-number gutter, or inline highlights, or stops deriving rows from `structuredPatch` context. Upstream-only changes to context width or the edit-distance bound do not need one.
-- **Agent Team**: upstream changes how the Team tool row is mounted, the `apply(ctx, config)` signature, the `mountAgentTeamUi` arity, or the tool names that Team and subagent-control both claim.
+- **Agent Team**: retired in `dsh-v0.2.1-alpha.2`; the signal to reinstate it is a preset-composition mount that can express the capability boundary, plus the three overlapping tool names (`list_agents`, `send_message`, `interrupt_agent`) still being claimed by both `tool-subagent-control` and the Team plugin.
 - **MCP client**: upstream adds a `scope` key or any other per-Session connection selection. A same-named key is not automatically the same concept: upstream's `scopeOf(ctx)` is plugin-registration scope, while `session-project` is a binding between a child process and a Session's project.
 - **Terminal card**: retired in `dsh-v0.2.1-alpha.1`; the signal to re-open it is a release that validates the escalation pair on the Client again.
 - **Retired deviations**: a release that changes the released replacement's contract puts the deviation back on the table — for `verbose`, that means any return of the whole-Turn fold or of a grouped historical header.
