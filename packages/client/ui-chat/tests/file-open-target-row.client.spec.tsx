@@ -6,7 +6,7 @@ import type { WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controlle
 import type { SessionStatusSnapshot } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
-import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { allowAllAccess, bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { FileOpenTarget } from '../src/chat-settings.ts'
 import { FileOpenTargetRow, type FileOpenTargetRowProps } from '../src/client/settings/FileOpenTargetRow.tsx'
 import { en, zh } from '../src/client/locale.ts'
@@ -42,6 +42,7 @@ function mount(target: FileOpenTarget = 'host', dictionary: typeof en | typeof z
     useWorkspaces: emptyWorkspaces(),
     useSessionRetainInfo: () => undefined,
     useResource,
+    ...allowAllAccess,
     useFileOpenTarget: bindSnapshotSelector(source),
     setFileOpenTarget,
     t: makeTranslate(dictionary),
