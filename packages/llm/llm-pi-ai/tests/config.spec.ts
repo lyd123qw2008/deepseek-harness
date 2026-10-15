@@ -41,6 +41,14 @@ describe('reasoning schema boundary', () => {
     expect(absent.providers['acme-gateway']?.models?.[0]?.reasoningEfforts).toBeUndefined()
   })
 
+  it('validates the per-model Responses reasoning replay strategy', () => {
+    const chatConfig = configWith({ reasoningReplay: 'durable-text' })() as Options
+    expect(() => { assertServiceable(chatConfig) }).toThrow(/only to the openai-responses protocol/)
+    const responses = routeWith({ api: 'openai-responses', models: [{ id: 'm', reasoningReplay: 'durable-text' }] })() as Options
+    expect(() => { assertServiceable(responses) }).not.toThrow()
+    expect(configWith({ reasoningReplay: 'text' })).toThrow(/expected/)
+  })
+
   it('rejects a thinking format outside the offered set', () => {
     expect(configWith({ compat: { thinkingFormat: 'quantum' } })).toThrow(/expected/)
   })

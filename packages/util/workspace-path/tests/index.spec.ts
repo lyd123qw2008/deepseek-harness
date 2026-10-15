@@ -89,6 +89,7 @@ describe('Workspace path helpers', () => {
     ['/work/report.txt', '', '/work/report.txt'],
     ['/report.txt', '/', 'report.txt'],
     [String.raw`C:\work\reports\result.pdf`, String.raw`C:\work`, String.raw`reports\result.pdf`],
+    ['C:/work/reports/result.pdf', String.raw`C:\work`, 'reports/result.pdf'],
     [String.raw`\\server\share\report.txt`, String.raw`\\server\share`, 'report.txt'],
   ])('displays %s relative to %s only within that workspace', (path, cwd, label) => {
     expect(relativizeToCwd(path, cwd)).toBe(label)

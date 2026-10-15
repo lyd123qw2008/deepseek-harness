@@ -122,6 +122,7 @@ export const RELEASED_V0_EVENT_DISPOSITIONS: Readonly<Record<string, ReleasedV0P
   'turn/end': disposition(['turn', 'reason']),
   'turn/start': disposition(['turn']),
   'user/message': disposition(['role', 'id', 'content', 'source']),
+  'web/codex-search-llm-request': disposition(['endpoint', 'body']),
   'web/deepseek-search-llm-request': disposition(['endpoint', 'apiVersion', 'body']),
 })
 
