@@ -2,6 +2,13 @@
   "version": 1,
   "entries": [
     {
+      "path": "AGENTS.md",
+      "kind": "agent-instructions",
+      "strategy": "union",
+      "sourceMustExist": true,
+      "copyTime": "exact"
+    },
+    {
       "path": "sessions",
       "kind": "session-log",
       "strategy": "union",

@@ -61,7 +61,7 @@ Keep these source paths available when they exist:
 
 - `sessions`
 - `attachments`
-- `.agent-presets`
+- `AGENTS.md`
 - `profiles` configuration, excluding Profile `node_modules`
 - `settings.yaml`
 - `openssl-legacy.cnf`
