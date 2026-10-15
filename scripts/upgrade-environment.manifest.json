@@ -28,7 +28,7 @@
       "strategy": "union",
       "sourceMustExist": true,
       "copyTime": "presence",
-      "ignoredDescendants": ["node_modules"]
+      "ignoredDescendants": ["node_modules", ".playwright-mcp"]
     },
     {
       "path": "settings.yaml",

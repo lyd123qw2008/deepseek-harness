@@ -62,7 +62,7 @@ Keep these source paths available when they exist:
 - `sessions`
 - `attachments`
 - `AGENTS.md`
-- `profiles` configuration, excluding Profile `node_modules`
+- `profiles` configuration, excluding Profile `node_modules` and `.playwright-mcp` artifacts
 - `settings.yaml`
 - `openssl-legacy.cnf`
 - `storages/workspace.json`
