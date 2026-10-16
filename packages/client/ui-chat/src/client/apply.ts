@@ -9,10 +9,9 @@ import { createSnapshotStore, type ObservableSnapshot } from '@deepseek-ai/dsh-c
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-browser/client'
-import type {} from '@deepseek-ai/dsh-client-ui-input-trigger/client'
-// The `file` entry of `SidebarRightResourceParamsMap`, which types `{ params: { line } }` below.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client'
-import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
+import type {} from '@deepseek-ai/dsh-client-ui-input-trigger/client'
+import { fileAddressFor, resolveWorkspacePath } from '@deepseek-ai/dsh-util-workspace-path'
 // Type-only service and declaration merges used by the apply world.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -42,6 +41,8 @@ import { TranscriptViewPolicy } from './transcript-view.ts'
 import { derivePresentationPolicy } from './presentation-policy.ts'
 import { CHAT_SETTINGS_NAMESPACE, DEFAULT_LINK_OPENING, DEFAULT_TRANSCRIPT_VIEW_MODE, type ChatSettings } from '../chat-settings.ts'
 import { LinkOpeningRow, type LinkOpeningRowInjected } from './settings/LinkOpeningRow.tsx'
+import { FileOpenTargetRow, type FileOpenTargetRowInjected } from './settings/FileOpenTargetRow.tsx'
+import { FileOpenTargetPolicy } from './file-open-target.ts'
 import { PerformanceUsageRow, type PerformanceUsageRowInjected } from './settings/PerformanceUsageRow.tsx'
 import { PerformanceUsagePolicy } from './performance-usage.ts'
 import { useTurnDataValue } from './chat/use-turn-data.ts'
@@ -167,13 +168,30 @@ export function apply(ctx: Context): void {
   const transcriptView = new TranscriptViewPolicy(chatSettings, 'dshDesktop' in globalThis ? 'standard' : DEFAULT_TRANSCRIPT_VIEW_MODE)
   const presentation = derivePresentationPolicy(transcriptView.mode, transcriptView.collapseTiming)
   const performancePolicy = new PerformanceUsagePolicy(chatSettings)
-  ctx.effect(() => () => { transcriptView.dispose(); performancePolicy.dispose() })
+  const fileOpenTargetPolicy = new FileOpenTargetPolicy(chatSettings)
+  ctx.effect(() => () => {
+    transcriptView.dispose()
+    performancePolicy.dispose()
+    fileOpenTargetPolicy.dispose()
+  })
   const performanceUsage = performancePolicy.mode
+  const fileOpenTarget = fileOpenTargetPolicy.target
   registerChatNodeRenderers(ctx, performanceUsage, presentation)
   ctx.slots.registerFactory({
     name: 'conversation.chat.user.content', scope: 'session', locale: NS,
     children: { 'conversation.chat.user.images': { kind: 'single', scope: 'session' } },
   }, UserContent)
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'file-open-target',
+    order: 15,
+    locale: NS,
+    inject: (): FileOpenTargetRowInjected => ({
+      hooks: { fileOpenTarget },
+      setFileOpenTarget: (target) => { fileOpenTargetPolicy.setTarget(target) },
+    }),
+  }, FileOpenTargetRow))
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
@@ -243,24 +261,19 @@ export function apply(ctx: Context): void {
         return {
           ...nodeSources(binding),
           fileMentions: (owner: TurnTailOwnerProps) => ctx.get('chatFileMentions')?.forClosing(owner, sessionId),
-          // Files open in the right Sidebar, not in a desktop application: the
-          // content stays in the product, beside the conversation that produced
-          // it. A relative path, or an absolute one inside the session's
-          // workspace, is addressed under this session's scope,
-          // `dsh-resource://file/session/<id>/<path>`; an absolute path
-          // elsewhere keeps its absolute spelling in the same Session's address.
-          // Which tab type claims the
-          // address is the Sidebar's decision, not this call site's.
-          // A line travels as a navigation parameter, not as part of the
-          // address: the file is one piece of content whether it is opened at
-          // its top or at line 400, so the same tab is revealed and told where
-          // to land.
+          // Resolve the authored path against the Session workspace, then hand it
+          // to the target selected in Settings → General.
           openFile: async (path, options) => {
             const cwd = ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd
-            const url = fileAddressFor(sessionId, cwd, path)
-            if (options?.line === undefined) ctx.sidebarRight.openResource(url)
-            else ctx.sidebarRight.openResource(url, { params: { line: options.line } })
-            await Promise.resolve()
+            const resolved = resolveWorkspacePath(cwd, path)
+            if (fileOpenTarget.getSnapshot() === 'sidebar') {
+              const address = fileAddressFor(sessionId, cwd, resolved)
+              if (options?.line === undefined) ctx.sidebarRight.openResource(address)
+              else ctx.sidebarRight.openResource(address, { params: { line: options.line } })
+              return
+            }
+            const result = await ctx.remote.session.openWorkspacePath({ path: resolved })
+            if (!result.ok) throw new Error(`path open failed: ${result.error.message}`)
           },
           openExternalLink: (url) => {
             if (linkOpening.getSnapshot() === 'sidebar' && ctx.get('sidebarRightTabs')?.get('browser') !== undefined) {
