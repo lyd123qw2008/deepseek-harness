@@ -11,6 +11,8 @@
 import { LlmError } from '@deepseek-ai/dsh-llm'
 import type { AssistantMessage as HarnessAssistantMessage, ModelMessageSource, ReplayEnvelope } from '@deepseek-ai/dsh-llm'
 import type { Api, AssistantMessage, ToolCall, Usage as PiUsage } from '@earendil-works/pi-ai'
+import { isResponsesApi } from './catalog.ts'
+import type { PiAiReasoningReplay } from './catalog.ts'
 
 /** Per-block half of the pi-ai replay envelope, one entry per content block. */
 export type PiAiReplayBlock =
@@ -66,15 +68,42 @@ function emptyPiUsage(): PiUsage {
 }
 
 /**
+ * Apply the selected target model's reasoning replay strategy to one block.
+ *
+ * `native` preserves the provider signature; `durable-text` rebuilds the
+ * Responses input item from durable reasoning text and omits it when no such
+ * text exists. Callers limit saving to Responses outputs and history to a
+ * matching provider/model target.
+ */
+function responsesReasoningSignature(
+  strategy: PiAiReasoningReplay,
+  thinking: string,
+  signature: string | undefined,
+): { thinkingSignature?: string } {
+  if (strategy === 'native') {
+    return signature === undefined ? {} : { thinkingSignature: signature }
+  }
+  if (thinking.length === 0) return {}
+  return {
+    thinkingSignature: JSON.stringify({ type: 'reasoning', content: [{ type: 'reasoning_text', text: thinking }] }),
+  }
+}
+
+/**
  * Project a successful pi-ai response into the minimal durable replay state.
  * The per-block half is index-aligned with the streamed blocks (pi-ai content
  * order), so `BlockAssembler` prunes an entry with its block whenever assembly
  * removes one.
  * @param message - completed native pi-ai assistant response.
  * @param requestedModel - request identity stored in the assistant source; defaults to the native model.
+ * @param reasoningReplay - configured Responses replay strategy; defaults to native signatures.
  * @returns the versioned lossless-JSON replay projection.
  */
-export function toPiReplayState(message: AssistantMessage, requestedModel = message.model): ReplayEnvelope {
+export function toPiReplayState(
+  message: AssistantMessage,
+  requestedModel = message.model,
+  reasoningReplay: PiAiReasoningReplay = 'native',
+): ReplayEnvelope {
   const response: PiAiReplayResponse = {
     kind: 'pi-ai',
     version: 2,
@@ -96,7 +125,9 @@ export function toPiReplayState(message: AssistantMessage, requestedModel = mess
         }
         case 'thinking': return {
           type: 'reasoning',
-          ...block.thinkingSignature === undefined ? {} : { thinkingSignature: block.thinkingSignature },
+          ...isResponsesApi(message.api)
+            ? responsesReasoningSignature(reasoningReplay, block.thinking, block.thinkingSignature)
+            : block.thinkingSignature === undefined ? {} : { thinkingSignature: block.thinkingSignature },
           ...block.redacted === undefined ? {} : { redacted: block.redacted },
         }
         case 'toolCall': return {
@@ -184,7 +215,12 @@ function foreignAssistant(message: HarnessAssistantMessage): AssistantMessage {
 }
 
 /** Recombine durable Harness content with validated pi-ai replay metadata. */
-function replayedAssistant(message: HarnessAssistantMessage, source: ModelMessageSource, rawState: unknown): AssistantMessage {
+function replayedAssistant(
+  message: HarnessAssistantMessage,
+  source: ModelMessageSource,
+  rawState: unknown,
+  reasoningReplay: PiAiReasoningReplay,
+): AssistantMessage {
   const state = readReplayState(rawState)
   if (state.response.provider !== source.provider) return invalidReplay('provider does not match assistant source')
   if (state.response.model !== source.model) return invalidReplay('model does not match assistant source')
@@ -201,7 +237,11 @@ function replayedAssistant(message: HarnessAssistantMessage, source: ModelMessag
       case 'reasoning': return {
         type: 'thinking',
         thinking: block.text,
-        ...replay.type === 'reasoning' && replay.thinkingSignature !== undefined ? { thinkingSignature: replay.thinkingSignature } : {},
+        ...replay.type === 'reasoning' ? responsesReasoningSignature(
+          reasoningReplay,
+          block.text,
+          replay.thinkingSignature,
+        ) : {},
         ...replay.type === 'reasoning' && replay.redacted !== undefined ? { redacted: replay.redacted } : {},
       }
       case 'tool-call': return {
@@ -242,13 +282,18 @@ function replayedAssistant(message: HarnessAssistantMessage, source: ModelMessag
  * @param message - model-produced assistant content with provider, model, and optional adapter-owned replay metadata.
  * @param onDegrade - called with the diagnostic reason when an unusable replay
  *   state falls back to provider-neutral conversion.
+ * @param reasoningReplay - target model strategy for matching history; defaults to native signatures.
  * @returns a native pi-ai assistant message reconstructed from durable content.
  */
-export function toPiAssistant(message: HarnessAssistantMessage, onDegrade?: (reason: string) => void): AssistantMessage {
+export function toPiAssistant(
+  message: HarnessAssistantMessage,
+  onDegrade?: (reason: string) => void,
+  reasoningReplay: PiAiReasoningReplay = 'native',
+): AssistantMessage {
   const source = message.source
   if (source.replayState === undefined) return foreignAssistant(message)
   try {
-    return replayedAssistant(message, source, source.replayState)
+    return replayedAssistant(message, source, source.replayState, reasoningReplay)
   } catch (error: unknown) {
     /* v8 ignore next -- replayedAssistant throws only INVALID_REPLAY_STATE LlmErrors; the
        guard keeps a future non-replay failure loud instead of silently degrading it */

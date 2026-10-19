@@ -40,6 +40,9 @@ const NO_COST: ModelCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
 /** One request modality a pi-ai model may accept. */
 export type PiAiModality = Model<Api>['input'][number]
 
+/** How one Responses model replays earlier reasoning; absence defaults to `native`. */
+export type PiAiReasoningReplay = 'native' | 'durable-text'
+
 /**
  * Every pi-ai request modality. The `Record` key type is a drift gate: a pi-ai
  * upgrade that adds or removes a modality fails compilation here naming the
@@ -274,6 +277,16 @@ const COMPLETIONS_COMPAT_GATE = {
   supportsMidConvoToolAdditions: 'withhold',
   sessionAffinityFormat: 'withhold',
 } as const satisfies Record<keyof OpenAICompletionsCompat, CompatDisposition>
+
+const RESPONSES_APIS = new Set(['openai-responses'])
+
+/** Whether an API uses the supported OpenAI Responses reasoning protocol.
+ * @param api - the resolved pi-ai protocol name.
+ * @returns whether Responses reasoning replay configuration applies.
+ */
+export function isResponsesApi(api: string): boolean {
+  return RESPONSES_APIS.has(api)
+}
 
 /** Disposition of every `OpenAIResponsesCompat` field; a drift gate like the one above. */
 const RESPONSES_COMPAT_GATE = {
@@ -634,6 +647,8 @@ export interface PiAiModelProfile {
    * declares the offered levels and their wire spellings.
    */
   reasoningEfforts?: false | PiAiReasoningEfforts
+  /** `openai-responses` reasoning replay strategy; omission preserves the provider-native signature. */
+  reasoningReplay?: PiAiReasoningReplay
   /** pi-ai wire-compatibility switches for this model, winning over the route's per field; one its protocol does not declare is refused. */
   compat?: PiAiCompatProfile
 }
@@ -843,6 +858,8 @@ export interface RouteCatalog {
    * picked, so only an explicit configuration lands here.
    */
   configuredMaxTokens: ReadonlyMap<string, number>
+  /** Explicit Responses reasoning replay strategies, by model id. */
+  reasoningReplay: ReadonlyMap<string, PiAiReasoningReplay>
 }
 
 /**
@@ -908,6 +925,7 @@ export function resolveRouteModels(
   assertOfferedCompatFields(provider, 'route', request.compat)
   const seen = new Set<string>()
   const configuredMaxTokens = new Map<string, number>()
+  const reasoningReplay = new Map<string, PiAiReasoningReplay>()
   const resolveEntry = (entry: PiAiModelProfile): Model<Api> => {
     assertOfferedCompatFields(provider, `model "${entry.id}"`, entry.compat)
     if (entry.id.length === 0) invalid(provider, 'has a model with an empty id')
@@ -918,6 +936,13 @@ export function resolveRouteModels(
     if (api === undefined) {
       invalid(provider, `model "${entry.id}" needs an api; the installed catalog does not describe it, so set the`
         + ' route\'s api to the wire protocol its endpoint speaks')
+    }
+    if (entry.reasoningReplay !== undefined) {
+      if (!isResponsesApi(api)) {
+        invalid(provider, `model "${entry.id}" sets reasoningReplay, but its api is "${api}"; this option applies`
+          + ' only to the openai-responses protocol')
+      }
+      reasoningReplay.set(entry.id, entry.reasoningReplay)
     }
     const baseUrl = request.baseURL ?? base?.baseUrl ?? providerBaseUrl
     if (baseUrl === undefined) {
@@ -982,5 +1007,5 @@ export function resolveRouteModels(
     invalid(provider, `sets compat "${field}", but no model on the route speaks a protocol that takes it;`
       + ` it exists on ${takers.join(', ')}`)
   }
-  return { models: serviceableModels, configuredMaxTokens, modelErrors }
+  return { models: serviceableModels, configuredMaxTokens, modelErrors, reasoningReplay }
 }
