@@ -323,7 +323,7 @@ describe('Chat inject API', () => {
   it('resolves relative file paths against the Session\'s current working directory', async () => {
     // The target is pinned so this case measures the resolution base only; the
     // default target has its own case.
-    const b = await bench({ fileOpenTarget: 'sidebar' })
+    const b = await bench({ transcriptView: 'compact', performanceUsage: 'detailed', linkOpening: 'sidebar', fileOpenTarget: 'sidebar' })
     const { injected } = b.chatViewApi(b.rootReference)
     await b.runtime.sessions.setProjection(ROOT, 'workingDirectory', '/proj/.agents/worktrees/w')
     await injected.openFile('src/a.ts')
