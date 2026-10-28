@@ -451,7 +451,7 @@ describe('toPiContext', () => {
         content: [{ type: 'reasoning', text: reasoningText }],
         source: { kind: 'model', provider: 'deepseek', model: 'deepseek-flash', replayState: stored },
       })],
-    }, undefined, undefined, 'durable-text')
+    }, undefined, undefined, false, 'durable-text')
     const message = context.messages[0] as AssistantMessage
     const thinking = message.content[0]
     expect(thinking).toMatchObject({ type: 'thinking', thinking: reasoningText })
@@ -500,7 +500,7 @@ describe('toPiContext', () => {
           replayState: { response: persisted.response, blocks: [{ type: 'reasoning' }] },
         },
       })],
-    }, undefined, undefined, 'durable-text')
+    }, undefined, undefined, false, 'durable-text')
     const replayed = context.messages[0] as AssistantMessage
     expect(replayed.content[0]).toMatchObject({ type: 'thinking', thinking: reasoningText, thinkingSignature: expectedSignature })
 
@@ -531,7 +531,7 @@ describe('toPiContext', () => {
           },
         },
       })],
-    }, undefined, undefined, 'durable-text')
+    }, undefined, undefined, false, 'durable-text')
     const emptyModel: Model<'openai-responses'> = {
       id: 'deepseek-flash', name: 'DeepSeek Flash', api: 'openai-responses',
       provider: 'deepseek', baseUrl: 'https://example.test/v1', reasoning: true,
@@ -566,7 +566,7 @@ describe('toPiContext', () => {
           },
         },
       })],
-    }, undefined, undefined, 'durable-text')
+    }, undefined, undefined, false, 'durable-text')
     const thinking = (context.messages[0] as AssistantMessage).content[0]
     expect(thinking).toMatchObject({
       type: 'thinking',

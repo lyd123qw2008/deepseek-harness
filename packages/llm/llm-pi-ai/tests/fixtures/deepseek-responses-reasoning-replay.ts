@@ -32,7 +32,7 @@ export function apply(ctx: Context): void {
 
     const input = JSON.parse(JSON.stringify(convertResponsesMessages(
       model,
-      normalizeContext(toPiContext(options, undefined, undefined, 'durable-text')),
+      normalizeContext(toPiContext(options, undefined, undefined, false, 'durable-text')),
       new Set(['openai', 'openai-codex', 'opencode']),
     ))) as unknown[]
     // The persisted fixture keeps the provider's response-only fields, so an

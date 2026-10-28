@@ -571,7 +571,7 @@ describe('ChangedFiles card', () => {
     controller = new PresentedOpenController(), locale = en, matched = { changes, presented: [] as never[] }, summaries = servedStore(),
   ) {
     const props = openProps(controller, summaries)
-    props.openChanged.mockResolvedValue(null)
+    props.openChanged.mockResolvedValue({ kind: 'opened' })
     const openPreview = vi.fn<(sessionId: SessionId, cwd: string | undefined, path: string) => void>()
     const view = render(<Deliverables {...props} matched={matched} openPreview={openPreview} sessionId={SessionId('child-session')} t={makeTranslate(locale)} />)
     return { props, openPreview, view }
@@ -1012,7 +1012,7 @@ describe('presented files', () => {
     const owner = tailOwner(deliverablesOf(value), 3, preview)
     const matched = selectDeliverables(owner)!
     const props = openProps()
-    props.openPresented.mockResolvedValue(null)
+    props.openPresented.mockResolvedValue({ kind: 'opened' })
     const view = render(<Deliverables {...props} matched={matched} openPreview={preview} sessionId={SessionId('child-session')} t={makeTranslate(en)} />)
     expect(view.container.querySelectorAll('[data-presented-file]')).toHaveLength(4)
     const expand = view.getByRole('button', { name: 'Show all 8 delivered files' })

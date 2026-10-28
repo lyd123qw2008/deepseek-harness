@@ -235,15 +235,13 @@ describe('apply (plugin lifecycle)', () => {
 
     const execute = (id: string, cwd: string) => ctx.tools.execute({
       signal: new AbortController().signal,
-      callId: ToolCallId(`session-${id}`),
-      name: 'mcp__srv__remote',
-      arguments: {},
+      calls: [{ type: 'tool-call', id: ToolCallId(`session-${id}`), name: 'mcp__srv__remote', arguments: '{}' }],
       agent: { session: { header: { id, cwd } } } as never,
     })
 
     try {
       const first = await execute('a', 'D:\\repo-a')
-      expect(first.isError).toBe(false)
+      expect(first.results[0]?.result.isError).toBe(false)
       expect(mockTransport).toHaveBeenLastCalledWith(expect.objectContaining({ cwd: 'D:\\repo-a' }))
       expect(mockTransport).toHaveBeenCalledTimes(2)
 
