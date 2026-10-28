@@ -98,3 +98,26 @@ index 7da1c45..296d131 100644
                  break;
              }
              case "toolcall_end":
+diff --git a/dist/api/openai-codex-responses.js b/dist/api/openai-codex-responses.js
+--- a/dist/api/openai-codex-responses.js
++++ b/dist/api/openai-codex-responses.js
+@@ -381,8 +381,8 @@
+         grammarToolInputProperties,
+         supportsMidConvoSystemMessages: model.compat?.supportsMidConvoSystemMessages ?? false,
+         supportsAdditionalTools,
+         supportsToolSearch,
+-        toolOptions: { strict: null, supportsStrictMode, supportsOpenAIGrammarTools },
++        toolOptions: { strict: false, supportsStrictMode, supportsOpenAIGrammarTools },
+     });
+     const initialSystemMessage = getInitialSystemMessage(context.messages);
+     const instructions = initialSystemMessage ? getSystemMessageText(initialSystemMessage) : "";
+@@ -405,8 +405,8 @@
+         body.service_tier = options.serviceTier;
+     }
+     if (transcriptTools.requestTools.length > 0) {
+         body.tools = convertResponsesTools(transcriptTools.requestTools, {
+-            strict: null,
++            strict: false,
+             supportsStrictMode,
+             supportsOpenAIGrammarTools,
+         });

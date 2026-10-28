@@ -34,6 +34,7 @@ import type {
   Models,
   ModelThinkingLevel,
   MutableModels,
+  ProviderResponse,
   SimpleStreamOptions,
   ThinkingLevel,
 } from '@earendil-works/pi-ai'
@@ -42,11 +43,13 @@ import {
   contentHasImage,
   LlmAdapter,
   LlmError,
+  ProviderRequestId,
   ReasoningEffortId,
 } from '@deepseek-ai/dsh-llm'
 import type {
   GenerateOptions,
   ImageAttachmentAccess,
+  LlmFailure,
   LlmModelInfo,
   LlmProviderInfo,
   LlmResolvedModelInfo,
@@ -128,18 +131,94 @@ function profileOptions(
   profile: ResolvedPiAiProviderProfile,
   reasoning: ModelThinkingLevel | undefined,
   apiKey: string | undefined,
+  api: Api,
 ): SimpleStreamOptions {
   const enabledReasoning: ThinkingLevel | undefined = reasoning === 'off' ? undefined : reasoning
+  // Codex auto may replay a response request through WebSocket fallback before
+  // its first event; pinning SSE keeps durable attempt accounting strict.
+  const transport = api === 'openai-codex-responses' ? 'sse' : profile.transport
   return {
     ...apiKey === undefined ? {} : { apiKey },
     ...enabledReasoning === undefined ? {} : { reasoning: enabledReasoning },
     ...profile.thinkingBudgets === undefined ? {} : { thinkingBudgets: profile.thinkingBudgets },
     ...profile.cacheRetention === undefined ? {} : { cacheRetention: profile.cacheRetention },
-    ...profile.transport === undefined ? {} : { transport: profile.transport },
+    ...transport === undefined ? {} : { transport },
     ...profile.timeoutMs === undefined ? {} : { timeoutMs: profile.timeoutMs },
     ...profile.websocketConnectTimeoutMs === undefined ? {} : { websocketConnectTimeoutMs: profile.websocketConnectTimeoutMs },
-    // The agent recovery layer owns visible attempts; one adapter call is one SDK attempt.
+    // The agent recovery layer owns visible attempts; pi-ai retry loops stay disabled.
     maxRetries: 0,
+  }
+}
+
+type ProviderFailureFacts = Pick<LlmFailure, 'status' | 'providerRetryAfterMs' | 'requestId'>
+
+function validHttpStatus(value: number): value is number {
+  return Number.isInteger(value) && value >= 100 && value <= 599
+}
+
+function responseHeader(headers: Readonly<Record<string, string>>, names: readonly string[]): string | undefined {
+  const wanted = new Set(names.map(name => name.toLowerCase()))
+  for (const [name, value] of Object.entries(headers)) {
+    if (wanted.has(name.toLowerCase()) && value.trim().length > 0) return value.trim()
+  }
+  return undefined
+}
+
+function responseRetryAfterMs(headers: Readonly<Record<string, string>>): number | undefined {
+  const retryAfterMs = responseHeader(headers, ['retry-after-ms'])
+  if (retryAfterMs !== undefined) {
+    const milliseconds = Number(retryAfterMs)
+    if (Number.isFinite(milliseconds) && milliseconds > 0) return milliseconds
+  }
+  const retryAfter = responseHeader(headers, ['retry-after'])
+  if (retryAfter === undefined) return undefined
+  const seconds = Number(retryAfter)
+  if (Number.isFinite(seconds) && seconds > 0) {
+    const milliseconds = seconds * 1_000
+    if (Number.isFinite(milliseconds)) return milliseconds
+  }
+  const delay = Date.parse(retryAfter) - Date.now()
+  return Number.isFinite(delay) && delay > 0 ? delay : undefined
+}
+
+function responseFailureFacts(response: ProviderResponse): ProviderFailureFacts {
+  if (!validHttpStatus(response.status) || (response.status >= 200 && response.status <= 299)) return {}
+  const providerRetryAfterMs = responseRetryAfterMs(response.headers)
+  const rawRequestId = responseHeader(response.headers, [
+    'x-request-id',
+    'x-deepseek-request-id',
+    'request-id',
+    'x-correlation-id',
+  ])
+  const requestId = rawRequestId === undefined ? undefined : ProviderRequestId(rawRequestId)
+  return {
+    status: response.status,
+    ...providerRetryAfterMs === undefined ? {} : { providerRetryAfterMs },
+    ...requestId === undefined ? {} : { requestId },
+  }
+}
+
+function withResponseFailureFacts(
+  chunk: StreamChunk,
+  response: ProviderResponse | undefined,
+): StreamChunk {
+  if (response === undefined || chunk.type !== 'finish') return chunk
+  if (chunk.reason.kind !== 'error' && chunk.reason.kind !== 'aborted') return chunk
+  const facts = responseFailureFacts(response)
+  const failure = chunk.reason.failure
+  return {
+    ...chunk,
+    reason: {
+      ...chunk.reason,
+      failure: {
+        ...failure,
+        ...failure.status === undefined && facts.status !== undefined ? { status: facts.status } : {},
+        ...failure.providerRetryAfterMs === undefined && facts.providerRetryAfterMs !== undefined
+          ? { providerRetryAfterMs: facts.providerRetryAfterMs }
+          : {},
+        ...failure.requestId === undefined && facts.requestId !== undefined ? { requestId: facts.requestId } : {},
+      },
+    },
   }
 }
 
@@ -381,6 +460,7 @@ export class PiAiAdapter extends LlmAdapter {
       model,
       options.reasoningEffort ?? profile.reasoning,
     )
+    const reasoningReplay = profile.reasoningReplay.get(model.id) ?? 'native'
     const apiKey = await this.config.resolveApiKey(options.provider, profile)
 
     const consumer = new AbortController()
@@ -403,7 +483,7 @@ export class PiAiAdapter extends LlmAdapter {
         this.config.onReplayDegrade?.({ provider: options.provider, model: options.model, reason })
       }
       const context = attachments === undefined
-        ? toPiContext(request, undefined, onReplayDegrade, updates.systemPromptUpdate === 'in-history')
+        ? toPiContext(request, undefined, onReplayDegrade, updates.systemPromptUpdate === 'in-history', reasoningReplay)
         : await toPiContext({ ...request, signal: watchdog.signal }, {
           attachments,
           resolveImageAccess: ref => this.config.resolveImageAccess?.(attachments, ref),
@@ -412,18 +492,22 @@ export class PiAiAdapter extends LlmAdapter {
             maxPixels: profile.requestImagePixelBudget,
             maxBytes: profile.requestImageMaxBytes,
           },
-        }, onReplayDegrade, updates.systemPromptUpdate === 'in-history')
+        }, onReplayDegrade, updates.systemPromptUpdate === 'in-history', reasoningReplay)
+      let providerResponse: ProviderResponse | undefined
       const events = snapshot.models.streamSimple(model, context, {
-        ...profileOptions(profile, reasoning, apiKey),
+        ...profileOptions(profile, reasoning, apiKey, model.api),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
         signal: watchdog.signal,
+        onResponse: (response) => {
+          providerResponse = response
+        },
         // Profile headers are deployment-owned; attribution names are
         // Harness-owned and therefore win collisions.
         headers: requestHeaders(profile.headers),
       })
-      const iterator = toStreamChunks(events, model.contextWindow, options.signal, model.id)[Symbol.asyncIterator]()
+      const iterator = toStreamChunks(events, model.contextWindow, options.signal, model.id, reasoningReplay)[Symbol.asyncIterator]()
       let exhausted = false
       try {
         while (true) {
@@ -432,7 +516,7 @@ export class PiAiAdapter extends LlmAdapter {
             exhausted = true
             return
           }
-          yield result.value
+          yield withResponseFailureFacts(result.value, providerResponse)
         }
       } finally {
         if (!exhausted) {

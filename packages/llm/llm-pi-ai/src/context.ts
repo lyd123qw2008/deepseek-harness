@@ -18,6 +18,7 @@ import type { Context as PiContext, ImageContent, Message as PiMessage, SystemMe
 import { toPiAssistant } from './replay.ts'
 import { requestImageDimensions } from '@deepseek-ai/dsh-attachment'
 import { DEFAULT_REQUEST_IMAGE_MAX_BYTES, DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET } from './config.ts'
+import type { PiAiReasoningReplay } from './catalog.ts'
 
 /** Join the text blocks of a harness message. */
 function flattenText(message: RequestMessage): string {
@@ -204,9 +205,12 @@ function appendAssistant(
   message: Extract<Message, { role: 'assistant' }>,
   messages: PiMessage[],
   toolNames: Map<ToolCallId, string>,
+  target: Pick<GenerateOptions, 'provider' | 'model'>,
+  reasoningReplay: PiAiReasoningReplay,
   onReplayDegrade?: (reason: string) => void,
 ): void {
-  const assistant = toPiAssistant(message, onReplayDegrade)
+  const sameTarget = message.source.provider === target.provider && message.source.model === target.model
+  const assistant = toPiAssistant(message, onReplayDegrade, sameTarget ? reasoningReplay : 'native')
   for (const block of assistant.content) {
     if (block.type === 'toolCall') toolNames.set(brandString<ToolCallId>(block.id), block.name)
   }
@@ -220,6 +224,7 @@ function appendSharedHistory(
   messages: PiMessage[],
   toolNames: Map<ToolCallId, string>,
   supportsMidConvoSystemMessages: boolean,
+  reasoningReplay: PiAiReasoningReplay,
   onReplayDegrade?: (reason: string) => void,
 ): boolean {
   if (message.role === 'developer') {
@@ -239,7 +244,7 @@ function appendSharedHistory(
     return true
   }
   if (message.role === 'assistant') {
-    appendAssistant(message, messages, toolNames, onReplayDegrade)
+    appendAssistant(message, messages, toolNames, options, reasoningReplay, onReplayDegrade)
     return true
   }
   return false
@@ -248,6 +253,7 @@ function appendSharedHistory(
 function textOnlyContext(
   options: GenerateOptions,
   supportsMidConvoSystemMessages: boolean,
+  reasoningReplay: PiAiReasoningReplay,
   onReplayDegrade?: (reason: string) => void,
 ): PiContext {
   assertSupportedHistory(options.messages)
@@ -258,7 +264,9 @@ function textOnlyContext(
     if (contentHasImage(message.content)) {
       throw new LlmError('pi-ai image conversion requires the durable attachment service', 'UNSUPPORTED_CONTENT')
     }
-    if (appendSharedHistory(message, options, messages, toolNames, supportsMidConvoSystemMessages, onReplayDegrade)) continue
+    if (appendSharedHistory(
+      message, options, messages, toolNames, supportsMidConvoSystemMessages, reasoningReplay, onReplayDegrade,
+    )) continue
     if (message.role === 'tool') {
       messages.push(toolResultOf(message, toolNames, flattenText(message)))
       continue
@@ -305,6 +313,7 @@ export function requestImageTarget(ref: ImageAttachmentRef, budget: PiImageReque
  * @param images - absent; selects the synchronous conversion.
  * @param onReplayDegrade - forwarded to {@link toPiAssistant} for each assistant message.
  * @param supportsMidConvoSystemMessages - native model capability; otherwise later system text becomes a user-role system-reminder.
+ * @param reasoningReplay - strategy used only for matching provider/model history; defaults to native signatures.
  * @returns the pi-ai context; `tools` is omitted when the request declares none.
  * @throws {LlmError} `UNSUPPORTED_CONTENT` for images in any history role, including a leading system message.
  */
@@ -313,6 +322,7 @@ export function toPiContext(
   images?: undefined,
   onReplayDegrade?: (reason: string) => void,
   supportsMidConvoSystemMessages?: boolean,
+  reasoningReplay?: PiAiReasoningReplay,
 ): PiContext
 /**
  * Convert harness history to a pi-ai Context while resolving durable images.
@@ -325,6 +335,7 @@ export function toPiContext(
  * @param images - attachment provider, current path resolver, and request limits.
  * @param onReplayDegrade - forwarded to {@link toPiAssistant} for each assistant message.
  * @param supportsMidConvoSystemMessages - native model capability; otherwise later system text becomes a user-role system-reminder.
+ * @param reasoningReplay - strategy used only for matching provider/model history; defaults to native signatures.
  * @returns the asynchronously resolved pi-ai context.
  */
 export function toPiContext(
@@ -332,22 +343,25 @@ export function toPiContext(
   images: PiImageRequestContext,
   onReplayDegrade?: (reason: string) => void,
   supportsMidConvoSystemMessages?: boolean,
+  reasoningReplay?: PiAiReasoningReplay,
 ): Promise<PiContext>
 export function toPiContext(
   options: GenerateOptions,
   images?: PiImageRequestContext,
   onReplayDegrade?: (reason: string) => void,
   supportsMidConvoSystemMessages = false,
+  reasoningReplay: PiAiReasoningReplay = 'native',
 ): PiContext | Promise<PiContext> {
   return images === undefined
-    ? textOnlyContext(options, supportsMidConvoSystemMessages, onReplayDegrade)
-    : toPiContextWithImages(options, images, supportsMidConvoSystemMessages, onReplayDegrade)
+    ? textOnlyContext(options, supportsMidConvoSystemMessages, reasoningReplay, onReplayDegrade)
+    : toPiContextWithImages(options, images, supportsMidConvoSystemMessages, reasoningReplay, onReplayDegrade)
 }
 
 async function toPiContextWithImages(
   options: GenerateOptions,
   images: PiImageRequestContext,
   supportsMidConvoSystemMessages: boolean,
+  reasoningReplay: PiAiReasoningReplay,
   onReplayDegrade?: (reason: string) => void,
 ): Promise<PiContext> {
   const { attachments, resolveImageAccess, maxRequestImageBytes } = images
@@ -380,7 +394,9 @@ async function toPiContextWithImages(
   const messages: PiMessage[] = []
 
   for (const message of exactMessages) {
-    if (appendSharedHistory(message, options, messages, toolNames, supportsMidConvoSystemMessages, onReplayDegrade)) continue
+    if (appendSharedHistory(
+      message, options, messages, toolNames, supportsMidConvoSystemMessages, reasoningReplay, onReplayDegrade,
+    )) continue
     if (message.role === 'tool') {
       messages.push(toolResultOf(message, toolNames, userContent(message.content, requestImages, resolveImageAccess)))
       continue

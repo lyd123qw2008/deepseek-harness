@@ -39,6 +39,7 @@ import type {
   PiAiModelOverride,
   PiAiModelProfile,
   PiAiReasoningEfforts,
+  PiAiReasoningReplay,
   RouteCatalog,
 } from './catalog.ts'
 import { buildProvider, supportedProtocols } from './provider.ts'
@@ -85,6 +86,7 @@ export type {
   PiAiModelOverride,
   PiAiModelProfile,
   PiAiReasoningEfforts,
+  PiAiReasoningReplay,
   PiAiThinkingFormat,
 } from './catalog.ts'
 
@@ -216,6 +218,8 @@ export interface ResolvedPiAiProviderProfile
    * own, so a catalog capability must not appear here.
    */
   configuredMaxTokens: ReadonlyMap<string, number>
+  /** Explicit Responses reasoning replay strategies, by model id. */
+  reasoningReplay: ReadonlyMap<string, PiAiReasoningReplay>
 }
 
 /** Plugin configuration: the provider routes this instance owns. */
@@ -304,6 +308,7 @@ const modelFields = {
   name: z.string(),
   contextWindow: z.number().step(1).min(1),
   maxTokens: z.number().step(1).min(1),
+  reasoningReplay: z.union(['native', 'durable-text']),
   // No explicit default, unlike the route's `defaultInput`: schemastery
   // materializes `[]` for an absent array, and resolution reads that as "no
   // answer here" so the catalog entry below still applies.
@@ -501,6 +506,7 @@ export function resolveProfiles(
       ...rest.headers === undefined ? {} : { headers: { ...rest.headers } },
       ...rest.thinkingBudgets === undefined ? {} : { thinkingBudgets: { ...rest.thinkingBudgets } },
       configuredMaxTokens: catalog?.configuredMaxTokens ?? new Map(),
+      reasoningReplay: catalog?.reasoningReplay ?? new Map(),
       modelErrors: catalog?.modelErrors ?? new Map(),
       ...piProvider === undefined ? {} : { piProvider },
       ...catalogError === undefined ? {} : { catalogError },

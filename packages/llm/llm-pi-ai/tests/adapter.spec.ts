@@ -13,6 +13,8 @@ import LlmRuntime, { createToolResultMessage, createUserMessage, CONTEXT_WINDOW_
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
+import { stream as codexResponsesStream } from '@earendil-works/pi-ai/api/openai-codex-responses'
+import { normalizeContext } from '@earendil-works/pi-ai/utils/transcript'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { DEFAULT_MAX_REQUEST_IMAGE_BYTES, resolveProfiles } from '../src/config.ts'
 import { memoryAuth } from './auth-double.ts'
@@ -74,6 +76,64 @@ beforeEach(() => {
 })
 
 describe('PiAiAdapter provider routing', () => {
+  it('captures durable-text reasoning replay only when the model opts in', async () => {
+    const nativeItem = { type: 'reasoning', id: 'rs_native', status: 'completed', summary: [], encrypted_content: 'opaque' }
+    const signature = JSON.stringify(nativeItem)
+    const response = {
+      id: 'resp_1',
+      object: 'response',
+      created_at: 1,
+      model: 'deepseek-flash',
+      output: [
+        { type: 'reasoning', id: 'rs_native', status: 'completed', summary: [], encrypted_content: 'opaque' },
+        { type: 'message', id: 'msg_1', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: 'done' }] },
+      ],
+      status: 'completed',
+      usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+    }
+    const events = [
+      JSON.stringify({ type: 'response.created', response: { id: 'resp_1' } }),
+      JSON.stringify({ type: 'response.output_item.added', output_index: 0, item: { type: 'reasoning', id: 'rs_native', summary: [] } }),
+      JSON.stringify({ type: 'response.reasoning_text.delta', output_index: 0, delta: 'durable text' }),
+      JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: response.output[0] }),
+      JSON.stringify({ type: 'response.output_item.added', output_index: 1, item: { type: 'message', id: 'msg_1', role: 'assistant', content: [] } }),
+      JSON.stringify({ type: 'response.output_text.delta', output_index: 1, delta: 'done' }),
+      JSON.stringify({ type: 'response.output_item.done', output_index: 1, item: response.output[1] }),
+      JSON.stringify({ type: 'response.completed', response }),
+    ]
+    const configured = await mockServer([{ events }])
+    const native = await mockServer([{ events }])
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: {
+        deepseek: {
+          apiKeyEnv: 'PI_TEST_KEY',
+          api: 'openai-responses',
+          baseURL: `${configured.url}/v1`,
+          models: [{ id: 'deepseek-flash', reasoningReplay: 'durable-text' }],
+        },
+        'deepseek-native': {
+          apiKeyEnv: 'PI_TEST_KEY',
+          api: 'openai-responses',
+          baseURL: `${native.url}/v1`,
+          models: [{ id: 'deepseek-flash' }],
+        },
+      },
+    })
+    const configuredResult = await assemble(ctx, { provider: 'deepseek', model: 'deepseek-flash', messages: [] })
+    const nativeResult = await assemble(ctx, { provider: 'deepseek-native', model: 'deepseek-flash', messages: [] })
+    const configuredState = configuredResult.message.source.kind === 'model' ? configuredResult.message.source.replayState : undefined
+    const nativeState = nativeResult.message.source.kind === 'model' ? nativeResult.message.source.replayState : undefined
+    const configuredBlocks = (configuredState as { blocks?: { type: string; thinkingSignature?: string }[] } | undefined)?.blocks
+    const nativeBlocks = (nativeState as { blocks?: { type: string; thinkingSignature?: string }[] } | undefined)?.blocks
+    expect(configuredBlocks?.[0]).toEqual({
+      type: 'reasoning',
+      thinkingSignature: JSON.stringify({ type: 'reasoning', content: [{ type: 'reasoning_text', text: 'durable text' }] }),
+    })
+    expect(nativeBlocks?.[0]).toEqual({ type: 'reasoning', thinkingSignature: signature })
+  })
+
   it('resolves a catalog model dynamically and uses a private endpoint', async () => {
     const server = await mockServer([{ events: textEvents }])
     const ctx = await harness(server.url)
@@ -239,6 +299,83 @@ describe('PiAiAdapter provider routing', () => {
     const result = await assemble(ctx, { provider: 'openai', model: 'gpt-4.1', messages: [] })
     expect(result.finish.kind).toBe('error')
     expect(server.paths).toEqual(['/v1/responses'])
+  })
+
+  it('disables Codex strict sampling without materializing optional tool fields', async () => {
+    const model = getBuiltinModels('openai-codex').find(candidate => candidate.id === 'gpt-5.5')
+    if (model === undefined) throw new Error('gpt-5.5 is missing from the Codex catalog')
+
+    const parameters = {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        session_ids: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['query'],
+    }
+    const tool = {
+      name: 'session_search',
+      description: 'Search historical sessions.',
+      parameters,
+    }
+    let payload: unknown
+    const stream = codexResponsesStream(
+      { ...model, baseUrl: 'https://example.invalid' },
+      normalizeContext({ messages: [], tools: [tool] }),
+      {
+        apiKey: `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'test-account' } })).toString('base64url')}.signature`,
+        onPayload: (body) => {
+          payload = body
+          throw new Error('capture request')
+        },
+      },
+    )
+
+    const result = await stream.result()
+
+    expect(result.errorMessage).toBe('capture request')
+    expect(payload).toEqual(expect.objectContaining({
+      tools: [expect.objectContaining({
+        type: 'function',
+        name: 'session_search',
+        parameters,
+        strict: false,
+      })],
+    }))
+
+    let deferredPayload: unknown
+    const deferredStream = codexResponsesStream(
+      { ...model, baseUrl: 'https://example.invalid' },
+      // 0.87 declares a tool that becomes available mid-transcript through a LATER system message
+      // carrying `toolsAdded`; the leading message is the base prompt, so this is the deferred
+      // placement, whose conversion takes the shared `toolOptions`.
+      normalizeContext({
+        messages: [
+          { role: 'system', content: 'base', timestamp: 0 },
+          { role: 'user', content: 'hi', timestamp: 1 },
+          { role: 'system', content: 'loaded', toolsAdded: [tool], timestamp: 2 },
+        ],
+      }),
+      {
+        apiKey: `eyJhbGciOiJub25lIn0.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'test-account' } })).toString('base64url')}.signature`,
+        onPayload: (body) => {
+          deferredPayload = body
+          throw new Error('capture deferred request')
+        },
+      },
+    )
+
+    const deferredResult = await deferredStream.result()
+
+    expect(deferredResult.errorMessage).toBe('capture deferred request')
+    expect(deferredPayload).toEqual(expect.objectContaining({
+      input: expect.arrayContaining([
+        expect.objectContaining({
+          type: 'tool_search_output',
+          tools: [expect.objectContaining({ parameters, strict: false })],
+        }),
+      ]) as unknown as readonly unknown[],
+    }))
   })
 
   it('resolves attachment and filesystem services mounted after the adapter when dispatching an image', async () => {

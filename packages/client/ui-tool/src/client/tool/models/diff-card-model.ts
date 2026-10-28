@@ -4,8 +4,13 @@ import type { ToolCallBlock } from './tool-call-model.ts'
 import { parsedToolCall } from './raw-tool-call.ts'
 import { recordedAbsolutePath } from './recorded-path.ts'
 
-/** Room for a path, one removed/added pair, and three context lines on each side. */
-export const CHAT_DIFF_MAX_LINES = 9
+/**
+ * Diff-body viewport height in line units for the chat row. A chat row is a
+ * summary surface inside the message flow: the flow stays scannable across
+ * many calls while a long diff remains available through the card's scrollbar.
+ * This is a design constant of this UI's row geometry, not a deployment choice.
+ */
+export const CHAT_DIFF_MAX_LINES = 10
 
 /**
  * The {@link DiffBlock} props this derivation owns. Picked off the primitive's
@@ -31,11 +36,19 @@ function narrowDiffs(diffs: unknown): DiffHunk[] | null {
   const out: DiffHunk[] = []
   for (const hunk of diffs) {
     if (typeof hunk !== 'object' || hunk === null) return null
-    const { path, oldText, newText } = hunk as Record<string, unknown>
+    const { path, oldText, newText, oldStart, newStart } = hunk as Record<string, unknown>
     if (typeof path !== 'string') return null
     if (oldText !== null && typeof oldText !== 'string') return null
     if (typeof newText !== 'string') return null
-    out.push({ path, oldText, newText })
+    if (oldStart !== undefined && (typeof oldStart !== 'number' || !Number.isSafeInteger(oldStart) || oldStart < 1)) return null
+    if (newStart !== undefined && (typeof newStart !== 'number' || !Number.isSafeInteger(newStart) || newStart < 1)) return null
+    out.push({
+      path,
+      oldText,
+      newText,
+      ...(oldStart === undefined ? {} : { oldStart }),
+      ...(newStart === undefined ? {} : { newStart }),
+    })
   }
   return out
 }

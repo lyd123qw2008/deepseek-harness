@@ -58,6 +58,7 @@ export interface OpenFileOptions {
 export interface TurnTailOwnerProps {
   turn: TurnLocation
   seq: number
+  /** Open a workspace path with Chat's configured file target. */
   openFile: (path: string) => void
 }
 
@@ -228,6 +229,7 @@ export interface ChatNodeOwnerProps {
   /** Renderer-owned Node portion selected by the grouping Definition. */
   groupPart?: string
   cwd?: string | undefined
+  /** Open a workspace path with Chat's configured file target. */
   openFile: (path: string, options?: OpenFileOptions) => void
   inspectCall: ((callId: ToolCallId) => void) | undefined
   forkAt: (seq: number) => void
@@ -470,7 +472,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.chat.reasoning.body': { kind: 'single'; scope: 'session'; owner: ReasoningBodyOwnerProps }
     /**
      * Ordered feature contributions before a completed Turn's action row. Each
-     * entry receives the Turn, closing sequence, and file opener. A fresh `id`
+     * entry receives the Turn, closing sequence, and Host file opener. A fresh `id`
      * adds an entry; entries without content return null.
      */
     'conversation.chat.turnTail': { kind: 'list'; scope: 'session'; owner: TurnTailOwnerProps }

@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-08-deepseek-responses-reasoning-replay.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-08-deepseek-responses-reasoning-replay.md
+/agent-note-restore-deepseek-responses-reasoning-text-on-replay:
+  en: f8a6d81d4424a69b
+  zh: 65d40eb292ae3595
+/agent-note-restore-deepseek-responses-reasoning-text-on-replay/problem:
+  en: bb652a2083245af6
+  zh: b9bb4ef871089c87
+/agent-note-restore-deepseek-responses-reasoning-text-on-replay/decision:
+  en: bb8de1f399b28aa9
+  zh: 2d1a64519f48af88
+/agent-note-restore-deepseek-responses-reasoning-text-on-replay/alternatives-considered:
+  en: 03d74f41ee537fa5
+  zh: c5ee23429a34aeb4
+/agent-note-restore-deepseek-responses-reasoning-text-on-replay/consequences:
+  en: 4493a122449b6a19
+  zh: 273d0490888f78b9
