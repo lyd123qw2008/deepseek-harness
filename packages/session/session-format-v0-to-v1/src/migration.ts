@@ -22,8 +22,6 @@ import {
 import { assertReleasedV0Keys, releasedV0Record } from './validation-helpers.ts'
 
 const LEGACY_ASSISTANT_SOURCE_KEY = ['pro', 'venance'].join('')
-const CURRENT_SUBAGENT_DESCRIPTOR_VERSION = 3
-const PREVIOUS_SUBAGENT_DESCRIPTOR_VERSION = 2
 const PREVIOUS_PI_AI_REPLAY_VERSION = 1
 const CURRENT_PI_AI_REPLAY_VERSION = 2
 
@@ -102,11 +100,10 @@ function normalizeReleasedV0Event(
   const compaction = normalizeLegacyCompaction(retry, sessionId, state)
   const message = normalizeLegacyMessage(compaction, sessionId, state.messageIds)
   const replay = normalizeLegacyReplayState(message)
-  const descriptor = normalizeLegacySubagentDescriptor(replay)
-  if (descriptor.type !== 'assistant/chunk') assertReleasedEventPayload(descriptor, 0)
-  const messageId = eventMessageId(descriptor)
-  if (messageId !== undefined) state.messageIds.set(descriptor.seq, messageId)
-  return descriptor
+  if (replay.type !== 'assistant/chunk') assertReleasedEventPayload(replay, 0)
+  const messageId = eventMessageId(replay)
+  if (messageId !== undefined) state.messageIds.set(replay.seq, messageId)
+  return replay
 }
 
 function normalizeLegacyCompactionType(event: SessionFormatEvent): SessionFormatEvent {
@@ -433,28 +430,6 @@ function requiredLegacyReplayMember(
   const value = replay[key]
   if (value === undefined) throw new SessionFormatError(`${label} lacks required member "${key}"`)
   return value
-}
-
-function normalizeLegacySubagentDescriptor(event: SessionFormatEvent): SessionFormatEvent {
-  if (event.type !== 'subagent/descriptor') return event
-  const data = releasedV0Record(event.data, `subagent/descriptor ${event.seq} data`)
-  if (data['version'] !== PREVIOUS_SUBAGENT_DESCRIPTOR_VERSION) return event
-  if (data['mode'] === 'one-shot') {
-    assertReleasedV0Keys(data, ['mode', 'version', 'provider', 'label'], [], `subagent/descriptor ${event.seq} data`)
-  } else if (data['mode'] === 'continuable') {
-    assertReleasedV0Keys(
-      data,
-      ['mode', 'version', 'provider', 'label'],
-      ['agentProvider', 'agentModel', 'persona', 'toolFilter'],
-      `subagent/descriptor ${event.seq} data`,
-    )
-  } else {
-    throw new SessionFormatError(`subagent/descriptor ${event.seq} mode must be "one-shot" or "continuable"`)
-  }
-  return {
-    ...event,
-    data: { ...data, version: CURRENT_SUBAGENT_DESCRIPTOR_VERSION },
-  }
 }
 
 function normalizeLegacyMessage(

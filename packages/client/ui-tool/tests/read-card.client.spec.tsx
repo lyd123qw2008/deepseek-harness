@@ -229,11 +229,11 @@ describe('ReadRow keyed toolview', () => {
     expect(view.getAllByText('src/a.ts').length).toBe(1)
   })
 
-  it('the path summary opens the file through the Host callback', () => {
+  it('the path summary opens the file through the Host callback at the call\'s line', () => {
     const openFile = vi.fn()
     const view = render(<ReadRow {...{ ...rowProps(settled()), openFile }} />)
     fireEvent.click(view.getByRole('button', { name: 'src/a.ts' }))
-    expect(openFile).toHaveBeenCalledWith('src/a.ts')
+    expect(openFile).toHaveBeenCalledWith('src/a.ts', { line: 41 })
   })
 
   it('a running read renders the summary row alone, and its state', () => {
