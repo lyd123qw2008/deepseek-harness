@@ -42,6 +42,8 @@ function mount(target: FileOpenTarget = 'host', dictionary: typeof en | typeof z
     useWorkspaces: emptyWorkspaces(),
     useSessionRetainInfo: () => undefined,
     useResource,
+    // The row renders no context-menu trigger; the hook only has to exist.
+    useContextMenu: () => ({ getTriggerProps: () => ({}) }),
     ...allowAllAccess,
     useFileOpenTarget: bindSnapshotSelector(source),
     setFileOpenTarget,
