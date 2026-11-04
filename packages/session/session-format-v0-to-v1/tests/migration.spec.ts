@@ -141,9 +141,9 @@ describe('released Session format v0 to v1', () => {
     expect(output.values).toEqual([marker])
   })
 
-  it('promotes the released v2 subagent descriptor to the current v3 payload', () => {
+  it('keeps the released v2 subagent descriptor payload unchanged', () => {
     const header = {
-      type: 'session', version: 0, id: 'descriptor-upgrade', createdAt: 1, delegationDepth: 0,
+      type: 'session', version: 0, id: 'descriptor-passthrough', createdAt: 1, delegationDepth: 0,
     }
     const rows = [
       {
@@ -152,24 +152,23 @@ describe('released Session format v0 to v1', () => {
       },
     ]
 
-    expect(migrateRows(header, rows).events).toEqual([{
-      ...rows[0],
-      data: {
-        version: 3, mode: 'continuable', provider: 'spawn', label: 'child', agentProvider: 'p', agentModel: 'm',
-      },
-    }])
+    // v1 and v2 descriptors stay as written: the validator accepts every released
+    // descriptor version, and promoting them would reject the empty fields their
+    // writers allowed.
+    expect(migrateRows(header, rows).events).toEqual(rows)
   })
 
   it('rejects a released v2 descriptor that does not match its historical schema', () => {
     const header = {
-      type: 'session', version: 0, id: 'descriptor-upgrade-invalid', createdAt: 1, delegationDepth: 0,
+      type: 'session', version: 0, id: 'descriptor-invalid', createdAt: 1, delegationDepth: 0,
     }
     const rows = [{
       type: 'subagent/descriptor', seq: 0, time: 2,
-      data: { version: 2, mode: 'one-shot', provider: 'spawn' },
+      // A one-shot descriptor never carried route composition members.
+      data: { version: 2, mode: 'one-shot', provider: 'spawn', agentProvider: 'p' },
     }]
 
-    expect(() => migrateRows(header, rows)).toThrow(/lacks required member "label"/)
+    expect(() => migrateRows(header, rows)).toThrow(/subagent\/descriptor/)
   })
 
   it('marks the retired Codex search request as an ignorable preserved event', () => {
