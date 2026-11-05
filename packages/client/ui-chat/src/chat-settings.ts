@@ -32,6 +32,18 @@ export type FoldedReplies = typeof FOLDED_REPLIES[number]
 /** Keep every Assistant reply visible when no folded-reply preference is saved. */
 export const DEFAULT_FOLDED_REPLIES: FoldedReplies = 'all'
 
+/** Field carrying the Chat file-opening target. */
+export const FILE_OPEN_TARGET_FIELD = 'fileOpenTarget'
+
+/** Chat file-opening targets accepted at settings boundaries. */
+export const FILE_OPEN_TARGETS = ['host', 'sidebar'] as const
+
+/** Chat file-opening target for file links and tool-path actions. */
+export type FileOpenTarget = typeof FILE_OPEN_TARGETS[number]
+
+/** Default keeps Chat file actions in the Host's default application. */
+export const DEFAULT_FILE_OPEN_TARGET: FileOpenTarget = 'host'
+
 /** Work-details presentation modes a user can choose. */
 export const TRANSCRIPT_VIEW_MODES = ['compact', 'standard', 'detailed', 'verbose'] as const
 
@@ -82,12 +94,15 @@ export interface ChatSettings {
   performanceUsage: PerformanceUsageMode
   /** Default destination for Chat HTTP(S) links. */
   linkOpening: LinkOpening
+  /** Target used by Chat file links and tool-path actions. */
+  fileOpenTarget: FileOpenTarget
 }
 
 /** Durable Chat schema; also the wire envelope the browser scope validates against. */
 export const ChatSettingsFields = {
   [COLLAPSE_TIMING_FIELD]: z.union([...COLLAPSE_TIMINGS]).default(DEFAULT_COLLAPSE_TIMING),
   [FOLDED_REPLIES_FIELD]: z.union([...FOLDED_REPLIES]).default(DEFAULT_FOLDED_REPLIES),
+  [FILE_OPEN_TARGET_FIELD]: z.union([...FILE_OPEN_TARGETS]).default(DEFAULT_FILE_OPEN_TARGET),
   linkOpening: z.union(['sidebar', 'new-tab']).default(DEFAULT_LINK_OPENING),
   performanceUsage: z.union([...PERFORMANCE_USAGE_MODES]).default(DEFAULT_PERFORMANCE_USAGE),
   // Missing and unrecognized modes defer to the client's default.

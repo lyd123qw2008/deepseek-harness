@@ -1,0 +1,8 @@
+version: 1
+scenario: pi-ai-deepseek-responses-reasoning-replay
+profile: headless
+composition: pi-ai-deepseek-responses-reasoning-replay
+recording: authored
+header:
+  class: pi-ai-deepseek-responses-reasoning-replay
+  pin: true

@@ -87,6 +87,7 @@ export type {
   PiAiModelProfile,
   PiAiProviderProfile,
   PiAiReasoningEfforts,
+  PiAiReasoningReplay,
   PiAiThinkingFormat,
   ResolvedPiAiProviderProfile,
 } from './config.ts'

@@ -1,0 +1,49 @@
+# Bilingual-pair consistency record for 2026-09-16-local-exclusive-upgrade-treatment.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-09-16-local-exclusive-upgrade-treatment.md
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment:
+  en: f92bc7a8b28032a6
+  zh: 38a548cba81189f3
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/problem:
+  en: 6f5a1a5758095bb9
+  zh: 49184d9300caad4d
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/decision:
+  en: 8305cb57a839cb0d
+  zh: d8743518cb394ed9
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/decision/retired-by-dsh-v0-1-7-rc-1:
+  en: f5e5fbe343fe6333
+  zh: 15817c8f379571c5
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/decision/retired-by-dsh-v0-1-7-rc-2:
+  en: ca8fa651e87db1d1
+  zh: ff00259ce0f94257
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/decision/retired-by-dsh-v0-2-1-alpha-1:
+  en: 82ac7d3933ae81b8
+  zh: e3a8334bffb3638b
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/decision/retired-by-dsh-v0-2-1-alpha-2:
+  en: 7665dd28629e27cc
+  zh: 68d6df31a80f3aee
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/decision/web-diff-card-through-a-scroll-viewport:
+  en: 19ea4c71ffa69b2a
+  zh: d23c768d7781b08a
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/decision/agent-team-capability-isolated-by-preset:
+  en: 52c65e425cf0ca4e
+  zh: 70fdb8cdd80a25c8
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/decision/mcp-client-connection-scope:
+  en: fa4920fa28b410db
+  zh: 02f4a749792a68c1
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/decision/terminal-card-survives-an-invalid-escalation-pair:
+  en: 8987b3b12a5c7e4a
+  zh: 73a57beb26a89c01
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/upgrade-checkpoints:
+  en: e9ae403637ca49b7
+  zh: 438f7a0b99a08fd6
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/alternatives-considered:
+  en: d9312fa32cc8c946
+  zh: 542472625e0c0c97
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/consequences:
+  en: f278b396e66043de
+  zh: 693240819903c748
+/agent-note-local-exclusive-dsh-features-and-their-upgrade-treatment/related:
+  en: 076b360fcb11a5c4
+  zh: cd0ace242a04986e

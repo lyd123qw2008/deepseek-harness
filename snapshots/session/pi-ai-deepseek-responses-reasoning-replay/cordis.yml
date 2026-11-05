@@ -1,0 +1,3 @@
+- insert:
+    - id: deepseek-responses-reasoning-replay-snapshot
+      name: '../../../packages/llm/llm-pi-ai/tests/fixtures/deepseek-responses-reasoning-replay.ts'
