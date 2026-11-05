@@ -349,7 +349,11 @@ it('imports a removed section into the entry id that replaced it', async () => {
     expect(written.find(row => row.id === 'agent-preset-registry')?.config).toEqual({ default: 'standard', selectedDefault: 'standard-local', modeSelectionEnabled: true })
   })
   const entry = [...restored.loader.entries()].find(row => row.options.id === 'agent-preset-registry')!
-  expect((entry.fiber!.effectiveConfig as { selectedDefault: { get: () => string } }).selectedDefault.get()).toBe('standard-local')
+  // The effective config carries the imported value only once the entry activated,
+  // which trails the patch write this test already waited for.
+  await vi.waitFor(() => {
+    expect((entry.fiber!.effectiveConfig as { selectedDefault: { get: () => string } }).selectedDefault.get()).toBe('standard-local')
+  })
 })
 
 it('describes an entry whose required field only the profile supplies, and reports a failed refresh instead of crashing', async () => {
