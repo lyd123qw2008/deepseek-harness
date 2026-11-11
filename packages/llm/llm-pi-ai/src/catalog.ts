@@ -275,6 +275,16 @@ const COMPLETIONS_COMPAT_GATE = {
   sessionAffinityFormat: 'withhold',
 } as const satisfies Record<keyof OpenAICompletionsCompat, CompatDisposition>
 
+const RESPONSES_APIS = new Set(['openai-responses'])
+
+/** Whether an API uses the supported OpenAI Responses reasoning protocol.
+ * @param api - the resolved pi-ai protocol name.
+ * @returns whether Responses reasoning replay configuration applies.
+ */
+export function isResponsesApi(api: string): boolean {
+  return RESPONSES_APIS.has(api)
+}
+
 /** Disposition of every `OpenAIResponsesCompat` field; a drift gate like the one above. */
 const RESPONSES_COMPAT_GATE = {
   supportsDeveloperRole: 'offer',

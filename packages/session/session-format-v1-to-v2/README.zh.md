@@ -49,7 +49,7 @@ const eventRecord = releasedV2SessionFormatCodec.encodeEvent(currentEvent)
 
 如果引用指向被消费的 chunk，迁移会失败，而不会把它重定向到语义不同的事件。它会重映射已声明的 source-event reference、surface replacement、command source event、compaction range 与 list，以及 title message list。已经对模型可见的 `session/title-llm-request.messages` 文本会在源校验后保持逐字节不变，因此目标校验不会重新解释该 prompt 中嵌入的旧序号。带 seed 的源若让继承切点切开一个 Assistant attempt，也会迁移失败；目标会用 `session/end-seed { inherited: true }` 标出精确切点。
 
-v2 物理 header 要求 `isSeeded`，且不存储数值切点。编解码器从最后一个 inherited end-seed marker 推导切点，每行写入一个事件，只对 `sourceEventSeqs` 做范围编码，并对普通事件词汇与 payload 扩展保持中立。Released-current restoration 准入 installed Session package 已知的事件 type，以及携带 `ignorable: true` 的未知事件，并校验事件 member 与关系。普通 Session restore 只检查 runtime 直接依赖的 settlement 字段，不重放嵌入 stream；persistence publication 与冻结的 writer-image fixture validator 保留完整 stream verification。
+v2 物理 header 要求 `isSeeded`，且不存储数值切点。编解码器从最后一个 inherited end-seed marker 推导切点，每行写入一个事件，只对 `sourceEventSeqs` 做范围编码，并对普通事件词汇与 payload 扩展保持中立。严格的迁移目标校验会冻结 released-v2 清单，其中包括已停用的 `web/codex-search-llm-request` 信息事件，并拒绝未知 type 或 member。Installed-current restoration 准入 installed Session package 已知的事件 type，以及携带 `ignorable: true` 的未知事件，再把 payload 与 stream 语义交给 installed current restorer。普通 Session restore 只检查 runtime 直接依赖的 settlement 字段，不重放嵌入 stream；persistence publication 与冻结的 writer-image fixture validator 保留完整 stream verification。所有路径仍严格校验 header、event envelope、sequence 与 inherited cut。
 
 -----
 
@@ -103,7 +103,7 @@ v2 物理 header 要求 `isSeeded`，且不存储数值切点。编解码器从�
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **封闭的第一方源清单**——未知 v1 事件会使迁移失败，包括带有 `ignorable: true` 的事件。
+- **包含一个历史外部例外的封闭源清单**——已停用的 `web/codex-search-llm-request` 信息事件会复用 v0 处置规则；其他所有未知 v1 事件都会使迁移失败，包括带有 `ignorable: true` 的事件。
 - **线性重映射状态**——流式处理不保留完整 v1 事件数组，但最终 v2 事件数组和旧到新序号映射仍为 O(事件数)。
 - **不负责发布或兼容回退**——持久化拥有排他 successor 发布，保留的 v1 generation 不是自动 downgrade 或 restore 输入。
 
