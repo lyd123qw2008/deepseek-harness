@@ -30,11 +30,13 @@ describe('code-card controls', () => {
     expect(screen.queryByText('Code block')).toBeNull()
   })
 
-  it.each(['code', 'read'] as const)('toggles %s wrapping without changing source text', (kind) => {
+  it.each(['code', 'read', 'diff'] as const)('toggles %s wrapping without changing source text', (kind) => {
     const code = 'const longName = "a long value whose source must stay intact"'
     const view = render(kind === 'code'
       ? <CodeBlock code={code} lang="ts" {...labels} />
-      : <ReadBlock lines={[{ number: 24, text: code }]} totalLines={30} lang="ts" labels={{ ...readBlockLabels, ...toolbarLabels }} />)
+      : kind === 'read'
+        ? <ReadBlock lines={[{ number: 24, text: code }]} totalLines={30} lang="ts" labels={{ ...readBlockLabels, ...toolbarLabels }} />
+        : <DiffBlock diffs={[{ path: 'example.ts', oldText: 'old', newText: code }]} labels={{ ...diffBlockLabels, ...toolbarLabels }} />)
     const button = screen.getByRole('button', { name: 'Wrap lines' })
     const wasWrapped = button.getAttribute('aria-pressed') === 'true'
     fireEvent.click(button)
@@ -87,12 +89,11 @@ describe('code-card controls', () => {
     expect(screen.getByRole('button', { name: 'Copy' }).textContent).toBe('Copy')
   })
 
-  it('renders the local diff card without the code-card toolbar', () => {
+  it('uses the fallback title for diffs containing different languages', () => {
     render(<DiffBlock diffs={[
       { path: 'example.ts', oldText: '', newText: 'export {}' },
       { path: 'example.py', oldText: '', newText: 'print(1)' },
-    ]} labels={diffBlockLabels} />)
-    expect(screen.queryByText('Code block')).toBeNull()
-    expect(screen.getByRole('button', { name: '复制' })).toBeTruthy()
+    ]} labels={{ ...diffBlockLabels, ...toolbarLabels }} />)
+    expect(screen.getByText('Code block')).toBeTruthy()
   })
 })

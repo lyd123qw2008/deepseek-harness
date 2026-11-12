@@ -14,8 +14,10 @@ export const markdownLabels: MarkdownLabels = {
 }
 
 export const diffBlockLabels: DiffBlockLabels = {
-  copy: '复制', copied: '复制成功',
-  files: count => `${count} ${count === 1 ? 'file' : 'files'}`,
+  codeLabel: '代码块', wrapLabel: '自动换行', unwrapLabel: '取消自动换行',
+  copy: '复制', copied: '复制成功', collapseAria: '收起差异',
+  expandAria: hidden => `展开其余 ${hidden} 行差异`,
+  collapse: '收起', expand: hidden => `… 其余 ${hidden} 行`,
 }
 
 export const readBlockLabels: ReadBlockLabels = {
