@@ -158,7 +158,7 @@ describe('web e2e: inline-code mentions of produced files', () => {
     const mentions = page.locator('[class*="markdown"] code button')
     await expect.poll(() => mentions.count(), { timeout: 10_000 }).toBe(2)
     expect(await mentions.first().innerText()).toBe('report.html')
-    expect(await mentions.first().getAttribute('aria-label')).toBe('Open site/report.html in sidebar')
+    expect(await mentions.first().getAttribute('aria-label')).toBe('Open site/report.html in default app')
     expect(await mentions.first().getAttribute('title')).toBe('site/report.html')
     // Without a recorded git summary, no changed-files card follows.
     expect(await page.locator('[data-changed-files]').count()).toBe(0)
