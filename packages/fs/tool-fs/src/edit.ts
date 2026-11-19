@@ -113,7 +113,13 @@ export function applyEditTool(ctx: Context, sandbox: FsSandboxController): void 
       presentationMeta: (_args, value) => ({
         path: value.path,
         diffs: computeHunkDiffs(value.path, value.before, value.after)
-          .map(({ path, oldText, newText }) => ({ path, oldText, newText })),
+          .map(({ path, oldText, newText, oldStart, newStart }) => ({
+            path,
+            oldText,
+            newText,
+            ...(oldStart === undefined ? {} : { oldStart }),
+            ...(newStart === undefined ? {} : { newStart }),
+          })),
       }),
     },
     async execute(args: EditToolArgs, exec) {
