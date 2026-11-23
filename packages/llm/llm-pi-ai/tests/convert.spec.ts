@@ -404,6 +404,42 @@ describe('toPiContext', () => {
     })
   })
 
+  it('defaults DeepSeek Responses reasoning replay to native signatures', () => {
+    const signature = JSON.stringify({ type: 'reasoning', id: 'rs_1', encrypted_content: 'opaque' })
+    const persisted = toPiReplayState(assistant({
+      api: 'openai-responses',
+      provider: 'deepseek',
+      model: 'deepseek-flash',
+      content: [{ type: 'thinking', thinking: '', thinkingSignature: signature }],
+    }))
+    const block = persisted.blocks?.[0]
+    if (typeof block !== 'object' || block === null || Array.isArray(block)) {
+      throw new Error('missing persisted reasoning block')
+    }
+    expect((block as { thinkingSignature?: unknown }).thinkingSignature).toBe(signature)
+  })
+
+  it('keeps another Responses provider’s encrypted reasoning verbatim', () => {
+    const nativeReasoning = {
+      type: 'reasoning', id: 'rs_openai', status: 'completed', summary: [], encrypted_content: 'openai-ciphertext',
+    }
+    const persisted = toPiReplayState(assistant({
+      api: 'openai-responses',
+      provider: 'openai',
+      model: 'gpt-5',
+      content: [{
+        type: 'thinking',
+        thinking: 'private reasoning',
+        thinkingSignature: JSON.stringify(nativeReasoning),
+      }],
+    }))
+    const block = persisted.blocks?.[0]
+    if (typeof block !== 'object' || block === null || Array.isArray(block)) {
+      throw new Error('missing persisted reasoning block')
+    }
+    expect(JSON.parse((block as { thinkingSignature: string }).thinkingSignature)).toEqual(nativeReasoning)
+  })
+
   it.each(['high', ''])('preserves provider thinking level %j through durable projection and replay', (providerThinkingLevel) => {
     const state = toPiReplayState(assistant({
       api: 'anthropic-messages',

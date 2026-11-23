@@ -86,6 +86,7 @@ interface PwshToolArgs {
   workdir?: string
   run_in_background?: boolean
   sandbox_permissions?: string
+  /** Optional for an omitted or repeated effective mode; widening requires a non-empty reason. */
   justification?: string
 }
 
@@ -145,7 +146,12 @@ function validatePwshArgs(args: PwshToolArgs, advertised: AdvertisedArgs): void 
     throw new ToolArgsError([`invalid timeoutMs: expected a positive number, got ${JSON.stringify(args.timeoutMs)}`])
   }
   rejectUnadvertisedArgs(args, advertised)
-  validateEscalationArgs(args.sandbox_permissions, args.justification)
+  // Descriptor writers defaulted `justification` independently and did not reject a
+  // blank one; `dsh-tool-bash` normalises the same way before pairing checks.
+  const justification = args.sandbox_permissions === undefined && args.justification?.trim() === ''
+    ? undefined
+    : args.justification
+  validateEscalationArgs(args.sandbox_permissions, justification)
 }
 /* jscpd:ignore-end */
 
